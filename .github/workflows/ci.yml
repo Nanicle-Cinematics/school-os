@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push makes an in-flight run pointless; don't pay for both.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, seed and verify the engines
+    runs-on: ubuntu-latest
+
+    # A throwaway Postgres, seeded from scratch each run. The engine suites read
+    # real rows — money reconciliation, grading, debtor filtering — so they need
+    # a database, but pointing CI at the Supabase project would have runs racing
+    # each other through shared state and would put credentials in secrets for
+    # no benefit.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: school_os
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The verify scripts are run with `--env-file=.env`, so the file has to
+      # exist. No pgbouncer here, so DIRECT_URL is the same connection and the
+      # connection_limit=1 that production needs is deliberately absent.
+      - name: Write .env
+        run: |
+          cat > .env <<'ENV'
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/school_os"
+          DIRECT_URL="postgresql://postgres:postgres@localhost:5432/school_os"
+          DB_RLS="off"
+          APP_URL="http://localhost:3000"
+          SESSION_SECRET="ci-not-a-real-secret"
+          ENV
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Create the schema
+        run: npm run db:push
+
+      - name: Seed a demo school
+        run: npm run db:seed
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Money — payments, allocations and invoice balances
+        run: npm run db:verify
+
+      - name: Results — grading, weighting, ranking, aggregate
+        run: npm run verify:results
+
+      - name: SMS — phone normalisation, GSM-7 segments, merge fields
+        run: npm run verify:sms
+
+      - name: Audience — campaign reach, dedupe, debtor filtering
+        run: npm run verify:audience
+
+      - name: Build
+        run: npm run build
