@@ -1,0 +1,475 @@
+/**
+ * Exercise the real server actions over HTTP and assert that the guards refuse.
+ *
+ * Why this exists: every other verify-* script calls engine code directly, which
+ * cannot reach a server action — the guards that stop a bursar deleting a billed
+ * student, or an overlapping grade band silently rewriting a report card, live in
+ * `"use server"` functions behind `requireRole`. This drives them the way a
+ * browser with JavaScript disabled would: Next renders each form with a real
+ * `method="POST"` fallback whose hidden inputs carry the action id, so replaying
+ * that POST runs the genuine action, validation and transaction included.
+ *
+ * SAFETY: every assertion here is a REFUSAL or a preview. Nothing in this file
+ * is expected to write, which is what makes it safe to run against the seeded
+ * database as often as you like. If you add a case, keep that property — a
+ * verification script that mutates is a liability, not a test.
+ *
+ *   npm run dev            # in another terminal
+ *   npm run verify:actions
+ */
+
+import { createHash, randomBytes } from "node:crypto";
+import { PrismaClient } from "@prisma/client";
+
+const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
+const COOKIE_NAME = "school_os_session";
+const prisma = new PrismaClient();
+
+let passed = 0;
+let failed = 0;
+
+function ok(label, detail = "") {
+  passed += 1;
+  console.log(`  ok   ${label}${detail ? ` — ${detail}` : ""}`);
+}
+
+function bad(label, detail) {
+  failed += 1;
+  console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`);
+}
+
+function check(label, condition, detail) {
+  if (condition) ok(label, detail);
+  else bad(label, detail);
+}
+
+/**
+ * The script's own database reads need the same patience as its HTTP calls:
+ * this connection is as pooled and as droppable as the app's, and a P2024 here
+ * is noise, not a verdict.
+ */
+async function db(operation, tries = 8) {
+  let last;
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      last = error;
+      await sleep(400 * (attempt + 1));
+    }
+  }
+  throw last;
+}
+
+// ── HTTP, with patience ─────────────────────────────────────────────────────
+// The pooled connection drops often enough that a 500 is usually noise rather
+// than a result; retry before believing it. Retries back off — hammering a
+// stalled pool eight times in a second only reproduces the same stall.
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchPage(path, cookie, tries = 10) {
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    try {
+      const response = await fetch(BASE + path, {
+        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+        redirect: "manual",
+      });
+      if (response.status === 500) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+      return { status: response.status, html: await response.text() };
+    } catch {
+      await sleep(400 * (attempt + 1));
+    }
+  }
+  throw new Error(`GET ${path} never succeeded`);
+}
+
+async function postForm(path, form, overrides, cookie, tries = 8) {
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const body = new FormData();
+    const used = new Set();
+    for (const field of form.fields) {
+      if (field.type === "checkbox" && !field.checked && !(field.name in overrides)) continue;
+      if (field.name in overrides) {
+        if (used.has(field.name)) continue;
+        body.append(field.name, String(overrides[field.name]));
+        used.add(field.name);
+      } else {
+        body.append(field.name, field.value);
+      }
+    }
+    for (const [name, value] of Object.entries(overrides)) {
+      if (!used.has(name)) body.append(name, String(value));
+    }
+
+    try {
+      const response = await fetch(BASE + path, {
+        method: "POST",
+        headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+        body,
+        redirect: "manual",
+      });
+      if (response.status === 500) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+      return {
+        status: response.status,
+        location: response.headers.get("x-action-redirect") ?? response.headers.get("location"),
+        html: await response.text(),
+      };
+    } catch {
+      await sleep(400 * (attempt + 1));
+    }
+  }
+  throw new Error(`POST ${path} never succeeded`);
+}
+
+// ── Tiny HTML reading ───────────────────────────────────────────────────────
+
+/**
+ * Attribute values arrive HTML-escaped, and Next's action metadata is JSON —
+ * `$ACTION_n:0` is `{&quot;id&quot;:&quot;…`. Post that back without decoding and
+ * the action id is unparseable, which surfaces as a 500 that looks exactly like
+ * a dropped connection. Decode before sending.
+ */
+function decodeEntities(value) {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+/** Every <form> on the page with the fields that belong to it. */
+function forms(html) {
+  return [...html.matchAll(/<form\b[^>]*>([\s\S]*?)<\/form>/g)].map((match) => {
+    const inner = match[1];
+    const fields = [];
+
+    for (const tag of inner.match(/<input\b[^>]*>/g) ?? []) {
+      const name = tag.match(/name="([^"]*)"/)?.[1];
+      if (!name) continue;
+      fields.push({
+        name,
+        value: decodeEntities(tag.match(/value="([^"]*)"/)?.[1] ?? ""),
+        type: tag.match(/type="([^"]*)"/)?.[1] ?? "text",
+        checked: /\bchecked\b/.test(tag),
+        disabled: /\bdisabled\b/.test(tag),
+      });
+    }
+
+    for (const select of inner.match(/<select\b[\s\S]*?<\/select>/g) ?? []) {
+      const name = select.match(/name="([^"]*)"/)?.[1];
+      if (!name) continue;
+      const chosen = decodeEntities(
+        select.match(/<option value="([^"]*)"[^>]*\bselected\b/)?.[1] ??
+          select.match(/<option value="([^"]*)"/)?.[1] ??
+          "",
+      );
+      fields.push({ name, value: chosen, type: "select", checked: false, disabled: false });
+    }
+
+    return { text: inner.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(), fields, inner };
+  });
+}
+
+/** The form whose visible text contains `needle` — how a person would find it. */
+function formWith(html, needle) {
+  const found = forms(html).find((form) => form.text.includes(needle));
+  if (!found) throw new Error(`no form containing "${needle}"`);
+  return found;
+}
+
+/** The <Alert> banners an action rendered back. */
+function alerts(html) {
+  return [...html.matchAll(/role="alert"[^>]*>([\s\S]*?)<\/p>/g)]
+    .map((match) => match[1].replace(/<!-- -->/g, "").replace(/<[^>]+>/g, "").trim())
+    .filter(Boolean);
+}
+
+const says = (html, fragment) => alerts(html).some((alert) => alert.includes(fragment));
+
+// ── Session ─────────────────────────────────────────────────────────────────
+
+async function openSession() {
+  const user = await db(() => prisma.user.findFirst({
+    where: { email: "owner@stmarydemo.edu.gh", deletedAt: null },
+    include: { memberships: true },
+  }));
+  if (!user) {
+    throw new Error("demo owner not found — run `npm run db:seed` first");
+  }
+  const token = randomBytes(32).toString("hex");
+  await db(() => prisma.session.create({
+    data: {
+      userId: user.id,
+      tokenHash: createHash("sha256").update(token).digest("hex"),
+      activeSchoolId: user.memberships[0]?.schoolId,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+    },
+  }));
+  return { token, userId: user.id };
+}
+
+async function closeSession(token) {
+  // Best effort: a failure to tidy up must not mask the results above it.
+  try {
+    await db(() =>
+      prisma.session.deleteMany({
+        where: { tokenHash: createHash("sha256").update(token).digest("hex") },
+      }),
+    );
+  } catch {
+    console.log("  --   could not delete the verification session; it expires in 30 minutes");
+  }
+}
+
+// ── The checks ──────────────────────────────────────────────────────────────
+
+async function gradingGuards(cookie) {
+  console.log("\nGrading scales");
+  const { html } = await fetchPage("/settings/grading", cookie);
+
+  const frozen = await db(() => prisma.gradingScale.findFirst({
+    where: { subjectResults: { some: {} } },
+    select: { id: true, name: true, _count: { select: { subjectResults: true } } },
+  }));
+  if (!frozen) {
+    console.log("  --   no graded scale in this database, skipping the freeze checks");
+    return;
+  }
+
+  check(
+    "a graded scale renders no band editor",
+    !html.includes(`value="${frozen.id}"`) || !formWith(html, "Add band").inner.includes(frozen.id),
+    `${frozen.name}, ${frozen._count.subjectResults} results`,
+  );
+
+  // Forge the scale id: the UI never offers this, which is exactly why it needs
+  // checking — the refusal has to live in the action, not the markup.
+  const addBand = formWith(html, "Add band");
+  const forged = await postForm(
+    "/settings/grading",
+    addBand,
+    {
+      gradingScaleId: frozen.id,
+      grade: "ZZ",
+      minScore: "0",
+      maxScore: "1",
+      points: "1",
+      remark: "verification probe",
+    },
+    cookie,
+  );
+  check(
+    "a forged band write against a graded scale is refused",
+    says(forged.html, "already graded"),
+    alerts(forged.html)[0],
+  );
+
+  const editable = await db(() => prisma.gradingScale.findFirst({
+    where: { subjectResults: { none: {} }, bands: { some: {} } },
+    include: { bands: { orderBy: { minScore: "desc" } } },
+  }));
+  if (editable && editable.bands.length >= 2) {
+    const top = editable.bands[0];
+    const overlap = await postForm(
+      "/settings/grading",
+      addBand,
+      {
+        gradingScaleId: editable.id,
+        grade: "ZZ",
+        minScore: String(top.minScore),
+        maxScore: String(top.maxScore),
+        points: "1",
+        remark: "verification probe",
+      },
+      cookie,
+    );
+    check(
+      "an overlapping band is refused",
+      says(overlap.html, "overlaps"),
+      alerts(overlap.html)[0],
+    );
+
+    const backwards = await postForm(
+      "/settings/grading",
+      addBand,
+      {
+        gradingScaleId: editable.id,
+        grade: "ZZ",
+        minScore: "80",
+        maxScore: "20",
+        points: "1",
+        remark: "verification probe",
+      },
+      cookie,
+    );
+    check(
+      "a band whose floor is above its ceiling is refused",
+      says(backwards.html, "cannot be above"),
+      alerts(backwards.html)[0],
+    );
+  }
+}
+
+async function accountGuards(cookie, userId) {
+  console.log("\nAccounts");
+  const owners = await db(() => prisma.membership.count({ where: { role: "OWNER", status: "ACTIVE" } }));
+  const path = `/users/${userId}`;
+  const { html } = await fetchPage(path, cookie);
+
+  if (owners === 1) {
+    const demote = await postForm(path, formWith(html, "Save roles"), { roles: "TEACHER" }, cookie);
+    check(
+      "the last proprietor cannot be demoted",
+      says(demote.html, "last proprietor"),
+      alerts(demote.html)[0],
+    );
+  } else {
+    console.log(`  --   ${owners} proprietors exist, skipping the lockout check`);
+  }
+
+  const suspend = await postForm(path, formWith(html, "Suspend account"), {}, cookie);
+  check(
+    "you cannot suspend your own account",
+    suspend.location?.includes("error=self") ?? false,
+    suspend.location ?? "no redirect",
+  );
+
+  const remove = await postForm(path, formWith(html, "Remove access"), {}, cookie);
+  check(
+    "you cannot remove your own access",
+    remove.location?.includes("error=self") ?? false,
+    remove.location ?? "no redirect",
+  );
+
+  const after = await db(() => prisma.membership.findMany({ where: { userId }, select: { role: true, status: true } }));
+  check(
+    "the account survived all three refusals",
+    after.some((m) => m.role === "OWNER" && m.status === "ACTIVE"),
+    after.map((m) => `${m.role}:${m.status}`).join(" "),
+  );
+}
+
+async function studentGuards(cookie) {
+  console.log("\nStudents");
+  const billed = await db(() => prisma.student.findFirst({
+    where: { deletedAt: null, invoices: { some: {} } },
+    select: { id: true, admissionNo: true },
+  }));
+  if (!billed) {
+    console.log("  --   no billed student, skipping the delete guard");
+    return;
+  }
+
+  const path = `/students/${billed.id}`;
+  const { html } = await fetchPage(path, cookie);
+  const del = await postForm(path, formWith(html, "Delete record"), {}, cookie);
+  check(
+    "a billed student cannot be deleted",
+    del.location?.includes("error=has-money") ?? false,
+    `${billed.admissionNo} → ${del.location ?? "no redirect"}`,
+  );
+
+  const still = await db(() => prisma.student.findUnique({
+    where: { id: billed.id },
+    select: { deletedAt: true },
+  }));
+  check("the student is still on file", still?.deletedAt === null, billed.admissionNo);
+}
+
+async function structureGuards(cookie) {
+  console.log("\nSchool structure");
+  const { html } = await fetchPage("/settings/structure", cookie);
+
+  const inUse = await db(() => prisma.level.count({ where: { classGroups: { some: {} } } }));
+  const deleteForms = forms(html).filter((form) => form.text.includes("Delete level")).length;
+  check(
+    "levels that hold classes offer no delete button",
+    inUse === 0 || deleteForms < inUse,
+    `${inUse} levels in use, ${deleteForms} delete buttons rendered`,
+  );
+
+  const addLevel = formWith(html, "Add level");
+  const blank = await postForm("/settings/structure", addLevel, { name: "  ", code: "ZZZ" }, cookie);
+  check(
+    "server-side validation catches a blank name",
+    says(blank.html, "Give the level a name"),
+    alerts(blank.html)[0],
+  );
+}
+
+async function importChecks(cookie) {
+  console.log("\nStudent import (preview only — writes nothing)");
+  const { html } = await fetchPage("/students/import", cookie);
+
+  const existing = await db(() => prisma.student.findFirst({
+    where: { deletedAt: null },
+    select: { admissionNo: true },
+  }));
+
+  const csv = [
+    "first_name,last_name,gender,class,admission_no,guardian_name,guardian_phone",
+    "Verify,Probe,F,,,,",
+    "NoGender,Probe,,,,,",
+    `Duplicate,Probe,M,,${existing?.admissionNo ?? "SM/0001"},,`,
+    "BadClass,Probe,M,Nowhere Z,,,",
+  ].join("\n");
+
+  const preview = await postForm("/students/import", formWith(html, "Check the file"), { csv }, cookie);
+  const banner = alerts(preview.html).find((a) => a.includes("rows read")) ?? "";
+  check("the preview reads every row", banner.includes("4 rows read"), banner);
+  check("a row with no gender is blocked", preview.html.includes("gender must be M or F"));
+  check("a duplicate admission number is blocked", preview.html.includes("already exists"));
+  check("an unknown class is blocked", preview.html.includes("no class called"));
+  // The importable row here has warnings (no class, no guardian) but no errors,
+  // which is the distinction that matters: warnings never cost you a child.
+  check(
+    "a row with warnings but no errors still counts as importable",
+    banner.includes("1 ready") && banner.includes("3 with problems"),
+    banner,
+  );
+  check(
+    "nothing was written by the preview",
+    (await db(() => prisma.student.count({ where: { lastName: "Probe" } }))) === 0,
+  );
+}
+
+// ── Run ─────────────────────────────────────────────────────────────────────
+
+async function main() {
+  try {
+    const probe = await fetch(BASE, { redirect: "manual" }).catch(() => null);
+    if (!probe) {
+      console.error(`Cannot reach ${BASE} — start the app with \`npm run dev\` first.`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const { token, userId } = await openSession();
+    try {
+      console.log(`Driving ${BASE} as the demo proprietor.`);
+      await gradingGuards(token);
+      await accountGuards(token, userId);
+      await studentGuards(token);
+      await structureGuards(token);
+      await importChecks(token);
+    } finally {
+      await closeSession(token);
+    }
+
+    console.log(`\n${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exitCode = 1;
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+await main();
