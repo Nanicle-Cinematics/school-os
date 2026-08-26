@@ -144,6 +144,20 @@ cannot be reached by calling engine code. **Every assertion in it is a refusal o
 a preview, so a full run writes nothing** — keep that property when adding cases,
 or it stops being safe to run against a real database.
 
+It also runs against a deployment, signing in through the real login form so it
+needs no database at all:
+
+```bash
+VERIFY_BASE_URL=https://school-os-lilac.vercel.app \
+VERIFY_EMAIL=you@example.com VERIFY_PASSWORD='…' npm run verify:actions
+```
+
+The Deployment section needs no fixtures and is the post-deploy smoke test: the
+login page renders, the auth gate is closed, and an authenticated session reaches
+the app — which on production also proves the isolation guard was satisfied,
+since a misconfigured build refuses to start. The fixture-backed guards skip with
+a `--` line rather than passing vacuously when there is no database to read.
+
 **Server actions can be exercised without a browser.** The `Next-Action` header
 POST that works for RPC-style actions does 404 here, because every action is
 form-bound (`useActionState`). But Next also renders each form's **no-JS
