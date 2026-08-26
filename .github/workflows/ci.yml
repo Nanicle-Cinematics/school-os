@@ -55,6 +55,12 @@ jobs:
           DATABASE_URL="postgresql://postgres:postgres@localhost:5432/school_os"
           DIRECT_URL="postgresql://postgres:postgres@localhost:5432/school_os"
           DB_RLS="off"
+          # This database is a throwaway with one seeded school, so the suites
+          # run unscoped on the owner connection. Saying so explicitly is what
+          # the production guard in src/lib/prisma.ts requires — it refuses to
+          # start a production build that has isolation switched off by accident
+          # rather than on purpose.
+          ALLOW_UNSCOPED_DB="1"
           APP_URL="http://localhost:3000"
           SESSION_SECRET="ci-not-a-real-secret"
           ENV
