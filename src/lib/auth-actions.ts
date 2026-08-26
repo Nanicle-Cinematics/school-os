@@ -38,13 +38,16 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (!(await verifyPassword(password, user.passwordHash))) {
     return invalid;
   }
-  if (user.memberships.length === 0) {
+  // A platform admin deliberately belongs to no school — the Nanicle console
+  // sits outside every tenant. Requiring a membership here locked the only
+  // account that can provision the first school out of the product entirely.
+  if (user.memberships.length === 0 && !user.isPlatformAdmin) {
     return { error: "This account is not linked to any school. Contact your administrator." };
   }
 
   const headerList = await headers();
   await createSession(user.id, {
-    activeSchoolId: user.memberships[0].schoolId,
+    activeSchoolId: user.memberships[0]?.schoolId,
     ip: headerList.get("x-forwarded-for")?.split(",")[0]?.trim(),
     userAgent: headerList.get("user-agent") ?? undefined,
   });
@@ -53,7 +56,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
   );
 
-  redirect("/dashboard");
+  // Someone with no membership has nowhere to go inside a school.
+  redirect(user.memberships.length === 0 ? "/admin" : "/dashboard");
 }
 
 export async function logout() {
