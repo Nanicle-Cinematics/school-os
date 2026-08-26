@@ -5,7 +5,8 @@ import { Prisma, type Stage } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { prisma, tenantTransaction } from "@/lib/prisma";
+import { applyGesCurriculum } from "@/lib/ges-curriculum";
 
 export type StructureState = { error?: string; ok?: string };
 
@@ -199,4 +200,41 @@ export async function deleteProgramme(formData: FormData): Promise<void> {
 
   await prisma.programme.delete({ where: { id } });
   refresh();
+}
+
+
+/**
+ * Fill in the GES ladder and subject offerings for a school that already exists.
+ *
+ * Provisioning does this automatically, so this is for schools created before
+ * that, or one that deleted a level and wants it back. Idempotent: it adds what
+ * is missing and leaves everything else alone, including names a school has
+ * customised.
+ */
+export async function applyCurriculum(
+  // useActionState requires both parameters; this action reads neither, since
+  // the curriculum is fixed and the school comes from the session.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _prev: StructureState,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _formData: FormData,
+): Promise<StructureState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const result = await tenantTransaction(
+    auth.schoolId,
+    (tx) => applyGesCurriculum(tx, auth.schoolId),
+    { timeout: 180_000, maxWait: 20_000 },
+  );
+
+  refresh();
+  revalidatePath("/subjects");
+
+  if (result.levelsCreated === 0 && result.subjectsCreated === 0 && result.linksCreated === 0) {
+    return { ok: "Already set up — nothing was missing." };
+  }
+  return {
+    ok: `Added ${result.levelsCreated} levels, ${result.subjectsCreated} subjects and ${result.linksCreated} subject offerings. Anything already there was left alone.`,
+  };
 }

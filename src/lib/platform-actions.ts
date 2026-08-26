@@ -8,6 +8,7 @@ import { withBypass } from "@/lib/tenant-context";
 import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
 import { slugify } from "@/lib/platform-data";
+import { applyGesCurriculum } from "@/lib/ges-curriculum";
 
 export type PlatformState = { error?: string; ok?: string };
 
@@ -132,6 +133,11 @@ export async function createSchool(
             },
           });
 
+          // Every school starts on the national curriculum rather than an
+          // empty ladder: eleven levels KG1–JHS3 and the GES subject offering
+          // for each, transitions included.
+          await applyGesCurriculum(tx, school.id);
+
           await writeAudit(tx, {
             schoolId: school.id,
             actorUserId: admin.userId,
@@ -141,7 +147,8 @@ export async function createSchool(
             after: { name, slug, plan, classScoreWeight, owner: ownerEmail },
           });
         },
-        { timeout: 60_000, maxWait: 15_000 },
+        // Seeding the curriculum is 11 levels, 18 subjects and 104 offerings.
+        { timeout: 180_000, maxWait: 20_000 },
       ),
     );
   } catch (error) {
@@ -157,6 +164,6 @@ export async function createSchool(
 
   revalidatePath("/admin");
   return {
-    ok: `${name} is ready. ${ownerName} signs in with ${ownerEmail} and the temporary password ${password} — hand it over now, it is not shown again. They still need levels, classes and subjects before admitting anyone.`,
+    ok: `${name} is ready, with the GES curriculum already set up — KG1 to JHS 3 and the subjects each level offers. ${ownerName} signs in with ${ownerEmail} and the temporary password ${password} — hand it over now, it is not shown again. Next they add an academic year and their classes.`,
   };
 }

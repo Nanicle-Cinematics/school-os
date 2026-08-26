@@ -64,6 +64,30 @@ transport, health, payroll. Single-campus by design — there is no `Branch` mod
   shows up as esbuild `EBADMACHO` / errno 88; fix with
   `rm -rf node_modules package-lock.json && npm cache clean --force && npm install`.
 
+## The GES curriculum is the onboarding baseline
+
+Every school is provisioned with the national curriculum already set up —
+11 levels (KG 1 to JHS 3), 18 subjects and 104 level-subject offerings — rather
+than an empty ladder. `src/lib/ges-curriculum.ts` holds it as ground truth;
+`applyGesCurriculum` is idempotent, so it also fills gaps for a school created
+earlier (offered on Settings → School structure).
+
+The transitions are the part a hand-built list gets wrong, and the reason this is
+data rather than documentation:
+
+- **KG is not subjects.** Four thematic areas — Numeracy, Literacy, Creative
+  Arts, Our World Our People. Mathematics and Science must never appear there.
+- **OWOP and History** run B1–B6 only; at B7 they merge into **Social Studies**.
+- **Creative Arts** (B1–B6) becomes **Creative Arts and Design** at JHS.
+- **French and Computing** start at **B4**, not B1.
+- **Arabic and Career Technology** are JHS-only.
+- **PE** is "Physical Education" (B1–B6) and "Physical Health" (B7–B9) — one
+  lineage, two names, so continuity checks must treat them as the same subject.
+
+Counts to assert against: KG 4, B1–B3 9, B4–B6 11, B7–B9 12. A school whose local
+practice differs edits it afterwards — the structure is a baseline, and a
+deviation is a customisation rather than an error.
+
 ## Tenancy — enforcement is LIVE
 
 `DB_RLS="on"` and the app connects through `APP_DATABASE_URL` as the restricted

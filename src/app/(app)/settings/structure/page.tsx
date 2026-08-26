@@ -4,7 +4,12 @@ import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { STAGES, getStructure } from "@/lib/structure-data";
 import { Card } from "../../ui";
-import { HouseSection, LevelSection, ProgrammeSection } from "./structure-forms";
+import {
+  ApplyCurriculumForm,
+  HouseSection,
+  LevelSection,
+  ProgrammeSection,
+} from "./structure-forms";
 
 export const metadata: Metadata = { title: "School structure · School OS" };
 
@@ -24,6 +29,10 @@ export default async function StructurePage() {
           classes — a class needs a level to sit in.
         </p>
       </div>
+
+      <Card title="GES curriculum">
+        <ApplyCurriculumForm levelCount={levels.length} />
+      </Card>
 
       <Card title={`Levels · ${levels.length}`}>
         {levels.length === 0 ? (
