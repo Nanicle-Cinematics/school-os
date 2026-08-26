@@ -31,6 +31,7 @@ export const NAV: NavSection[] = [
       { href: "/students", label: "Students", roles: [...OFFICE, "TEACHER"] },
       { href: "/guardians", label: "Guardians", roles: OFFICE },
       { href: "/staff", label: "Staff", roles: OFFICE },
+      { href: "/houses", label: "Houses", roles: OFFICE },
     ],
   },
   {

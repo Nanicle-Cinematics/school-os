@@ -302,6 +302,55 @@ export function AdmitStudentForm({
       </div>
 
       <Fields houses={houses} programmes={programmes} />
+
+      {/* Captured here rather than left to a second screen: a student with no
+          guardian receives no bill, no result and no closing-date notice, and
+          nothing later forces anyone to notice. Optional, because the office
+          often has the parent's details on a separate form. */}
+      <fieldset className="mt-5 border-t border-slate-200 pt-4">
+        <legend className="sr-only">Parent or guardian</legend>
+        <div className="mb-3 flex items-baseline gap-2">
+          <h3 className="text-sm font-semibold text-slate-900">Parent or guardian</h3>
+          <span className="text-xs text-slate-400">
+            optional — but they receive the bills and the results
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Full name">
+            <input type="text" name="guardianName" placeholder="Kofi Mensah" className={inputClass} />
+          </Field>
+
+          <Field label="Phone" hint="A family already on file is matched by this number.">
+            <input type="tel" name="guardianPhone" placeholder="0244123456" className={inputClass} />
+          </Field>
+
+          <Field label="Relationship">
+            <select name="guardianRelationship" defaultValue="GUARDIAN" className={inputClass}>
+              <option value="MOTHER">Mother</option>
+              <option value="FATHER">Father</option>
+              <option value="GRANDPARENT">Grandparent</option>
+              <option value="UNCLE">Uncle</option>
+              <option value="AUNT">Aunt</option>
+              <option value="SIBLING">Sibling</option>
+              <option value="GUARDIAN">Guardian</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </Field>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-700">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="guardianReceivesBills" defaultChecked className="h-4 w-4" />
+            Receives bills
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="guardianReceivesReports" defaultChecked className="h-4 w-4" />
+            Receives results
+          </label>
+        </div>
+      </fieldset>
+
       <Feedback state={state} />
 
       <div className="mt-5">

@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Gender, Residency, StudentStatus } from "@prisma/client";
+import type { Gender, GuardianRelationship, Residency, StudentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import { writeAudit } from "@/lib/audit";
+import { normalisePhone } from "@/lib/sms-shared";
 
 export type StudentState = { error?: string; ok?: string };
 
@@ -21,6 +22,48 @@ const STATUSES: StudentStatus[] = [
   "TRANSFERRED",
   "SUSPENDED",
 ];
+
+const RELATIONSHIPS: GuardianRelationship[] = [
+  "FATHER", "MOTHER", "GRANDPARENT", "UNCLE", "AUNT", "SIBLING", "GUARDIAN", "OTHER",
+];
+
+/**
+ * The guardian captured on the admission form, if any.
+ *
+ * Admitting a child without one is allowed — the office often has the parent's
+ * details on a separate form — but it is worth doing here, because a student
+ * with no guardian receives no bill, no result and no closing-date notice, and
+ * nothing later forces anyone to notice.
+ */
+function readGuardian(formData: FormData) {
+  const name = String(formData.get("guardianName") ?? "").trim();
+  const phone = String(formData.get("guardianPhone") ?? "").trim();
+  if (!name && !phone) {
+    return { guardian: null as null | {
+      firstName: string; lastName: string; phone: string;
+      relationship: GuardianRelationship; receivesBills: boolean; receivesReports: boolean;
+    }, error: null as string | null };
+  }
+  if (!name) {
+    return { guardian: null, error: "Give the guardian a name, or clear their phone number." };
+  }
+  if (!normalisePhone(phone)) {
+    return { guardian: null, error: "That guardian phone is not a Ghanaian mobile number, e.g. 0244123456." };
+  }
+  const relationship = String(formData.get("guardianRelationship") ?? "GUARDIAN") as GuardianRelationship;
+  const parts = name.split(/\s+/);
+  return {
+    error: null,
+    guardian: {
+      firstName: parts[0],
+      lastName: parts.slice(1).join(" ") || parts[0],
+      phone,
+      relationship: RELATIONSHIPS.includes(relationship) ? relationship : "GUARDIAN",
+      receivesBills: formData.get("guardianReceivesBills") === "on",
+      receivesReports: formData.get("guardianReceivesReports") === "on",
+    },
+  };
+}
 
 function optionalDate(value: FormDataEntryValue | null) {
   const raw = String(value ?? "").trim();
@@ -84,6 +127,11 @@ export async function admitStudent(
     return { error: "Pick a status." };
   }
 
+  const { guardian, error: guardianError } = readGuardian(formData);
+  if (guardianError) {
+    return { error: guardianError };
+  }
+
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
   // Admitting straight into a class is the normal path; without a current year
   // there is no roster to join, and a student with a class but no enrolment
@@ -125,6 +173,42 @@ export async function admitStudent(
       });
     }
 
+    if (guardian) {
+      // Siblings share a parent: match on the normalised phone so a family of
+      // four does not become four copies of the same mother.
+      const wanted = normalisePhone(guardian.phone);
+      const candidates = await tx.guardian.findMany({
+        where: { deletedAt: null },
+        select: { id: true, phone: true },
+      });
+      const existing = candidates.find((c) => normalisePhone(c.phone) === wanted);
+
+      const guardianId =
+        existing?.id ??
+        (
+          await tx.guardian.create({
+            data: {
+              schoolId: auth.schoolId,
+              firstName: guardian.firstName,
+              lastName: guardian.lastName,
+              phone: guardian.phone,
+            },
+          })
+        ).id;
+
+      await tx.studentGuardian.create({
+        data: {
+          schoolId: auth.schoolId,
+          studentId: student.id,
+          guardianId,
+          relationship: guardian.relationship,
+          isPrimary: true,
+          receivesBills: guardian.receivesBills,
+          receivesReports: guardian.receivesReports,
+        },
+      });
+    }
+
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,
@@ -140,7 +224,9 @@ export async function admitStudent(
   revalidatePath("/students");
   revalidatePath("/dashboard");
   return {
-    ok: `Admitted ${profile.firstName} ${profile.lastName} as ${admissionNo}. Link a guardian next so bills reach someone.`,
+    ok: guardian
+      ? `Admitted ${profile.firstName} ${profile.lastName} as ${admissionNo}, with ${guardian.firstName} ${guardian.lastName} as their guardian.`
+      : `Admitted ${profile.firstName} ${profile.lastName} as ${admissionNo}. Nobody is linked to receive their bills or results — add a guardian next.`,
   };
 }
 
