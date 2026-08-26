@@ -172,9 +172,16 @@ export async function deleteAcademicYear(formData: FormData): Promise<void> {
     where: { id },
     include: { terms: { select: { id: true } } },
   });
-  if (!year || year.isCurrent) {
+  if (!year) {
     return;
   }
+
+  // Being the current year is deliberately NOT a reason to refuse. A school
+  // whose only year was entered wrongly would otherwise be stuck: it cannot be
+  // deleted because it is current, and it cannot stop being current because
+  // there is nothing else to switch to. What actually needs protecting is
+  // attached data, which the checks below cover. Deleting the current year
+  // leaves none current, and every screen already says so plainly.
 
   const termIds = year.terms.map((term) => term.id);
   const invoices = await prisma.invoice.count({ where: { termId: { in: termIds } } });
