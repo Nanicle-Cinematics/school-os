@@ -5,6 +5,7 @@ import { OFFICE } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { deleteAcademicYear } from "@/lib/term-actions";
 import { setCurrentTerm } from "@/lib/settings-actions";
+import { getYearUsage } from "@/lib/settings-data";
 import { Alert, Card } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { NewYearForm, TermRowForm } from "./term-forms";
@@ -23,16 +24,7 @@ export default async function TermsPage() {
     include: { terms: { orderBy: { sequence: "asc" } } },
   });
 
-  // Which years are safe to remove: anything already billed, graded or enrolled
-  // against must stay, because Invoice and TermResult cascade from Term.
-  const usage = new Map<string, number>();
-  for (const year of years) {
-    const termIds = year.terms.map((term) => term.id);
-    const invoices = await prisma.invoice.count({ where: { termId: { in: termIds } } });
-    const results = await prisma.termResult.count({ where: { termId: { in: termIds } } });
-    const enrolments = await prisma.enrollment.count({ where: { academicYearId: year.id } });
-    usage.set(year.id, invoices + results + enrolments);
-  }
+  const usage = await getYearUsage(years);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
