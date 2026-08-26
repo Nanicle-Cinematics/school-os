@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import {
+  applyCurriculum,
   deleteHouse,
   deleteLevel,
   deleteProgramme,
@@ -361,5 +362,36 @@ export function ProgrammeSection({ programmes }: { programmes: ProgrammeRow[] })
         <Feedback state={state} />
       </div>
     </>
+  );
+}
+
+
+/**
+ * Offered when the ladder is empty or partial. The GES structure is the baseline
+ * every Ghanaian school starts from, so typing it in by hand is work nobody
+ * should repeat — and the transitions (OWOP to Social Studies, Creative Arts to
+ * Creative Arts and Design, French from Basic 4) are easy to get subtly wrong.
+ */
+export function ApplyCurriculumForm({ levelCount }: { levelCount: number }) {
+  const [state, formAction] = useActionState<StructureState, FormData>(applyCurriculum, {});
+
+  return (
+    <form action={formAction} className="space-y-3 p-4">
+      <p className="text-sm text-slate-600">
+        {levelCount === 0
+          ? "This school has no levels yet. The GES curriculum sets up KG 1 to JHS 3 and the subjects each level offers."
+          : "Add anything missing from the GES curriculum. Existing levels, subjects and names are left untouched."}
+      </p>
+      {state.error ? <Alert tone="error">{state.error}</Alert> : null}
+      {state.ok ? <Alert tone="success">{state.ok}</Alert> : null}
+      <SubmitButton pendingLabel="Setting up…">
+        {levelCount === 0 ? "Set up the GES curriculum" : "Fill in anything missing"}
+      </SubmitButton>
+      <p className="text-xs text-slate-400">
+        KG is four thematic areas, not subjects. OWOP and History run to Basic 6 and become Social
+        Studies at JHS. French and Computing start at Basic 4. A school that differs edits it
+        afterwards.
+      </p>
+    </form>
   );
 }
