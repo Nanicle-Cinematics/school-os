@@ -126,9 +126,7 @@ export default async function SettingsPage() {
                           {/* The delete belongs to the year, so it is offered
                               once, on its first term's row. */}
                           {term.sequence === 1 ? (
-                            year.isCurrent ? (
-                              <span className="text-xs text-slate-400">current year</span>
-                            ) : (usage.get(year.id) ?? 0) > 0 ? (
+                            (usage.get(year.id) ?? 0) > 0 ? (
                               <span
                                 className="text-xs text-slate-400"
                                 title="Billed, graded or enrolled against."

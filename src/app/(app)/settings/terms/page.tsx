@@ -56,9 +56,7 @@ export default async function TermsPage() {
             key={year.id}
             title={`${year.name}${year.isCurrent ? " · current" : ""}`}
             action={
-              year.isCurrent ? (
-                <span className="text-xs text-slate-400">in use</span>
-              ) : used > 0 ? (
+              used > 0 ? (
                 <span className="text-xs text-slate-400" title="Billed, graded or enrolled against.">
                   {used} record{used === 1 ? "" : "s"} attached
                 </span>
@@ -111,7 +109,8 @@ export default async function TermsPage() {
 
       <p className="text-xs text-slate-400">
         A year that has been billed, graded or enrolled against cannot be deleted — invoices and
-        results hang off its terms and would go with it.
+        results hang off its terms and would go with it. Deleting the current year is allowed while
+        it is still empty; the school is then left with no current term until you set one.
       </p>
     </div>
   );
