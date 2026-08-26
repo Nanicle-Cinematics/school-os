@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { generateInvoicesForTerm, recalcInvoice } from "@/lib/invoice-engine";
@@ -18,6 +19,7 @@ export async function generateInvoices(
   formData: FormData,
 ): Promise<GenerateState> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
 
   if (!termId) {
@@ -29,8 +31,7 @@ export async function generateInvoices(
 
   // Generous timeout: this walks every active student and writes an invoice
   // plus its lines for each, and the database is a continent away.
-  const result = await tenantTransaction(
-    async (tx) => {
+  const result = await tenantTransaction(auth.schoolId, async (tx) => {
       const generated = await generateInvoicesForTerm(tx, auth.schoolId, termId, dueDays);
       await writeAudit(tx, {
         schoolId: auth.schoolId,
@@ -63,12 +64,13 @@ export async function generateInvoices(
 
 export async function cancelInvoice(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
   const invoiceId = String(formData.get("invoiceId") ?? "");
   if (!invoiceId) {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const invoice = await tx.invoice.findUnique({
       where: { id: invoiceId },
       include: { allocations: true },
@@ -99,11 +101,12 @@ export async function cancelInvoice(formData: FormData): Promise<void> {
 }
 
 export async function recomputeInvoice(formData: FormData): Promise<void> {
-  await requireRole(FINANCE);
+  const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
   const invoiceId = String(formData.get("invoiceId") ?? "");
   if (!invoiceId) {
     return;
   }
-  await tenantTransaction((tx) => recalcInvoice(tx, invoiceId));
+  await tenantTransaction(auth.schoolId, (tx) => recalcInvoice(tx, invoiceId));
   revalidatePath(`/invoices/${invoiceId}`);
 }

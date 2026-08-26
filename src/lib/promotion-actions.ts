@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
@@ -24,6 +25,7 @@ export async function runPromotion(
   formData: FormData,
 ): Promise<PromotionState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const classGroupId = String(formData.get("classGroupId") ?? "");
   const sourceYearId = String(formData.get("sourceYearId") ?? "");
@@ -64,8 +66,7 @@ export async function runPromotion(
 
   const applied = { promoted: 0, repeated: 0, graduated: 0, held: 0 };
 
-  await tenantTransaction(
-    async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
       for (const move of moves) {
         if (move.decision === "HOLD") {
           applied.held += 1;
@@ -167,6 +168,7 @@ export async function runWholeSchoolPromotion(
   formData: FormData,
 ): Promise<PromotionState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const sourceYearId = String(formData.get("sourceYearId") ?? "");
   const targetYearId = String(formData.get("targetYearId") ?? "");
@@ -192,8 +194,7 @@ export async function runWholeSchoolPromotion(
   const totals = { promoted: 0, repeated: 0, graduated: 0, classes: 0 };
 
   for (const plan of chosen) {
-    await tenantTransaction(
-      async (tx) => {
+    await tenantTransaction(auth.schoolId, async (tx) => {
         for (const move of plan.moves) {
           if (move.decision === "GRADUATE") {
             await tx.student.update({

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma, type AudienceType } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { resolveAudience, type AudienceFilter } from "@/lib/message-data";
@@ -36,6 +37,7 @@ export async function previewCampaign(
   formData: FormData,
 ): Promise<PreviewState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const body = String(formData.get("body") ?? "").trim();
   const audienceType = String(formData.get("audienceType") ?? "ALL_PARENTS") as AudienceType;
 
@@ -88,6 +90,7 @@ export type SendState = { error?: string; ok?: string };
  */
 export async function sendCampaign(_prev: SendState, formData: FormData): Promise<SendState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const name = String(formData.get("name") ?? "").trim() || "Untitled campaign";
   const body = String(formData.get("body") ?? "").trim();
@@ -111,8 +114,7 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
 
   const settings = await prisma.schoolSettings.findUnique({ where: { schoolId: auth.schoolId } });
 
-  const campaignId = await tenantTransaction(
-    async (tx) => {
+  const campaignId = await tenantTransaction(auth.schoolId, async (tx) => {
       const campaign = await tx.messageCampaign.create({
         data: {
           schoolId: auth.schoolId,

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { SmsProvider } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
@@ -25,6 +26,7 @@ export async function saveSchoolProfile(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) {
@@ -63,6 +65,7 @@ export async function saveAcademicPolicy(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const classScoreWeight = Number(formData.get("classScoreWeight"));
   const examScoreWeight = Number(formData.get("examScoreWeight"));
@@ -98,7 +101,7 @@ export async function saveAcademicPolicy(
 
   const before = await prisma.schoolSettings.findUnique({ where: { schoolId: auth.schoolId } });
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const settings = await tx.schoolSettings.upsert({
       where: { schoolId: auth.schoolId },
       create: { schoolId: auth.schoolId, ...data },
@@ -136,6 +139,7 @@ export async function saveFeesPolicy(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const invoiceDueDays = Number(formData.get("invoiceDueDays"));
   if (!Number.isFinite(invoiceDueDays) || invoiceDueDays < 0) {
@@ -157,6 +161,7 @@ export async function saveSmsSettings(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const smsEnabled = formData.get("smsEnabled") === "on";
   const providerRaw = String(formData.get("smsProvider") ?? "");
@@ -197,12 +202,13 @@ export async function saveSmsSettings(
  */
 export async function setCurrentTerm(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
   if (!termId) {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const term = await tx.term.findUnique({ where: { id: termId } });
     if (!term) {
       return;

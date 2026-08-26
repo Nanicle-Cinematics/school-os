@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -18,6 +19,7 @@ export async function saveSubject(
   formData: FormData,
 ): Promise<SubjectState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -74,6 +76,7 @@ export async function saveSubjectLevels(
   formData: FormData,
 ): Promise<SubjectState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const subjectId = String(formData.get("subjectId") ?? "");
   if (!subjectId) {
@@ -111,7 +114,8 @@ export async function saveSubjectLevels(
 }
 
 export async function deleteSubject(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;

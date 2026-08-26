@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma, type TermName } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
@@ -50,6 +51,7 @@ export async function createAcademicYear(
   formData: FormData,
 ): Promise<TermState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const name = String(formData.get("name") ?? "").trim();
   const startDate = parseDate(formData.get("startDate"));
@@ -69,7 +71,7 @@ export async function createAcademicYear(
   const terms = splitIntoTerms(startDate, endDate);
 
   try {
-    await tenantTransaction(async (tx) => {
+    await tenantTransaction(auth.schoolId, async (tx) => {
       const year = await tx.academicYear.create({
         data: { schoolId: auth.schoolId, name, startDate, endDate },
       });
@@ -125,6 +127,7 @@ export async function createAcademicYear(
 
 export async function saveTerm(_prev: TermState, formData: FormData): Promise<TermState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const startDate = parseDate(formData.get("startDate"));
@@ -150,7 +153,7 @@ export async function saveTerm(_prev: TermState, formData: FormData): Promise<Te
     return { error: "The next term cannot begin before this one ends." };
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.term.update({
       where: { id },
       data: { startDate, endDate, vacationDate, nextTermBegins },
@@ -175,7 +178,8 @@ export async function saveTerm(_prev: TermState, formData: FormData): Promise<Te
 }
 
 export async function deleteAcademicYear(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;

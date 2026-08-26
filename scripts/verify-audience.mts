@@ -6,6 +6,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { resolveAudience } from "@/lib/message-data";
+import { runWithTenantContext } from "@/lib/tenant-context";
 
 const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
 
@@ -19,19 +20,26 @@ function check(label: string, condition: boolean, detail = "") {
 
 const school = await prisma.school.findUniqueOrThrow({ where: { slug: "st-mary-demo" } });
 
-const allParents = await resolveAudience(school.id, "ALL_PARENTS", {}, school.name);
-const debtors = await resolveAudience(school.id, "DEBTORS", {}, school.name);
-const bigDebtors = await resolveAudience(school.id, "DEBTORS", { minBalance: 1000 }, school.name);
-const staff = await resolveAudience(school.id, "ALL_STAFF", {}, school.name);
-const custom = await resolveAudience(
+/** The app client is tenant-scoped now, so a script must set the context too. */
+function inSchool<T>(fn: () => Promise<T>): Promise<T> {
+  return runWithTenantContext({ schoolId: school.id }, async () => await fn());
+}
+
+const allParents = await inSchool(() => resolveAudience(school.id, "ALL_PARENTS", {}, school.name));
+const debtors = await inSchool(() => resolveAudience(school.id, "DEBTORS", {}, school.name));
+const bigDebtors = await inSchool(() => resolveAudience(school.id, "DEBTORS", { minBalance: 1000 }, school.name));
+const staff = await inSchool(() => resolveAudience(school.id, "ALL_STAFF", {}, school.name));
+const custom = await inSchool(() => resolveAudience(
   school.id,
   "CUSTOM",
   { phones: ["0244000001", "+233244000002", "rubbish", "0244000001"] },
   school.name,
-);
+));
 
 const jhs = await prisma.classGroup.findFirstOrThrow({ where: { level: { code: "JHS2" } } });
-const oneClass = await resolveAudience(school.id, "CLASS", { classGroupIds: [jhs.id] }, school.name);
+const oneClass = await inSchool(() =>
+  resolveAudience(school.id, "CLASS", { classGroupIds: [jhs.id] }, school.name),
+);
 
 console.log("Audience sizes");
 console.log(`  all parents ${allParents.length} · debtors ${debtors.length} · ` +

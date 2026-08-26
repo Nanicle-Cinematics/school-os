@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
@@ -15,6 +16,7 @@ export async function recordExpense(
   formData: FormData,
 ): Promise<ExpenseState> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const categoryId = String(formData.get("categoryId") ?? "");
   const termId = String(formData.get("termId") ?? "");
@@ -32,7 +34,7 @@ export async function recordExpense(
     return { error: "Enter a valid amount greater than zero." };
   }
 
-  const voucherNo = await tenantTransaction(async (tx) => {
+  const voucherNo = await tenantTransaction(auth.schoolId, async (tx) => {
     const voucher = await nextNumber(
       tx,
       auth.schoolId,
@@ -76,12 +78,13 @@ export async function recordExpense(
 
 export async function cancelExpense(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
   const expenseId = String(formData.get("expenseId") ?? "");
   if (!expenseId) {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const expense = await tx.expense.findUnique({ where: { id: expenseId } });
     if (!expense) {
       return;

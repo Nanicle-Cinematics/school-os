@@ -23,9 +23,9 @@ function isTransientDbError(error: unknown) {
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Row-Level Security: when enabled, every model operation runs with the tenant
-// GUCs set transaction-locally so Postgres enforces isolation. Off by default so
-// the flag can ship dormant ahead of the production cutover.
+// Row-Level Security: every model operation runs with the tenant GUCs set
+// transaction-locally so Postgres enforces isolation. Live — see the Tenancy
+// section of CLAUDE.md; the policies are applied by `npm run db:rls`.
 const RLS_ON = process.env.DB_RLS === "on";
 const SET_GUC_SQL =
   "SELECT set_config('app.school_id', $1, true), set_config('app.bypass_rls', $2, true)";
@@ -36,9 +36,26 @@ function gucArgs() {
 }
 
 function createPrismaClient() {
+  // The running app connects as the restricted role (no BYPASSRLS, owns
+  // nothing), so the policies in scripts/apply-rls.mjs actually bind to it.
+  // DATABASE_URL stays the owner connection for the Prisma CLI, the seed and
+  // the admin-side verify scripts, which must not be tenant-scoped.
+  const url = process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL;
+
   const base = new PrismaClient({
+    ...(url ? { datasources: { db: { url } } } : {}),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
+
+  // Forward reference to the EXTENDED client. The GUC statement and the query it
+  // guards must be issued through the same client instance, or Prisma does not
+  // enlist them in one transaction: set_config(..., true) is transaction-local,
+  // so the query then runs on another connection with no tenant set and matches
+  // no rows. Using `base` here silently disabled every policy.
+  // Assigned below, once the extension it refers to exists; a const cannot
+  // express that cycle.
+  // eslint-disable-next-line prefer-const
+  let extended: PrismaClient;
 
   const client = base.$extends({
     query: {
@@ -51,8 +68,8 @@ function createPrismaClient() {
             return query(args);
           }
           const [sid, bypass] = gucArgs();
-          return base
-            .$transaction([base.$executeRawUnsafe(SET_GUC_SQL, sid, bypass), query(args)])
+          return extended
+            .$transaction([extended.$executeRawUnsafe(SET_GUC_SQL, sid, bypass), query(args)])
             .then((res: unknown[]) => res[1]);
         };
 
@@ -72,6 +89,9 @@ function createPrismaClient() {
     },
   });
 
+  // Only $transaction and $executeRawUnsafe are used through this handle, and
+  // both exist on the base type; the cast avoids a circular type reference.
+  extended = client as unknown as PrismaClient;
   return client;
 }
 
@@ -102,22 +122,34 @@ if (process.env.NODE_ENV !== "production") {
  */
 export const TX_OPTS = { timeout: 30_000, maxWait: 15_000 } as const;
 
-// Run an interactive transaction with the tenant GUC set as its first statement,
-// so RLS applies to every write inside it. Replaces raw prisma.$transaction for
-// all tenant-scoped multi-statement writes (invoice generation, payment
-// allocation, number-sequence increments). Inherits the current request's
-// tenant context.
+/**
+ * Run an interactive transaction with the tenant GUC set as its first statement,
+ * so RLS applies to every write inside it. Replaces raw prisma.$transaction for
+ * all tenant-scoped multi-statement writes (invoice generation, payment
+ * allocation, number-sequence increments).
+ *
+ * The school is passed in, not inferred. It used to come from the ambient
+ * AsyncLocalStorage context, which `requireAuth` sets with `enterWith` — and
+ * `enterWith` called inside a nested async function does NOT reliably propagate
+ * back to its caller's continuation. In a server action the context was
+ * therefore empty, the GUC was set to '', and every WITH CHECK rejected the row
+ * with 42501. Every caller already holds `auth.schoolId`; requiring it makes the
+ * tenant a fact of the call rather than a hope about the runtime.
+ *
+ * The callback also runs inside runWithTenantContext, so reads issued on `tx`
+ * see the same tenant.
+ */
 export async function tenantTransaction<T>(
+  schoolId: string,
   fn: (tx: TenantTx) => Promise<T>,
   opts?: { timeout?: number; maxWait?: number },
 ): Promise<T> {
   const ctx = getTenantContext() ?? {};
   return prisma.$transaction(async (tx) => {
     if (RLS_ON) {
-      const [sid, bypass] = gucArgs();
-      await tx.$executeRawUnsafe(SET_GUC_SQL, sid, bypass);
+      await tx.$executeRawUnsafe(SET_GUC_SQL, schoolId, ctx.bypass ? "on" : "off");
     }
-    return runWithTenantContext({ ...ctx, inTx: true }, () => fn(tx));
+    return runWithTenantContext({ ...ctx, schoolId, inTx: true }, () => fn(tx));
   }, opts ?? TX_OPTS);
 }
 

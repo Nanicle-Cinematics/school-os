@@ -2,8 +2,9 @@
 // Market: Ghana / GES (KG–SHS, 3 terms, CA + exam weighting, GHS, mobile money)
 //
 // Tenancy rule: EVERY tenant-owned table carries `schoolId` and is indexed on it.
-// This is what makes Postgres Row-Level Security possible later (see lib/prisma.ts),
-// and it is never optional — a table without schoolId is a tenancy bug.
+// Postgres Row-Level Security is applied to each of them by `npm run db:rls` and
+// is ENFORCED, so a table without schoolId is not merely untidy — it is a table
+// no policy can protect.
 //
 // Scope: Phase 1 (foundation + people), Phase 2 (fees + expenditure),
 // Phase 3 (assessment), plus SMS. Deliberately NOT modelled yet: timetable,

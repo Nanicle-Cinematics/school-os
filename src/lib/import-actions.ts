@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { GuardianRelationship } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { nextNumber, takenProbes } from "@/lib/sequences";
@@ -66,7 +67,8 @@ export async function previewImport(
   _prev: ImportState,
   formData: FormData,
 ): Promise<ImportState> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const csv = await readCsv(formData);
   if (!csv.trim()) {
@@ -98,6 +100,7 @@ export async function commitImport(
   formData: FormData,
 ): Promise<ImportState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const csv = await readCsv(formData);
   if (!csv.trim()) {
@@ -132,8 +135,7 @@ export async function commitImport(
   for (let start = 0; start < usable.length; start += CHUNK) {
     const chunk = usable.slice(start, start + CHUNK);
 
-    await tenantTransaction(
-      async (tx) => {
+    await tenantTransaction(auth.schoolId, async (tx) => {
         for (const row of chunk) {
           const admissionNo =
             row.admissionNo ??
@@ -214,7 +216,7 @@ export async function commitImport(
     );
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,

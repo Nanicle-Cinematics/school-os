@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Gender, Residency, StudentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
 import { nextNumber, takenProbes } from "@/lib/sequences";
@@ -69,6 +70,7 @@ export async function admitStudent(
   formData: FormData,
 ): Promise<StudentState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const profile = readProfile(formData);
   const invalid = validateProfile(profile);
@@ -92,7 +94,7 @@ export async function admitStudent(
     };
   }
 
-  const admissionNo = await tenantTransaction(async (tx: TenantTx) => {
+  const admissionNo = await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {
     const allocated = await nextNumber(
       tx,
       auth.schoolId,
@@ -143,7 +145,8 @@ export async function admitStudent(
 }
 
 export async function saveStudent(_prev: StudentState, formData: FormData): Promise<StudentState> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   if (!id) {
@@ -188,6 +191,7 @@ export async function enrolStudent(
   formData: FormData,
 ): Promise<StudentState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const studentId = String(formData.get("studentId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
@@ -200,7 +204,7 @@ export async function enrolStudent(
     return { error: "No academic year is marked current — set one in Settings first." };
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.enrollment.upsert({
       where: { studentId_academicYearId: { studentId, academicYearId: year.id } },
       create: {
@@ -242,6 +246,7 @@ export async function enrolStudent(
  */
 export async function withdrawStudent(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const studentId = String(formData.get("studentId") ?? "");
   const status = String(formData.get("status") ?? "WITHDRAWN") as StudentStatus;
 
@@ -249,7 +254,7 @@ export async function withdrawStudent(formData: FormData): Promise<void> {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const before = await tx.student.findUnique({ where: { id: studentId } });
     if (!before) {
       return;
@@ -282,7 +287,8 @@ export async function withdrawStudent(formData: FormData): Promise<void> {
 }
 
 export async function deleteStudent(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const studentId = String(formData.get("studentId") ?? "");
   if (!studentId) {
     return;

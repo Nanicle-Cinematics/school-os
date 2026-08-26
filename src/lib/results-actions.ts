@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
@@ -14,6 +15,7 @@ export async function computeResults(
   formData: FormData,
 ): Promise<ComputeState> {
   const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
 
@@ -21,8 +23,7 @@ export async function computeResults(
     return { error: "Choose a term and a class." };
   }
 
-  const result = await tenantTransaction(
-    async (tx) => {
+  const result = await tenantTransaction(auth.schoolId, async (tx) => {
       const computed = await computeClassResults(tx, auth.schoolId, termId, classGroupId);
       await writeAudit(tx, {
         schoolId: auth.schoolId,
@@ -61,6 +62,7 @@ export async function computeResults(
  */
 export async function setResultsStatus(formData: FormData): Promise<void> {
   const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
   const status = String(formData.get("status") ?? "");
@@ -75,7 +77,7 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const updated = await tx.termResult.updateMany({
       where: { termId, classGroupId },
       data: {
@@ -100,6 +102,7 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
 /** Form-master and head remarks, saved per student from the broadsheet. */
 export async function saveRemarks(formData: FormData): Promise<void> {
   const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
   const studentId = String(formData.get("studentId") ?? "");
   if (!termId || !studentId) {
@@ -115,7 +118,7 @@ export async function saveRemarks(formData: FormData): Promise<void> {
   const daysPresentRaw = String(formData.get("daysPresent") ?? "");
   const daysTotalRaw = String(formData.get("daysTotal") ?? "");
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.termResult.update({
       where: { termId_studentId: { termId, studentId } },
       data: {
