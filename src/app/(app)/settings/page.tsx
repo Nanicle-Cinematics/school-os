@@ -3,8 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
-import { getSettings } from "@/lib/settings-data";
+import { getSettings, getYearUsage } from "@/lib/settings-data";
 import { setCurrentTerm } from "@/lib/settings-actions";
+import { deleteAcademicYear } from "@/lib/term-actions";
 import { Alert, Card, EmptyRow, PageHeader, tableHeadClass, thClass } from "../ui";
 import { SubmitButton } from "../submit-button";
 import { AcademicForm, FeesForm, ProfileForm, SmsForm } from "./settings-forms";
@@ -45,6 +46,7 @@ export default async function SettingsPage() {
   };
 
   const currentTerm = years.flatMap((year) => year.terms).find((term) => term.isCurrent);
+  const usage = await getYearUsage(years);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -112,14 +114,37 @@ export default async function SettingsPage() {
                         {term.vacationDate ? dateFmt.format(term.vacationDate) : "—"}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2 text-right">
-                        {term.isCurrent ? null : (
-                          <form action={setCurrentTerm}>
-                            <input type="hidden" name="termId" value={term.id} />
-                            <SubmitButton variant="secondary" pendingLabel="Switching…">
-                              Make current
-                            </SubmitButton>
-                          </form>
-                        )}
+                        <div className="flex items-center justify-end gap-2">
+                          {term.isCurrent ? null : (
+                            <form action={setCurrentTerm}>
+                              <input type="hidden" name="termId" value={term.id} />
+                              <SubmitButton variant="secondary" pendingLabel="Switching…">
+                                Make current
+                              </SubmitButton>
+                            </form>
+                          )}
+                          {/* The delete belongs to the year, so it is offered
+                              once, on its first term's row. */}
+                          {term.sequence === 1 ? (
+                            year.isCurrent ? (
+                              <span className="text-xs text-slate-400">current year</span>
+                            ) : (usage.get(year.id) ?? 0) > 0 ? (
+                              <span
+                                className="text-xs text-slate-400"
+                                title="Billed, graded or enrolled against."
+                              >
+                                {usage.get(year.id)} attached
+                              </span>
+                            ) : (
+                              <form action={deleteAcademicYear}>
+                                <input type="hidden" name="id" value={year.id} />
+                                <SubmitButton variant="danger" pendingLabel="Deleting…">
+                                  Delete year
+                                </SubmitButton>
+                              </form>
+                            )
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   )),
@@ -130,7 +155,9 @@ export default async function SettingsPage() {
         </div>
         <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
           Switching the current term changes what every other page is talking about — invoices,
-          score entry, the dashboard. It does not move or alter any existing record.
+          score entry, the dashboard. It does not move or alter any existing record. A year can
+          only be deleted while nothing has been billed, graded or enrolled against it — its
+          terms carry those records and would take them along.
         </p>
       </Card>
 

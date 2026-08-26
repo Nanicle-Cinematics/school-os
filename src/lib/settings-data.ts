@@ -24,3 +24,26 @@ export async function getSettings(schoolId: string) {
 
   return { school, settings, gradingScales, years };
 }
+
+/**
+ * How many records hang off each academic year.
+ *
+ * A year that has been billed, graded or enrolled against must not be deleted:
+ * Invoice, TermResult, Assessment and FeeStructure all cascade from Term, which
+ * cascades from AcademicYear, so removing it would take a school's billing and
+ * grade history with it. Shared by both screens that offer the delete, so the
+ * two cannot drift into disagreeing about what is safe.
+ */
+export async function getYearUsage(
+  years: { id: string; terms: { id: string }[] }[],
+): Promise<Map<string, number>> {
+  const usage = new Map<string, number>();
+  for (const year of years) {
+    const termIds = year.terms.map((term) => term.id);
+    const invoices = await prisma.invoice.count({ where: { termId: { in: termIds } } });
+    const results = await prisma.termResult.count({ where: { termId: { in: termIds } } });
+    const enrolments = await prisma.enrollment.count({ where: { academicYearId: year.id } });
+    usage.set(year.id, invoices + results + enrolments);
+  }
+  return usage;
+}
