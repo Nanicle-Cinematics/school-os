@@ -1,16 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma, type TermName } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
+import { splitIntoTerms } from "@/lib/academic-year";
 
 export type TermState = { error?: string; ok?: string };
-
-const SEQUENCE_NAME: Record<number, TermName> = { 1: "FIRST", 2: "SECOND", 3: "THIRD" };
 
 function refresh() {
   revalidatePath("/settings/terms");
@@ -25,25 +24,6 @@ function parseDate(value: FormDataEntryValue | null) {
   }
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? null : date;
-}
-
-/**
- * Split an academic year into three terms.
- *
- * Ghanaian schools always run three, so creating a year without them would
- * leave every term-scoped screen — invoicing, score entry — with nothing to
- * attach to. The even split is a starting point the office then corrects; real
- * term dates are set by GES and are never exactly even.
- */
-function splitIntoTerms(start: Date, end: Date) {
-  const span = end.getTime() - start.getTime();
-  const step = Math.floor(span / 3);
-  return [1, 2, 3].map((sequence) => {
-    const termStart = new Date(start.getTime() + step * (sequence - 1));
-    const termEnd =
-      sequence === 3 ? new Date(end) : new Date(start.getTime() + step * sequence - 86_400_000);
-    return { sequence, name: SEQUENCE_NAME[sequence], startDate: termStart, endDate: termEnd };
-  });
 }
 
 export async function createAcademicYear(
