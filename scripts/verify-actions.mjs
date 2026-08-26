@@ -16,6 +16,17 @@
  *
  *   npm run dev            # in another terminal
  *   npm run verify:actions
+ *
+ * Against a deployed environment, where there is no local database and possibly
+ * no data yet, sign in through the real login form instead:
+ *
+ *   VERIFY_BASE_URL=https://school-os-lilac.vercel.app \
+ *   VERIFY_EMAIL=you@example.com VERIFY_PASSWORD='…' npm run verify:actions
+ *
+ * The guard checks need fixtures (a graded scale, a billed student, a level in
+ * use); where those are absent the suite says so and skips rather than passing
+ * vacuously. The deployment checks below run everywhere and are the ones worth
+ * having after a deploy.
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -23,7 +34,14 @@ import { PrismaClient } from "@prisma/client";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const COOKIE_NAME = "school_os_session";
-const prisma = new PrismaClient();
+const EMAIL = process.env.VERIFY_EMAIL;
+const PASSWORD = process.env.VERIFY_PASSWORD;
+
+// Signing in through the form needs no database at all, which is what makes
+// this usable against a deployment whose database you cannot reach.
+const usingForm = Boolean(EMAIL && PASSWORD);
+const prisma = usingForm ? null : new PrismaClient();
+let hasDb = !usingForm;
 
 let passed = 0;
 let failed = 0;
@@ -198,6 +216,10 @@ const says = (html, fragment) => alerts(html).some((alert) => alert.includes(fra
 // ── Session ─────────────────────────────────────────────────────────────────
 
 async function openSession() {
+  if (usingForm) {
+    return signIn();
+  }
+
   const user = await db(() => prisma.user.findFirst({
     where: { email: "owner@stmarydemo.edu.gh", deletedAt: null },
     include: { memberships: true },
@@ -217,8 +239,39 @@ async function openSession() {
   return { token, userId: user.id };
 }
 
+/** Sign in the way a person does, so no database access is needed. */
+async function signIn() {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const page = await fetchPage("/login", "");
+    const body = new FormData();
+    for (const field of formWith(page.html, "Sign in").fields) {
+      if (field.name === "identifier" || field.name === "password") continue;
+      body.append(field.name, field.value);
+    }
+    body.append("identifier", EMAIL);
+    body.append("password", PASSWORD);
+
+    const response = await fetch(BASE + "/login", { method: "POST", body, redirect: "manual" });
+    const html = await response.text();
+    const raw = response.headers.getSetCookie?.().find((c) => c.includes(COOKIE_NAME));
+    const token = raw?.match(new RegExp(`${COOKIE_NAME}=([^;]+)`))?.[1];
+    if (token) {
+      return { token, userId: null };
+    }
+    if (response.status !== 500) {
+      throw new Error(`sign-in failed: ${alerts(html)[0] ?? `HTTP ${response.status}`}`);
+    }
+    await sleep(500 * (attempt + 1));
+  }
+  throw new Error("sign-in never succeeded");
+}
+
 async function closeSession(token) {
-  // Best effort: a failure to tidy up must not mask the results above it.
+  if (usingForm) {
+    // The session belongs to a real account; sign out rather than deleting rows.
+    await fetch(BASE + "/login", { headers: { Cookie: `${COOKIE_NAME}=${token}` } }).catch(() => {});
+    return;
+  }
   try {
     await db(() =>
       prisma.session.deleteMany({
@@ -230,10 +283,47 @@ async function closeSession(token) {
   }
 }
 
+/**
+ * Checks that need no fixtures, so they run against any environment including a
+ * freshly deployed, empty one. These are the ones worth running after a deploy:
+ * they prove the app booted (which on production means the tenant-isolation
+ * guard in src/lib/prisma.ts was satisfied, since it throws otherwise) and that
+ * the auth gate is actually closed.
+ */
+async function deploymentChecks(cookie) {
+  console.log("\nDeployment");
+
+  const login = await fetchPage("/login", "");
+  check("the login page renders", login.status === 200 && login.html.includes('name="identifier"'), BASE);
+
+  for (const path of ["/dashboard", "/students", "/settings"]) {
+    const anon = await fetchPage(path, "");
+    check(
+      `${path} is closed to anonymous requests`,
+      anon.status >= 300 && anon.status < 400,
+      `HTTP ${anon.status}`,
+    );
+  }
+
+  // Reaching any authenticated page at all proves the app started, and a
+  // production build only starts when APP_DATABASE_URL and DB_RLS are set.
+  const landing = await fetchPage("/admin", cookie);
+  const dashboard = landing.status === 200 ? landing : await fetchPage("/dashboard", cookie);
+  check(
+    "an authenticated session reaches the app",
+    dashboard.status === 200,
+    `HTTP ${dashboard.status}`,
+  );
+}
+
 // ── The checks ──────────────────────────────────────────────────────────────
 
 async function gradingGuards(cookie) {
   console.log("\nGrading scales");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
   const { html } = await fetchPage("/settings/grading", cookie);
 
   const frozen = await db(() => prisma.gradingScale.findFirst({
@@ -321,6 +411,14 @@ async function gradingGuards(cookie) {
 
 async function accountGuards(cookie, userId) {
   console.log("\nAccounts");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
+  if (!userId) {
+    console.log("  --   signed in through the form, so the account under test is unknown");
+    return;
+  }
   const owners = await db(() => prisma.membership.count({ where: { role: "OWNER", status: "ACTIVE" } }));
   const path = `/users/${userId}`;
   const { html } = await fetchPage(path, cookie);
@@ -360,6 +458,10 @@ async function accountGuards(cookie, userId) {
 
 async function studentGuards(cookie) {
   console.log("\nStudents");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
   const billed = await db(() => prisma.student.findFirst({
     where: { deletedAt: null, invoices: { some: {} } },
     select: { id: true, admissionNo: true },
@@ -387,6 +489,10 @@ async function studentGuards(cookie) {
 
 async function structureGuards(cookie) {
   console.log("\nSchool structure");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
   const { html } = await fetchPage("/settings/structure", cookie);
 
   const inUse = await db(() => prisma.level.count({ where: { classGroups: { some: {} } } }));
@@ -408,6 +514,10 @@ async function structureGuards(cookie) {
 
 async function importChecks(cookie) {
   console.log("\nStudent import (preview only — writes nothing)");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
   const { html } = await fetchPage("/students/import", cookie);
 
   const existing = await db(() => prisma.student.findFirst({
@@ -448,14 +558,17 @@ async function main() {
   try {
     const probe = await fetch(BASE, { redirect: "manual" }).catch(() => null);
     if (!probe) {
-      console.error(`Cannot reach ${BASE} — start the app with \`npm run dev\` first.`);
+      console.error(
+        `Cannot reach ${BASE} — ${BASE.includes("localhost") ? "start the app with `npm run dev` first." : "is the deployment up?"}`,
+      );
       process.exitCode = 1;
       return;
     }
 
     const { token, userId } = await openSession();
     try {
-      console.log(`Driving ${BASE} as the demo proprietor.`);
+      console.log(`Driving ${BASE}${usingForm ? ` as ${EMAIL}` : " as the demo proprietor"}.`);
+      await deploymentChecks(token);
       await gradingGuards(token);
       await accountGuards(token, userId);
       await studentGuards(token);
@@ -468,7 +581,7 @@ async function main() {
     console.log(`\n${passed} passed, ${failed} failed`);
     if (failed > 0) process.exitCode = 1;
   } finally {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   }
 }
 
