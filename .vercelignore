@@ -1,0 +1,9 @@
+# Vercel falls back to .gitignore when this file is absent, but secrets are
+# worth being explicit about: env files are supplied as project environment
+# variables and must never be uploaded with the source.
+.env
+.env.*
+!.env.example
+.vercel
+node_modules
+.next
