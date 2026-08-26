@@ -1,31 +1,18 @@
 "use server";
 
-import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma, type Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
-import { hashPassword } from "@/lib/password";
+import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
 import { normalisePhone } from "@/lib/sms-shared";
 import { ASSIGNABLE_ROLES, PRIVILEGED_ROLES, countOwners } from "@/lib/user-data";
 
 export type UserState = { error?: string; ok?: string };
-
-const WORDS = ["Kente", "Adinkra", "Sankofa", "Bosom", "Akoma", "Gyata", "Odum", "Fufu"];
-
-/**
- * A temporary password the office can read aloud over the phone.
- *
- * Deliberately word + digits rather than random characters: it gets dictated to
- * a teacher who then types it on a phone keyboard, and an unreadable string just
- * becomes a sticky note on the bursar's monitor.
- */
-function temporaryPassword() {
-  return `${WORDS[randomInt(WORDS.length)]}${randomInt(1000, 10000)}!`;
-}
 
 function readRoles(formData: FormData): Role[] {
   const raw = formData.getAll("roles").map(String);
@@ -37,6 +24,7 @@ export async function createUserAccount(
   formData: FormData,
 ): Promise<UserState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const staffId = String(formData.get("staffId") ?? "");
   const roles = readRoles(formData);
@@ -74,7 +62,7 @@ export async function createUserAccount(
   const passwordHash = await hashPassword(password);
 
   try {
-    await tenantTransaction(async (tx) => {
+    await tenantTransaction(auth.schoolId, async (tx) => {
       const user = await tx.user.create({
         data: {
           name: `${staff.firstName} ${staff.lastName}`,
@@ -121,6 +109,7 @@ export async function createUserAccount(
 
 export async function updateUserRoles(_prev: UserState, formData: FormData): Promise<UserState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const userId = String(formData.get("userId") ?? "");
   const roles = readRoles(formData);
@@ -159,7 +148,7 @@ export async function updateUserRoles(_prev: UserState, formData: FormData): Pro
     }
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     if (removed.length > 0) {
       await tx.membership.deleteMany({
         where: { schoolId: auth.schoolId, userId, role: { in: removed } },
@@ -197,6 +186,7 @@ export async function updateUserRoles(_prev: UserState, formData: FormData): Pro
 
 export async function setAccountSuspended(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const userId = String(formData.get("userId") ?? "");
   const suspend = String(formData.get("suspend") ?? "") === "1";
 
@@ -221,7 +211,7 @@ export async function setAccountSuspended(formData: FormData): Promise<void> {
     }
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.membership.updateMany({
       where: { schoolId: auth.schoolId, userId },
       data: { status: suspend ? "SUSPENDED" : "ACTIVE" },
@@ -251,6 +241,7 @@ export async function resetUserPassword(
   formData: FormData,
 ): Promise<UserState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const userId = String(formData.get("userId") ?? "");
   if (!userId) {
     return { error: "Missing account." };
@@ -269,7 +260,7 @@ export async function resetUserPassword(
   const password = temporaryPassword();
   const passwordHash = await hashPassword(password);
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.user.update({ where: { id: userId }, data: { passwordHash } });
     // Every existing session is invalidated — a reset is usually a response to
     // a lost or shared password, and leaving old sessions alive defeats it.
@@ -292,6 +283,7 @@ export async function resetUserPassword(
 
 export async function removeUserAccess(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const userId = String(formData.get("userId") ?? "");
 
   if (!userId) {
@@ -320,7 +312,7 @@ export async function removeUserAccess(formData: FormData): Promise<void> {
     redirect("/users?error=privileged");
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     // The User row survives: it may hold access to another school, and it is
     // named as the actor on payments and audit rows here.
     await tx.membership.deleteMany({ where: { schoolId: auth.schoolId, userId } });

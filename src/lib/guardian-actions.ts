@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { GuardianRelationship } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { normalisePhone } from "@/lib/sms-shared";
@@ -26,6 +27,7 @@ export async function saveGuardian(
   formData: FormData,
 ): Promise<GuardianState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const firstName = String(formData.get("firstName") ?? "").trim();
@@ -85,6 +87,7 @@ export async function linkStudent(
   formData: FormData,
 ): Promise<GuardianState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const guardianId = String(formData.get("guardianId") ?? "");
   const studentId = String(formData.get("studentId") ?? "");
@@ -98,7 +101,7 @@ export async function linkStudent(
     return { error: "Pick a relationship." };
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     // One primary guardian per student — that is who the bill and the report
     // card are addressed to, so promoting this one demotes the incumbent.
     if (isPrimary) {
@@ -137,7 +140,8 @@ export async function linkStudent(
 }
 
 export async function unlinkStudent(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const guardianId = String(formData.get("guardianId") ?? "");
   const linkId = String(formData.get("linkId") ?? "");
   if (!linkId) {
@@ -150,7 +154,8 @@ export async function unlinkStudent(formData: FormData): Promise<void> {
 }
 
 export async function deleteGuardian(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;

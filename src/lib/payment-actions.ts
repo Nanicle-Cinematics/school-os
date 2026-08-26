@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
@@ -20,6 +21,7 @@ export async function recordPayment(
   formData: FormData,
 ): Promise<PaymentState> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const studentId = String(formData.get("studentId") ?? "");
   const amount = parseAmount(formData.get("amount"));
@@ -42,7 +44,7 @@ export async function recordPayment(
   let receiptNo = "";
 
   try {
-    receiptNo = await tenantTransaction(async (tx) => {
+    receiptNo = await tenantTransaction(auth.schoolId, async (tx) => {
       const student = await tx.student.findUnique({
         where: { id: studentId },
         include: {
@@ -178,13 +180,14 @@ export async function recordPayment(
 
 export async function reversePayment(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
   const paymentId = String(formData.get("paymentId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!paymentId) {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const payment = await tx.payment.findUnique({
       where: { id: paymentId },
       include: { allocations: true },

@@ -29,10 +29,9 @@ export const ASSIGNABLE_ROLES: Role[] = [
 export const PRIVILEGED_ROLES: Role[] = ["OWNER", "HEAD", "ASSISTANT_HEAD"];
 
 export async function getUserList(schoolId: string) {
-  // schoolId is passed explicitly rather than left to the tenant context.
-  // Everywhere else that is fine — RLS will scope it once DB_RLS is on — but
-  // this screen hands out access, so a leak here would be an escalation rather
-  // than a disclosure. It is worth the redundancy while RLS ships dormant.
+  // schoolId is passed explicitly rather than left to the tenant context. RLS
+  // already scopes it, but this screen hands out access, so a leak here would be
+  // an escalation rather than a disclosure — worth the belt as well as braces.
   const memberships = await prisma.membership.findMany({
     where: { schoolId },
     include: {

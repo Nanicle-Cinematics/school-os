@@ -64,6 +64,52 @@ transport, health, payroll. Single-campus by design — there is no `Branch` mod
   shows up as esbuild `EBADMACHO` / errno 88; fix with
   `rm -rf node_modules package-lock.json && npm cache clean --force && npm install`.
 
+## Tenancy — enforcement is LIVE
+
+`DB_RLS="on"` and the app connects through `APP_DATABASE_URL` as the restricted
+`school_os_app` role. 39 tables have RLS enabled and FORCED with a
+`tenant_isolation` policy; `npm run db:rls` (re)applies them and is idempotent.
+Verified by `npm run verify:isolation` (8/8) and `npm run verify:actions` (18/18).
+
+Four things had to be true at once, and each was broken:
+
+- **The role, not just the policies.** `postgres` owns the tables *and* has
+  `rolbypassrls`; policies applied to it are decoration. FORCE covers ownership,
+  a separate NOBYPASSRLS role covers the attribute. `DATABASE_URL` stays the
+  owner connection for the Prisma CLI, the seed and the admin-side verify
+  scripts, which must not be tenant-scoped.
+- **One client for the GUC and the query.** The extension issued `set_config`
+  through the unextended client while `query(args)` belonged to the extended one,
+  so they never shared a transaction and the transaction-local setting was
+  invisible.
+- **Await inside the storage scope.** Prisma promises are lazy, so
+  `storage.run()` returning an un-awaited promise let the query execute after the
+  scope had exited. See `runAsync` in tenant-context.ts.
+- **Set the context in the frame that needs it.** `enterWith` inside
+  `requireAuth` does NOT reach the caller's continuation. Every server action
+  therefore calls `setTenantContext({ schoolId: auth.schoolId })` itself, right
+  after `requireRole`, and `tenantTransaction(schoolId, …)` takes the school as
+  an argument rather than inferring it.
+
+**Empty reads make guards pass, not fail.** Before that last fix, an action's
+pre-transaction reads returned nothing under RLS, so `assertEditable` concluded
+"nothing in the way" and a forged band write onto a frozen grading scale
+*succeeded*. If you add an action, set the context in it — a guard that reads
+zero rows is indistinguishable from a guard with nothing to find.
+
+**Adding `schoolId` to a `where` clause does not substitute for this.** Under RLS
+the policy filters first: `updateUserRoles` already filtered by `schoolId`
+explicitly and still saw nothing when the GUC was empty.
+
+**`connection_limit`**: with RLS on, every model op becomes a transaction, which
+`connection_limit=1` cannot serve (P2024). The app role's URL uses 10.
+
+**Restarting `next dev` is a trap.** It detects a running server and silently
+serves the old one — including its old `.env` — printing "You can access the
+existing server". `pkill -f "next dev"` does not match the listener. Kill by port
+(`lsof -nP -iTCP:3000 -sTCP:LISTEN -t`) and check the log does not say "existing
+server", or you will spend an hour measuring stale code.
+
 ## Tenancy
 
 Every tenant-owned table carries `schoolId` and is indexed on it. A table without
@@ -72,7 +118,7 @@ Every tenant-owned table carries `schoolId` and is indexed on it. A table withou
 `src/lib/tenant-context.ts` holds a per-request `AsyncLocalStorage` context;
 `src/lib/prisma.ts` extends the client so each operation sets the
 `app.school_id` / `app.bypass_rls` GUCs transaction-locally, which is what
-Postgres RLS policies read. RLS ships dormant behind `DB_RLS=on`. Use
+Postgres RLS policies read. Use
 `tenantTransaction()` for any multi-statement tenant write (invoice generation,
 results computation, number-sequence increments) so the GUC and the writes share
 one transaction.

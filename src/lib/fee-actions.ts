@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
 import { tenantTransaction, prisma } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
@@ -19,6 +20,7 @@ export async function saveFeeStructure(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const levelId = String(formData.get("levelId") ?? "");
   const academicYearId = String(formData.get("academicYearId") ?? "");
@@ -53,7 +55,7 @@ export async function saveFeeStructure(
     return { error: "That level no longer exists." };
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const data = {
       schoolId: auth.schoolId,
       academicYearId,
@@ -95,12 +97,13 @@ export async function saveFeeStructure(
 
 export async function deleteFeeStructure(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("structureId") ?? "");
   if (!id) {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const existing = await tx.feeStructure.findUnique({ where: { id }, include: { items: true } });
     if (!existing) {
       return;

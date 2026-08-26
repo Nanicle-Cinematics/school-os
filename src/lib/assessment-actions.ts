@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
@@ -37,6 +38,7 @@ export async function createAssessment(
   formData: FormData,
 ): Promise<AssessmentState> {
   const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
@@ -61,7 +63,7 @@ export async function createAssessment(
   }
 
   let created = "";
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const assessment = await tx.assessment.create({
       data: {
         schoolId: auth.schoolId,
@@ -106,6 +108,7 @@ export async function saveScores(
   formData: FormData,
 ): Promise<ScoreEntryState> {
   const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
   const assessmentId = String(formData.get("assessmentId") ?? "");
 
   const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId } });
@@ -149,8 +152,7 @@ export async function saveScores(
     updates.push({ studentId, rawScore: parsed, isAbsent: false });
   }
 
-  await tenantTransaction(
-    async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
       for (const update of updates) {
         if (update.rawScore === null && !update.isAbsent) {
           await tx.score.deleteMany({ where: { assessmentId, studentId: update.studentId } });
@@ -196,6 +198,7 @@ export async function saveScores(
 
 export async function setAssessmentStatus(formData: FormData): Promise<void> {
   const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
   const assessmentId = String(formData.get("assessmentId") ?? "");
   const status = String(formData.get("status") ?? "");
 
@@ -207,7 +210,7 @@ export async function setAssessmentStatus(formData: FormData): Promise<void> {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const before = await tx.assessment.findUnique({ where: { id: assessmentId } });
     if (!before) {
       return;
@@ -233,12 +236,13 @@ export async function setAssessmentStatus(formData: FormData): Promise<void> {
 
 export async function deleteAssessment(formData: FormData): Promise<void> {
   const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
   const assessmentId = String(formData.get("assessmentId") ?? "");
   if (!assessmentId) {
     return;
   }
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const assessment = await tx.assessment.findUnique({
       where: { id: assessmentId },
       include: { _count: { select: { scores: true } } },

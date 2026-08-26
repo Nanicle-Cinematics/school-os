@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
@@ -32,6 +33,7 @@ async function assertEditable(gradingScaleId: string): Promise<string | null> {
 
 export async function saveScale(_prev: GradingState, formData: FormData): Promise<GradingState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -42,7 +44,7 @@ export async function saveScale(_prev: GradingState, formData: FormData): Promis
   }
 
   try {
-    await tenantTransaction(async (tx) => {
+    await tenantTransaction(auth.schoolId, async (tx) => {
       const scale = id
         ? await tx.gradingScale.update({ where: { id }, data: { name } })
         : await tx.gradingScale.create({ data: { schoolId: auth.schoolId, name } });
@@ -85,6 +87,7 @@ export async function saveScale(_prev: GradingState, formData: FormData): Promis
  */
 export async function duplicateScale(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -104,7 +107,7 @@ export async function duplicateScale(formData: FormData): Promise<void> {
   });
   const name = existing === 0 ? `${source.name} (copy)` : `${source.name} (copy ${existing + 1})`;
 
-  await tenantTransaction(async (tx) => {
+  await tenantTransaction(auth.schoolId, async (tx) => {
     const copy = await tx.gradingScale.create({
       data: { schoolId: auth.schoolId, name },
     });
@@ -130,6 +133,7 @@ export async function duplicateScale(formData: FormData): Promise<void> {
 
 export async function deleteScale(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -155,6 +159,7 @@ export async function deleteScale(formData: FormData): Promise<void> {
 
 export async function saveBand(_prev: GradingState, formData: FormData): Promise<GradingState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const gradingScaleId = String(formData.get("gradingScaleId") ?? "");
   const id = String(formData.get("id") ?? "");
@@ -216,7 +221,7 @@ export async function saveBand(_prev: GradingState, formData: FormData): Promise
   };
 
   try {
-    await tenantTransaction(async (tx) => {
+    await tenantTransaction(auth.schoolId, async (tx) => {
       const band = id
         ? await tx.gradeBand.update({ where: { id }, data })
         : await tx.gradeBand.create({
@@ -244,7 +249,8 @@ export async function saveBand(_prev: GradingState, formData: FormData): Promise
 }
 
 export async function deleteBand(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   const gradingScaleId = String(formData.get("gradingScaleId") ?? "");
   if (!id || !gradingScaleId) {

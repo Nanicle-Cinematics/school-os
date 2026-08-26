@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { EmploymentType, Gender, StaffStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
 import { nextNumber } from "@/lib/sequences";
@@ -27,6 +28,7 @@ function optionalDate(value: FormDataEntryValue | null) {
 
 export async function saveStaff(_prev: StaffState, formData: FormData): Promise<StaffState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const firstName = String(formData.get("firstName") ?? "").trim();
@@ -83,7 +85,7 @@ export async function saveStaff(_prev: StaffState, formData: FormData): Promise<
 
   // The staff number and the row have to commit together, or a failed insert
   // burns a number and the file numbers develop a gap nobody can explain.
-  const staffNo = await tenantTransaction(async (tx: TenantTx) => {
+  const staffNo = await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {
     const allocated = await nextNumber(
       tx,
       auth.schoolId,
@@ -104,6 +106,7 @@ export async function addTeachingAssignment(
   formData: FormData,
 ): Promise<StaffState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const staffId = String(formData.get("staffId") ?? "");
   const subjectId = String(formData.get("subjectId") ?? "");
@@ -145,7 +148,8 @@ export async function addTeachingAssignment(
 }
 
 export async function removeTeachingAssignment(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const staffId = String(formData.get("staffId") ?? "");
   const assignmentId = String(formData.get("assignmentId") ?? "");
   if (!assignmentId) {
@@ -157,7 +161,8 @@ export async function removeTeachingAssignment(formData: FormData): Promise<void
 }
 
 export async function removeStaff(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;

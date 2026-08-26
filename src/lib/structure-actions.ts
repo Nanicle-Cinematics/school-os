@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma, type Stage } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
@@ -32,6 +33,7 @@ export async function saveLevel(
   formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -75,7 +77,8 @@ export async function saveLevel(
 }
 
 export async function deleteLevel(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -98,6 +101,7 @@ export async function saveHouse(
   formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -126,7 +130,8 @@ export async function saveHouse(
 }
 
 export async function deleteHouse(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -148,6 +153,7 @@ export async function saveProgramme(
   formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -179,7 +185,8 @@ export async function saveProgramme(
 }
 
 export async function deleteProgramme(formData: FormData): Promise<void> {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;

@@ -1,4 +1,4 @@
-import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCb) as (
@@ -25,4 +25,17 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const expected = Buffer.from(hashHex, "hex");
   const derived = await scrypt(password, Buffer.from(saltHex, "hex"), KEYLEN);
   return derived.length === expected.length && timingSafeEqual(derived, expected);
+}
+
+const WORDS = ["Kente", "Adinkra", "Sankofa", "Bosom", "Akoma", "Gyata", "Odum", "Fufu"];
+
+/**
+ * A temporary password the office can read aloud over the phone.
+ *
+ * Word plus digits rather than random characters: it gets dictated to a teacher
+ * who then types it on a phone keyboard, and an unreadable string just becomes a
+ * sticky note on the bursar's monitor.
+ */
+export function temporaryPassword() {
+  return `${WORDS[randomInt(WORDS.length)]}${randomInt(1000, 10000)}!`;
 }
