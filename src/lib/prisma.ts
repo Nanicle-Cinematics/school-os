@@ -42,6 +42,21 @@ function createPrismaClient() {
   // the admin-side verify scripts, which must not be tenant-scoped.
   const url = process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL;
 
+  // Falling back to the owner connection in production would silently disable
+  // tenant isolation — the exact failure this codebase already shipped once,
+  // where one school could read another's students, guardians and invoices.
+  // A missing variable must stop the deployment, not quietly widen access.
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ALLOW_UNSCOPED_DB !== "1" &&
+    (!process.env.APP_DATABASE_URL || process.env.DB_RLS !== "on")
+  ) {
+    throw new Error(
+      "Tenant isolation is not configured: set APP_DATABASE_URL (the restricted role, see scripts/apply-rls.mjs) and DB_RLS=on. " +
+        "To run without isolation deliberately — a single-tenant demo, say — set ALLOW_UNSCOPED_DB=1.",
+    );
+  }
+
   const base = new PrismaClient({
     ...(url ? { datasources: { db: { url } } } : {}),
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
