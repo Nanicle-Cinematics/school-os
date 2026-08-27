@@ -9,6 +9,7 @@ import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
 import { slugify } from "@/lib/platform-data";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
+import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
 
 export type PlatformState = { error?: string; ok?: string };
 
@@ -137,6 +138,10 @@ export async function createSchool(
           // empty ladder: eleven levels KG1–JHS3 and the GES subject offering
           // for each, transitions included.
           await applyGesCurriculum(tx, school.id);
+
+          // And on a working bill: a fee structure is priced per item, so a
+          // school with no fee items cannot enter an amount anywhere.
+          await applyDefaultFinanceCategories(tx, school.id);
 
           await writeAudit(tx, {
             schoolId: school.id,

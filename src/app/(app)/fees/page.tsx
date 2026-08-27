@@ -7,6 +7,7 @@ import { formatCedis } from "@/lib/money";
 import { PageHeader, Card, Stat } from "../ui";
 import { SubmitButton } from "../submit-button";
 import { StructureForm } from "./structure-form";
+import { FeeItemSection } from "./fee-items";
 
 export const metadata: Metadata = { title: "Fee structure · School OS" };
 
@@ -63,7 +64,11 @@ export default async function FeesPage() {
         />
       </div>
 
-      {missing.length > 0 ? (
+      <Card title={`Fee items · ${categories.length}`}>
+        <FeeItemSection items={categories} />
+      </Card>
+
+      {missing.length > 0 && categories.length > 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <span className="font-medium">No fee structure yet for:</span>{" "}
           {missing.map((level) => level.name).join(", ")}. Students in these levels will be skipped

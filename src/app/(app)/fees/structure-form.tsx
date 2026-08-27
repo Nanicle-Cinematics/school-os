@@ -97,6 +97,12 @@ export function StructureForm({
 
       <div className="mt-5">
         <p className="mb-2 text-sm font-medium text-slate-700">Fee items (GHS per term)</p>
+        {categories.length === 0 ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            No fee items exist yet, so there is nothing to price. Add them in the Fee items card
+            below first — a structure is a set of amounts, one per item.
+          </p>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((category) => (
             <label key={category.id} className="flex items-center gap-2">
@@ -111,9 +117,11 @@ export function StructureForm({
             </label>
           ))}
         </div>
-        <p className="mt-2 text-xs text-slate-400">
-          Leave an item blank to exclude it from this structure.
-        </p>
+        {categories.length > 0 ? (
+          <p className="mt-2 text-xs text-slate-400">
+            Leave an item blank to exclude it from this structure.
+          </p>
+        ) : null}
       </div>
 
       {state.error ? (
@@ -127,9 +135,11 @@ export function StructureForm({
         </div>
       ) : null}
 
-      <div className="mt-5">
-        <SubmitButton pendingLabel="Saving…">Save fee structure</SubmitButton>
-      </div>
+      {categories.length > 0 ? (
+        <div className="mt-5">
+          <SubmitButton pendingLabel="Saving…">Save fee structure</SubmitButton>
+        </div>
+      ) : null}
     </form>
   );
 }
