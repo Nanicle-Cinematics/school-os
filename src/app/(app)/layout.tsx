@@ -23,8 +23,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     .toUpperCase();
 
   return (
-    <div className="flex min-h-full flex-col bg-slate-50">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+    <div className="flex min-h-full flex-col bg-slate-50 print:block print:bg-white">
+      {/* The app chrome is not part of anything a school hands out — it printed
+          on report cards and fee invoices alike until this was added. */}
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white print:hidden">
         <div className="flex h-14 items-center gap-3 px-4">
           <MobileNav sections={sections} />
 
@@ -67,9 +69,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         </div>
       </header>
 
-      <div className="flex flex-1">
+      <div className="flex flex-1 print:block">
         <Sidebar sections={sections} />
-        <main className="min-w-0 flex-1 p-4 lg:p-8">{children}</main>
+        <main className="min-w-0 flex-1 p-4 lg:p-8 print:p-0">{children}</main>
       </div>
     </div>
   );

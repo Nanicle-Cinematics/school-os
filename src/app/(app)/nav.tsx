@@ -52,7 +52,7 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
 
 export function Sidebar({ sections }: { sections: NavSection[] }) {
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white p-4 lg:block">
+    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white p-4 lg:block print:lg:hidden">
       <NavLinks sections={sections} />
     </aside>
   );

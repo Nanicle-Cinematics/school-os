@@ -146,9 +146,22 @@ export async function saveFeesPolicy(
     return { error: "Days until due must be zero or more." };
   }
 
+  const paymentInstructions = String(formData.get("paymentInstructions") ?? "").trim();
+  const invoiceNote = String(formData.get("invoiceNote") ?? "").trim();
+
+  if (paymentInstructions.length > 600) {
+    return { error: "Keep the payment details under 600 characters — they share a page with the bill." };
+  }
+  if (invoiceNote.length > 200) {
+    return { error: "Keep the note under 200 characters — it prints as one line." };
+  }
+
   await upsertSettings(auth.schoolId, {
     invoiceDueDays: Math.trunc(invoiceDueDays),
     blockReportOnArrears: formData.get("blockReportOnArrears") === "on",
+    // Empty means "print nothing", not "an empty box".
+    paymentInstructions: paymentInstructions || null,
+    invoiceNote: invoiceNote || null,
   });
 
   revalidatePath("/settings");

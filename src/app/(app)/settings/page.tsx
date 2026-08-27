@@ -257,6 +257,8 @@ export default async function SettingsPage() {
           values={{
             invoiceDueDays: settings?.invoiceDueDays ?? 14,
             blockReportOnArrears: settings?.blockReportOnArrears ?? false,
+            paymentInstructions: settings?.paymentInstructions ?? "",
+            invoiceNote: settings?.invoiceNote ?? "",
           }}
         />
       </Card>
