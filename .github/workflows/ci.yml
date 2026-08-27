@@ -89,5 +89,8 @@ jobs:
       - name: Audience — campaign reach, dedupe, debtor filtering
         run: npm run verify:audience
 
+      - name: Invoicing — fee-structure matching and why a student was skipped
+        run: npm run verify:invoicing
+
       - name: Build
         run: npm run build
