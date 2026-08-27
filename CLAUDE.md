@@ -167,6 +167,7 @@ npm run db:verify        # money: payments == allocations == invoice balances
 npm run verify:results   # grading, weighting, ranking, aggregate
 npm run verify:sms       # phone normalisation, GSM-7 vs UCS2 segments, merge fields
 npm run verify:audience  # who a campaign would reach, dedupe, debtor filtering
+npm run verify:invoicing # which fee structure applies, and why a student was skipped
 npm run verify:actions   # the server-action guards — needs `npm run dev` running
 ```
 

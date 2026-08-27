@@ -47,19 +47,30 @@ export function GenerateForm({ terms, currentTermId }: { terms: Term[]; currentT
         </div>
       ) : null}
 
-      {state.noStructure && state.noStructure.length > 0 ? (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          <p className="font-medium">
-            {state.noStructure.length} student
-            {state.noStructure.length === 1 ? " was" : "s were"} skipped — no class or no fee
-            structure for their level:
-          </p>
-          <p className="mt-1 text-xs">
-            {state.noStructure
-              .slice(0, 12)
-              .map((s) => `${s.admissionNo} ${s.name}`)
-              .join(", ")}
-            {state.noStructure.length > 12 ? ` and ${state.noStructure.length - 12} more` : ""}
+      {state.blocked && state.blocked.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {state.blocked.map((group) => (
+            <div
+              key={group.problem}
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+            >
+              <p className="font-medium">
+                {group.students.length} student{group.students.length === 1 ? "" : "s"} skipped —{" "}
+                {group.problem}
+              </p>
+              <p className="mt-0.5 text-amber-800">{group.fix}</p>
+              <p className="mt-1 text-xs text-amber-800/80">
+                {group.students
+                  .slice(0, 12)
+                  .map((s) => `${s.admissionNo} ${s.name}`)
+                  .join(", ")}
+                {group.students.length > 12 ? ` and ${group.students.length - 12} more` : ""}
+              </p>
+            </div>
+          ))}
+          <p className="text-xs text-slate-500">
+            Nothing was lost — fix the above and run this again. Students who already have an
+            invoice are skipped, so re-running only fills the gaps.
           </p>
         </div>
       ) : null}

@@ -5,13 +5,19 @@ import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
-import { generateInvoicesForTerm, recalcInvoice } from "@/lib/invoice-engine";
+import {
+  generateInvoicesForTerm,
+  groupSkipped,
+  recalcInvoice,
+  type BlockedGroup,
+} from "@/lib/invoice-engine";
 import { writeAudit } from "@/lib/audit";
 
 export type GenerateState = {
   error?: string;
   ok?: string;
-  noStructure?: { admissionNo: string; name: string }[];
+  /** Grouped by cause, so the banner can name the screen that fixes each. */
+  blocked?: BlockedGroup[];
 };
 
 export async function generateInvoices(
@@ -58,7 +64,7 @@ export async function generateInvoices(
       `Created ${result.created} invoice${result.created === 1 ? "" : "s"}` +
       (result.skipped > 0 ? `, skipped ${result.skipped} already invoiced` : "") +
       ".",
-    noStructure: result.noStructure.length > 0 ? result.noStructure : undefined,
+    blocked: result.noStructure.length > 0 ? groupSkipped(result.noStructure) : undefined,
   };
 }
 
