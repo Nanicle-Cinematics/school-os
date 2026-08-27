@@ -562,6 +562,57 @@ async function feeGuards(cookie) {
   );
 }
 
+async function billChecks(cookie) {
+  console.log("\nPrinted bills");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
+
+  const invoice = await db(() =>
+    prisma.invoice.findFirst({
+      where: { status: { not: "CANCELLED" } },
+      include: { student: true },
+      orderBy: { invoiceNo: "asc" },
+    }),
+  );
+  if (!invoice) {
+    console.log("  --   no invoices in this database to print");
+    return;
+  }
+
+  const { html } = await fetchPage(
+    `/invoices/print?term=${invoice.termId}&one=${invoice.id}`,
+    cookie,
+  );
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+
+  check("a bill names the student and their admission number",
+    text.includes(invoice.student.firstName) && text.includes(invoice.student.admissionNo),
+    invoice.student.admissionNo);
+  check("and carries its invoice number", text.includes(invoice.invoiceNo), invoice.invoiceNo);
+  check("and a stub the parent brings back", text.includes("Detach and return with payment"));
+  check("exactly one bill, so no stray page break",
+    !html.includes("print:break-after-page"));
+
+  // The app chrome must not print — it did, on report cards too.
+  check("the sidebar is hidden when printing", html.includes("print:lg:hidden"));
+  check("the top bar is hidden when printing", html.includes("print:hidden"));
+
+  const cancelled = await db(() => prisma.invoice.findFirst({ where: { status: "CANCELLED" } }));
+  if (cancelled) {
+    const batch = await fetchPage(`/invoices/print?term=${cancelled.termId}`, cookie);
+    check("a cancelled invoice is never in a batch — it is not money owed",
+      !batch.html.includes(cancelled.invoiceNo), cancelled.invoiceNo);
+  }
+
+  const noTerm = await fetchPage("/invoices/print", cookie);
+  check("printing without a term is refused", noTerm.status === 404, `HTTP ${noTerm.status}`);
+}
+
 async function importChecks(cookie) {
   console.log("\nStudent import (preview only — writes nothing)");
   if (!hasDb) {
@@ -624,6 +675,7 @@ async function main() {
       await studentGuards(token);
       await structureGuards(token);
       await feeGuards(token);
+      await billChecks(token);
       await importChecks(token);
     } finally {
       await closeSession(token);

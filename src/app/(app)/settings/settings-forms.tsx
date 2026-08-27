@@ -293,7 +293,12 @@ export function AcademicForm({
 export function FeesForm({
   values,
 }: {
-  values: { invoiceDueDays: number; blockReportOnArrears: boolean };
+  values: {
+    invoiceDueDays: number;
+    blockReportOnArrears: boolean;
+    paymentInstructions: string;
+    invoiceNote: string;
+  };
 }) {
   const [state, formAction] = useActionState<SettingsState, FormData>(saveFeesPolicy, {});
 
@@ -320,6 +325,32 @@ export function FeesForm({
           />
           Withhold report cards from students in arrears
         </label>
+      </div>
+
+      <div className="mt-3 grid gap-3">
+        <Field
+          label="How to pay"
+          hint="Printed on every invoice. Momo number and merchant name, bank account, or where to pay at the school."
+        >
+          <textarea
+            name="paymentInstructions"
+            rows={4}
+            defaultValue={values.paymentInstructions}
+            placeholder={"MTN MoMo: 024 000 0000 (Nanicle Academy)\nBank: GCB 1234567890123, Adum Branch\nOr pay at the bursar's office, 8am–3pm."}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field label="Note under the total" hint="One line, e.g. a deadline or a late-payment rule.">
+          <input
+            type="text"
+            name="invoiceNote"
+            maxLength={200}
+            defaultValue={values.invoiceNote}
+            placeholder="Fees are payable in full by the third week of term."
+            className={inputClass}
+          />
+        </Field>
       </div>
 
       <Feedback state={state} />

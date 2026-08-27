@@ -148,6 +148,12 @@ model SchoolSettings {
   // Fees policy
   blockReportOnArrears Boolean @default(false)
   invoiceDueDays       Int     @default(14)
+  // Free text printed on every bill: momo number, bank account, who to pay and
+  // where. Deliberately not modelled as fields — schools use momo, a bank, the
+  // bursar's window or all three, and the arrangement changes without warning.
+  paymentInstructions  String?
+  // Printed under the total, e.g. "Fees are payable in full by the third week."
+  invoiceNote          String?
 
   // SMS
   smsProvider           SmsProvider?

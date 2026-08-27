@@ -45,7 +45,20 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <PageHeader title="Invoices" subtitle={`${data.count} matching invoices`} />
+      <PageHeader
+        title="Invoices"
+        subtitle={`${data.count} matching invoices`}
+        action={
+          termId ? (
+            <Link
+              href={`/invoices/print?term=${termId}${classGroupId ? `&class=${classGroupId}` : ""}`}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Print bills{classGroupId ? " for this class" : ""}
+            </Link>
+          ) : null
+        }
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Billed" value={formatCedis(data.billed)} />

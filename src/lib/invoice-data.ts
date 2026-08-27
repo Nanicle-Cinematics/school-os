@@ -66,26 +66,97 @@ export async function getInvoiceList(filters: InvoiceFilters) {
   };
 }
 
+/**
+ * Everything a printed bill shows. Named and shared so the single invoice and
+ * the class print run cannot drift apart — the same reason report cards have
+ * REPORT_CARD_INCLUDE.
+ */
+export const BILL_INCLUDE = {
+  items: { include: { feeCategory: true } },
+  term: { include: { academicYear: true } },
+  student: {
+    include: {
+      currentClassGroup: { include: { level: true } },
+      guardians: {
+        where: { receivesBills: true },
+        include: { guardian: true },
+      },
+    },
+  },
+} satisfies Prisma.InvoiceInclude;
+
+export type BillInvoice = Prisma.InvoiceGetPayload<{ include: typeof BILL_INCLUDE }>;
+
 export async function getInvoice(id: string) {
   return prisma.invoice.findUnique({
     where: { id },
     include: {
-      items: { include: { feeCategory: true } },
-      term: { include: { academicYear: true } },
-      student: {
-        include: {
-          currentClassGroup: { include: { level: true } },
-          guardians: {
-            where: { receivesBills: true },
-            include: { guardian: true },
-          },
-        },
-      },
+      ...BILL_INCLUDE,
       allocations: {
         include: { payment: true },
         orderBy: { createdAt: "asc" },
       },
     },
+  });
+}
+
+/** One bill, for the single-invoice print. */
+export async function getBill(id: string) {
+  return prisma.invoice.findUnique({ where: { id }, include: BILL_INCLUDE });
+}
+
+/** The letterhead: whatever the school has filled in, plus how to pay. */
+export async function getBillSchool(schoolId: string) {
+  return prisma.school.findUnique({
+    where: { id: schoolId },
+    select: {
+      name: true,
+      motto: true,
+      address: true,
+      town: true,
+      district: true,
+      region: true,
+      gpsAddress: true,
+      phone: true,
+      altPhone: true,
+      email: true,
+      website: true,
+      headName: true,
+      settings: { select: { paymentInstructions: true, invoiceNote: true } },
+    },
+  });
+}
+
+export type BillSchool = NonNullable<Awaited<ReturnType<typeof getBillSchool>>>;
+
+/**
+ * The bills to print for a term, optionally one class.
+ *
+ * Cancelled invoices are left out: they are not bills any more, and handing one
+ * to a parent asks for money that is not owed. Settled ones are included by
+ * default — a receipt-shaped "paid in full" is worth having — but `unpaidOnly`
+ * skips them, which is what a bursar chasing arrears actually wants.
+ */
+export async function getBillsForTerm(
+  termId: string,
+  options: { classGroupId?: string; unpaidOnly?: boolean } = {},
+) {
+  return prisma.invoice.findMany({
+    where: {
+      termId,
+      status: { not: "CANCELLED" },
+      ...(options.unpaidOnly ? { balance: { gt: 0 } } : {}),
+      ...(options.classGroupId
+        ? { student: { currentClassGroupId: options.classGroupId } }
+        : {}),
+    },
+    include: BILL_INCLUDE,
+    orderBy: [
+      { student: { currentClassGroup: { level: { order: "asc" } } } },
+      { student: { currentClassGroup: { name: "asc" } } },
+      { student: { lastName: "asc" } },
+      { student: { firstName: "asc" } },
+    ],
   });
 }
 
