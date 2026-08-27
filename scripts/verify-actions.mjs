@@ -512,6 +512,56 @@ async function structureGuards(cookie) {
   );
 }
 
+async function feeGuards(cookie) {
+  console.log("\nFee items");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
+  const { html } = await fetchPage("/fees", cookie);
+
+  const before = await db(() => prisma.feeCategory.count());
+  check("the fee items card lists the school's items", html.includes("Fee items ·"), `${before} items`);
+
+  // A fee item that is already priced or billed must not offer a delete: it
+  // would cascade the structure lines away and silently change what a level
+  // costs.
+  const inUse = await db(() =>
+    prisma.feeCategory.count({
+      where: { OR: [{ structureItems: { some: {} } }, { invoiceItems: { some: {} } }] },
+    }),
+  );
+  const deleteForms = forms(html).filter((form) => form.text.includes("Delete item")).length;
+  check(
+    "a priced or billed fee item offers no delete button",
+    inUse === 0 || deleteForms <= before - inUse,
+    `${inUse} of ${before} in use, ${deleteForms} delete buttons rendered`,
+  );
+
+  const addItem = formWith(html, "Add fee item");
+  const blank = await postForm("/fees", addItem, { name: "   " }, cookie);
+  check(
+    "a blank fee item name is refused",
+    says(blank.html, "Give the fee item a name"),
+    alerts(blank.html)[0],
+  );
+
+  const existing = await db(() => prisma.feeCategory.findFirst({ orderBy: { order: "asc" } }));
+  if (existing) {
+    const dupe = await postForm("/fees", addItem, { name: existing.name }, cookie);
+    check(
+      "a duplicate fee item is refused rather than shadowing the original",
+      says(dupe.html, "already a fee item called"),
+      alerts(dupe.html)[0],
+    );
+  }
+
+  check(
+    "nothing was written by these refusals",
+    (await db(() => prisma.feeCategory.count())) === before,
+  );
+}
+
 async function importChecks(cookie) {
   console.log("\nStudent import (preview only — writes nothing)");
   if (!hasDb) {
@@ -573,6 +623,7 @@ async function main() {
       await accountGuards(token, userId);
       await studentGuards(token);
       await structureGuards(token);
+      await feeGuards(token);
       await importChecks(token);
     } finally {
       await closeSession(token);

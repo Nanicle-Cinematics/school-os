@@ -16,20 +16,25 @@ export async function getFeeSetup() {
     return null;
   }
 
-  const [levels, categories, structures, terms] = await Promise.all([
-    prisma.level.findMany({ orderBy: { order: "asc" } }),
-    prisma.feeCategory.findMany({ orderBy: { order: "asc" } }),
-    prisma.feeStructure.findMany({
-      where: { academicYearId: year.id },
-      include: {
-        items: { include: { feeCategory: true } },
-        level: true,
-        term: true,
-      },
-      orderBy: [{ level: { order: "asc" } }, { name: "asc" }],
-    }),
-    prisma.term.findMany({ where: { academicYearId: year.id }, orderBy: { sequence: "asc" } }),
-  ]);
+  // Sequential, not Promise.all — see the connection_limit note in CLAUDE.md.
+  const levels = await prisma.level.findMany({ orderBy: { order: "asc" } });
+  const categories = await prisma.feeCategory.findMany({
+    orderBy: { order: "asc" },
+    include: { _count: { select: { structureItems: true, invoiceItems: true } } },
+  });
+  const structures = await prisma.feeStructure.findMany({
+    where: { academicYearId: year.id },
+    include: {
+      items: { include: { feeCategory: true } },
+      level: true,
+      term: true,
+    },
+    orderBy: [{ level: { order: "asc" } }, { name: "asc" }],
+  });
+  const terms = await prisma.term.findMany({
+    where: { academicYearId: year.id },
+    orderBy: { sequence: "asc" },
+  });
 
   return {
     year,

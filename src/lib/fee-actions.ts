@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
 import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
 import { tenantTransaction, prisma } from "@/lib/prisma";
@@ -93,6 +95,174 @@ export async function saveFeeStructure(
 
   revalidatePath("/fees");
   return { ok: `Fee structure saved for ${level.name}.` };
+}
+
+/**
+ * Fee items are the lines a bill is made of, so they are the first thing a
+ * school needs and the one thing the structure form cannot do without — with
+ * none defined there is no field to type an amount into.
+ */
+export async function saveFeeCategory(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const rawOrder = String(formData.get("order") ?? "").trim();
+
+  if (!name) {
+    return { error: "Give the fee item a name." };
+  }
+  if (name.length > 60) {
+    return { error: "That name is too long for a bill line — keep it under 60 characters." };
+  }
+
+  const order = rawOrder ? Number(rawOrder) : undefined;
+  if (order !== undefined && (!Number.isFinite(order) || order < 0)) {
+    return { error: "Order must be a number." };
+  }
+
+  // The code is the stable handle and must stay unique per school. It is
+  // derived rather than asked for, because a bursar should not have to invent
+  // one — but it is only derived on create, so renaming "PTA Levy" to "PTA and
+  // Development Levy" does not orphan the structures priced against it.
+  const code = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 24);
+  if (!code) {
+    return { error: "Use at least one letter or number in the name." };
+  }
+
+  try {
+    await tenantTransaction(auth.schoolId, async (tx) => {
+      if (id) {
+        const existing = await tx.feeCategory.findUnique({ where: { id } });
+        if (!existing) {
+          throw new Error("MISSING");
+        }
+        await tx.feeCategory.update({
+          where: { id },
+          data: { name, ...(order !== undefined ? { order } : {}) },
+        });
+        await writeAudit(tx, {
+          schoolId: auth.schoolId,
+          actorUserId: auth.userId,
+          action: "feeCategory.update",
+          entity: "FeeCategory",
+          entityId: id,
+          before: { name: existing.name, order: existing.order },
+          after: { name, order },
+        });
+        return;
+      }
+
+      const last = await tx.feeCategory.findFirst({
+        where: { schoolId: auth.schoolId },
+        orderBy: { order: "desc" },
+      });
+      const created = await tx.feeCategory.create({
+        data: {
+          schoolId: auth.schoolId,
+          name,
+          code,
+          order: order ?? (last?.order ?? 0) + 1,
+          isMandatory: true,
+        },
+      });
+      await writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: "feeCategory.create",
+        entity: "FeeCategory",
+        entityId: created.id,
+        after: { name, code },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "MISSING") {
+      return { error: "That fee item no longer exists." };
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: `There is already a fee item called "${name}".` };
+    }
+    throw error;
+  }
+
+  revalidatePath("/fees");
+  return { ok: id ? `Renamed to ${name}.` : `${name} added. It can now be priced per level.` };
+}
+
+/**
+ * Refused once the item is priced or billed. Deleting it would cascade the
+ * structure lines away and silently change what every level costs; a school
+ * that has stopped charging it prices it at zero, or removes the line from the
+ * structures that carry it.
+ */
+export async function deleteFeeCategory(formData: FormData): Promise<void> {
+  const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
+  const id = String(formData.get("id") ?? "");
+  if (!id) {
+    return;
+  }
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    const existing = await tx.feeCategory.findUnique({
+      where: { id },
+      include: { _count: { select: { structureItems: true, invoiceItems: true } } },
+    });
+    if (!existing) {
+      return;
+    }
+    if (existing._count.structureItems > 0 || existing._count.invoiceItems > 0) {
+      return;
+    }
+    await tx.feeCategory.delete({ where: { id } });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "feeCategory.delete",
+      entity: "FeeCategory",
+      entityId: id,
+      before: { name: existing.name, code: existing.code },
+    });
+  });
+
+  revalidatePath("/fees");
+}
+
+/** Offered when the list is empty or partial, mirroring the curriculum button. */
+export async function applyDefaultFeeItems(
+  // useActionState requires both; the list is fixed and the school comes from
+  // the session, so neither is read.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _prev: ActionState,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _formData: FormData,
+): Promise<ActionState> {
+  const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const result = await tenantTransaction(auth.schoolId, (tx) =>
+    applyDefaultFinanceCategories(tx, auth.schoolId),
+  );
+
+  revalidatePath("/fees");
+  revalidatePath("/expenses");
+
+  if (result.feeCategoriesCreated === 0 && result.expenseCategoriesCreated === 0) {
+    return { ok: "Nothing to add — the standard items are already here." };
+  }
+  return {
+    ok: `Added ${result.feeCategoriesCreated} fee item${
+      result.feeCategoriesCreated === 1 ? "" : "s"
+    }. Rename or delete any the school does not charge, then price them per level.`,
+  };
 }
 
 export async function deleteFeeStructure(formData: FormData): Promise<void> {
