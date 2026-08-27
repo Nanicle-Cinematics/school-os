@@ -88,6 +88,15 @@ Counts to assert against: KG 4, B1–B3 9, B4–B6 11, B7–B9 12. A school whos
 practice differs edits it afterwards — the structure is a baseline, and a
 deviation is a customisation rather than an error.
 
+**Fee items and expense headings are provisioned the same way**, from
+`src/lib/finance-defaults.ts` (7 of each, idempotent on `code`). This is not
+cosmetic: a `FeeStructure` is priced *per `FeeCategory`*, so a school with none
+gets a fee form with no fields at all — a heading, a hint and nothing to type
+into. Both lists are editable on `/fees`, where the gap is discovered. Deleting
+an item is refused once it is priced or billed (the FK cascades and would take
+the structure lines with it), but renaming always works, because `code` is the
+stable handle and is derived only on create.
+
 ## Tenancy — enforcement is LIVE
 
 `DB_RLS="on"` and the app connects through `APP_DATABASE_URL` as the restricted
