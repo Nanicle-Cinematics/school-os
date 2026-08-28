@@ -25,8 +25,17 @@ export default async function ClassDetailPage({
     notFound();
   }
 
-  const { classGroup, year, levels, teachers, roster, subjectRows, previousYear, totalEnrollments } =
-    result;
+  const {
+    classGroup,
+    year,
+    levels,
+    teachers,
+    roster,
+    subjectRows,
+    classTeacherLevel,
+    previousYear,
+    totalEnrollments,
+  } = result;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -115,6 +124,12 @@ export default async function ClassDetailPage({
             rows={subjectRows}
             teachers={teachers}
             previousYearName={previousYear?.name ?? null}
+            classTeacherLevel={classTeacherLevel}
+            formTeacherName={
+              classGroup.formTeacher
+                ? `${classGroup.formTeacher.firstName} ${classGroup.formTeacher.lastName}`
+                : null
+            }
           />
         ) : (
           <p className="px-4 py-6 text-sm text-slate-500">

@@ -251,6 +251,16 @@ Where this year is empty and last year is not, the form pre-fills from last year
 and says so; nothing is written until Save, which is what stops a rollover
 meaning 104 fresh submissions.
 
+**The screen follows the level's staffing model**, which in a Ghanaian basic
+school is not uniform: through KG and primary one class teacher takes every
+subject, and from B7 each subject has its own teacher. So on a class-teacher
+level (`CLASS_TEACHER_STAGES` in `class-data.ts`) every row is pre-filled with
+the class's **form teacher** and the screen says so; at JHS nothing is
+pre-filled, because a suggestion there would be a wrong answer already entered.
+A class-teacher level with no form teacher set says that instead of asking
+someone to pick the same name nine times — the fix is the form teacher field,
+not these rows.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against

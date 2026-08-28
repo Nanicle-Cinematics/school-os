@@ -11,6 +11,8 @@ export type SubjectRow = {
   code: string;
   staffId: string | null;
   previousStaffId: string | null;
+  /** The form teacher, below JHS, where one teacher takes every subject. */
+  suggestedStaffId: string | null;
 };
 
 export type TeacherOption = { id: string; firstName: string; lastName: string };
@@ -28,11 +30,15 @@ export function AssignmentsForm({
   rows,
   teachers,
   previousYearName,
+  classTeacherLevel,
+  formTeacherName,
 }: {
   classGroupId: string;
   rows: SubjectRow[];
   teachers: TeacherOption[];
   previousYearName: string | null;
+  classTeacherLevel: boolean;
+  formTeacherName: string | null;
 }) {
   const [state, formAction] = useActionState<ClassState, FormData>(saveClassAssignments, {});
   const formRef = useRef<HTMLFormElement>(null);
@@ -41,6 +47,10 @@ export function AssignmentsForm({
   // Prefilled from last year where this year is empty, so a rollover is a
   // review rather than a retyping. Nothing is written until Save.
   const prefilled = rows.some((row) => !row.staffId && row.previousStaffId);
+  const suggested = rows.some((row) => !row.staffId && !row.previousStaffId && row.suggestedStaffId);
+  // A class-teacher level with nobody to suggest: the form teacher is unset, and
+  // that is the field to fix rather than picking the same name nine times here.
+  const needsFormTeacher = classTeacherLevel && rows.every((row) => !row.staffId) && !formTeacherName;
 
   function applyToAll(staffId: string) {
     setBulk(staffId);
@@ -66,6 +76,28 @@ export function AssignmentsForm({
           No assignments for this year yet, so the teachers below are carried over from{" "}
           {previousYearName}. Change anything that has moved, then save — nothing is written until
           you do.
+        </p>
+      ) : null}
+
+      {suggested && formTeacherName ? (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          This is a class-teacher level, so every subject is set to{" "}
+          <span className="font-medium text-slate-900">{formTeacherName}</span>, the form teacher.
+          Change any that differ, then save.
+        </p>
+      ) : null}
+
+      {needsFormTeacher ? (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          One teacher takes every subject at this level, but this class has no form teacher yet.
+          Set one above and they will be filled in here.
+        </p>
+      ) : null}
+
+      {!classTeacherLevel && rows.every((row) => !row.staffId) ? (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Each subject has its own teacher at this level, so these are left for you to set
+          individually.
         </p>
       ) : null}
 
@@ -108,7 +140,7 @@ export function AssignmentsForm({
                 <td className="px-4 py-2">
                   <select
                     name={`teacher:${row.subjectId}`}
-                    defaultValue={row.staffId ?? row.previousStaffId ?? ""}
+                    defaultValue={row.staffId ?? row.previousStaffId ?? row.suggestedStaffId ?? ""}
                     className={inputClass}
                   >
                     <option value="">— nobody yet —</option>

@@ -1,6 +1,14 @@
 import "server-only";
 
+import type { Stage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+
+/**
+ * Stages where one teacher takes every subject in the class, as opposed to each
+ * subject having its own teacher. The split is the ordinary Ghanaian one: a
+ * class teacher through KG and primary, subject teachers from JHS 1.
+ */
+const CLASS_TEACHER_STAGES = new Set<Stage>(["CRECHE", "NURSERY", "KINDERGARTEN", "PRIMARY"]);
 
 /**
  * Queries here are deliberately sequential, not Promise.all.
@@ -57,7 +65,7 @@ export async function getClassGroup(id: string) {
   const classGroup = await prisma.classGroup.findUnique({
     where: { id },
     include: {
-      level: { select: { id: true, name: true, code: true, order: true } },
+      level: { select: { id: true, name: true, code: true, order: true, stage: true } },
       formTeacher: { select: { id: true, firstName: true, lastName: true } },
     },
   });
@@ -133,12 +141,21 @@ export async function getClassGroup(id: string) {
 
   const previousBySubject = new Map(previous.map((a) => [a.subjectId, a.staffId]));
 
+  // Below JHS one teacher takes the whole class, so the form teacher is the
+  // answer for every subject and the screen should say so rather than make
+  // someone pick the same name nine times. From B7 each subject has its own
+  // teacher, and a suggestion there would be a wrong answer pre-filled.
+  const classTeacherLevel = CLASS_TEACHER_STAGES.has(classGroup.level.stage);
+  const suggestedStaffId =
+    classTeacherLevel && assignments.length === 0 ? (classGroup.formTeacherId ?? null) : null;
+
   const subjectRows = offered.map((row) => ({
     subjectId: row.subject.id,
     name: row.subject.name,
     code: row.subject.code,
     staffId: assignedBySubject.get(row.subject.id) ?? null,
     previousStaffId: previousBySubject.get(row.subject.id) ?? null,
+    suggestedStaffId,
   }));
 
   // Across every year, not just the current one — this is the delete guard.
@@ -152,6 +169,7 @@ export async function getClassGroup(id: string) {
     roster,
     assignments,
     subjectRows,
+    classTeacherLevel,
     previousYear: previous.length > 0 ? previousYear : null,
     totalEnrollments,
   };
