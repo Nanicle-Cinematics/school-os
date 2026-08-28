@@ -173,6 +173,21 @@ export default async function SettingsPage() {
         </p>
       </Card>
 
+      <Card
+        title="Assessment components"
+        action={
+          <Link href="/settings/components" className="text-sm text-slate-500 hover:text-slate-900">
+            Manage →
+          </Link>
+        }
+      >
+        <p className="p-4 text-sm text-slate-500">
+          What every subject is marked out of — the class tests, group work, project and exam.
+          Teachers get these automatically when they open a mark sheet, and set each
+          component&rsquo;s total marks for their own class.
+        </p>
+      </Card>
+
       <Card title="School profile">
         <ProfileForm
           values={{

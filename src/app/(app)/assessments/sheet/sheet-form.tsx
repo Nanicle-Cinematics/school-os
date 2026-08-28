@@ -1,0 +1,269 @@
+"use client";
+
+import { useActionState, useMemo, useState } from "react";
+import { saveSheet, type SheetState } from "@/lib/sheet-actions";
+import { SubmitButton } from "../../submit-button";
+import { Alert } from "../../ui";
+
+type Column = {
+  id: string;
+  title: string;
+  maxScore: number;
+  isExam: boolean;
+  status: string;
+  marked: number;
+};
+type Student = { id: string; firstName: string; lastName: string; admissionNo: string };
+type Cell = { rawScore: string | null; isAbsent: boolean };
+
+/**
+ * The running class score, computed in the browser from what is typed.
+ *
+ * Mirrors the server engine exactly: each component's percentage weighted by
+ * its own maximum reduces to (marks earned / marks available), scaled to the
+ * school's class and exam split. A teacher who cannot see the effect of a mark
+ * until after publishing is marking blind.
+ */
+function totalsFor(
+  columns: Column[],
+  values: Record<string, string>,
+  absent: Record<string, boolean>,
+  maxima: Record<string, string>,
+  studentId: string,
+  classWeight: number,
+  examWeight: number,
+) {
+  const part = (items: Column[], outOf: number) => {
+    let earned = 0;
+    let available = 0;
+    let any = false;
+
+    for (const column of items) {
+      const key = `${column.id}:${studentId}`;
+      const max = Number(maxima[column.id] ?? column.maxScore);
+      if (!Number.isFinite(max) || max <= 0) continue;
+
+      if (absent[key]) {
+        available += max;
+        any = true;
+        continue;
+      }
+      const raw = values[key];
+      if (raw === undefined || raw.trim() === "") continue;
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) continue;
+
+      earned += parsed;
+      available += max;
+      any = true;
+    }
+
+    if (!any || available <= 0) return null;
+    return (earned / available) * outOf;
+  };
+
+  const classPart = part(columns.filter((c) => !c.isExam), classWeight);
+  const examPart = part(columns.filter((c) => c.isExam), examWeight);
+  if (classPart === null && examPart === null) return null;
+  return { classPart, examPart, total: (classPart ?? 0) + (examPart ?? 0) };
+}
+
+export function SheetForm({
+  termId,
+  classGroupId,
+  subjectId,
+  columns,
+  students,
+  scoreFor,
+  classWeight,
+  examWeight,
+}: {
+  termId: string;
+  classGroupId: string;
+  subjectId: string;
+  columns: Column[];
+  students: Student[];
+  scoreFor: Record<string, Cell>;
+  classWeight: number;
+  examWeight: number;
+}) {
+  const [state, formAction] = useActionState<SheetState, FormData>(saveSheet, {});
+
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const [key, cell] of Object.entries(scoreFor)) {
+      initial[key] = cell.rawScore ?? "";
+    }
+    return initial;
+  });
+  const [absent, setAbsent] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const [key, cell] of Object.entries(scoreFor)) {
+      if (cell.isAbsent) initial[key] = true;
+    }
+    return initial;
+  });
+  const [maxima, setMaxima] = useState<Record<string, string>>(() =>
+    Object.fromEntries(columns.map((c) => [c.id, String(c.maxScore)])),
+  );
+
+  const marksAvailable = useMemo(
+    () =>
+      columns
+        .filter((c) => !c.isExam)
+        .reduce((sum, c) => sum + (Number(maxima[c.id]) || 0), 0),
+    [columns, maxima],
+  );
+
+  const outOfRange = useMemo(() => {
+    for (const column of columns) {
+      const max = Number(maxima[column.id]);
+      for (const student of students) {
+        const raw = values[`${column.id}:${student.id}`];
+        if (raw === undefined || raw.trim() === "") continue;
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
+          return `${student.lastName} — ${column.title}: ${raw} is not between 0 and ${max}`;
+        }
+      }
+    }
+    return null;
+  }, [columns, students, values, maxima]);
+
+  return (
+    <form action={formAction} className="space-y-3">
+      <input type="hidden" name="termId" value={termId} />
+      <input type="hidden" name="classGroupId" value={classGroupId} />
+      <input type="hidden" name="subjectId" value={subjectId} />
+
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50/60">
+              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                Student
+              </th>
+              {columns.map((column) => (
+                <th key={column.id} className="px-2 py-2 text-center align-top">
+                  <p className="text-xs font-medium text-slate-700">{column.title}</p>
+                  <label className="mt-1 flex items-center justify-center gap-1">
+                    <span className="sr-only">Total marks for {column.title}</span>
+                    <span className="text-xs text-slate-400">/</span>
+                    <input
+                      type="number"
+                      name={`max:${column.id}`}
+                      min={1}
+                      max={1000}
+                      step="1"
+                      value={maxima[column.id] ?? ""}
+                      disabled={column.status === "APPROVED"}
+                      onChange={(e) =>
+                        setMaxima((prev) => ({ ...prev, [column.id]: e.target.value }))
+                      }
+                      className="w-14 rounded border border-slate-200 px-1 py-0.5 text-center text-xs tabular-nums disabled:bg-slate-100 disabled:text-slate-400"
+                      aria-label={`Total marks for ${column.title}`}
+                    />
+                  </label>
+                  {column.status === "APPROVED" ? (
+                    <p className="mt-0.5 text-[10px] uppercase text-amber-600">locked</p>
+                  ) : null}
+                </th>
+              ))}
+              <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-500">
+                Class ({classWeight})
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-500">
+                Exam ({examWeight})
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-500">
+                Total
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {students.map((student) => {
+              const totals = totalsFor(
+                columns,
+                values,
+                absent,
+                maxima,
+                student.id,
+                classWeight,
+                examWeight,
+              );
+              return (
+                <tr key={student.id} className="hover:bg-slate-50/60">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-1.5">
+                    <p className="font-medium text-slate-900">
+                      {student.lastName}, {student.firstName}
+                    </p>
+                    <p className="text-xs text-slate-400">{student.admissionNo}</p>
+                  </td>
+
+                  {columns.map((column) => {
+                    const key = `${column.id}:${student.id}`;
+                    const locked = column.status === "APPROVED";
+                    const isAbsent = absent[key] ?? false;
+                    return (
+                      <td key={column.id} className="px-2 py-1.5 text-center">
+                        <input
+                          type="number"
+                          name={`score:${column.id}:${student.id}`}
+                          min={0}
+                          max={Number(maxima[column.id]) || column.maxScore}
+                          step="0.01"
+                          value={isAbsent ? "" : (values[key] ?? "")}
+                          disabled={locked || isAbsent}
+                          onChange={(e) =>
+                            setValues((prev) => ({ ...prev, [key]: e.target.value }))
+                          }
+                          className="w-16 rounded border border-slate-200 px-1.5 py-1 text-center tabular-nums disabled:bg-slate-100"
+                          aria-label={`${column.title} for ${student.firstName} ${student.lastName}`}
+                        />
+                        <label className="mt-0.5 flex items-center justify-center gap-1 text-[10px] text-slate-400">
+                          <input
+                            type="checkbox"
+                            name={`absent:${column.id}:${student.id}`}
+                            checked={isAbsent}
+                            disabled={locked}
+                            onChange={(e) =>
+                              setAbsent((prev) => ({ ...prev, [key]: e.target.checked }))
+                            }
+                            className="h-3 w-3"
+                          />
+                          abs
+                        </label>
+                      </td>
+                    );
+                  })}
+
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                    {totals?.classPart != null ? totals.classPart.toFixed(1) : "—"}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                    {totals?.examPart != null ? totals.examPart.toFixed(1) : "—"}
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-slate-900">
+                    {totals ? totals.total.toFixed(1) : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {outOfRange ? <Alert tone="error">{outOfRange}</Alert> : null}
+      {state.error ? <Alert tone="error">{state.error}</Alert> : null}
+      {state.ok ? <Alert tone="success">{state.ok}</Alert> : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <SubmitButton pendingLabel="Saving…">Save the sheet</SubmitButton>
+        <p className="text-xs text-slate-500">
+          The class components are worth {marksAvailable} marks in total, scaled to {classWeight}.
+          Blank means not marked yet; <span className="font-medium">abs</span> counts as zero.
+        </p>
+      </div>
+    </form>
+  );
+}

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
-import { tenantTransaction } from "@/lib/prisma";
+import { prisma, tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
 
@@ -144,4 +144,129 @@ export async function saveRemarks(formData: FormData): Promise<void> {
   });
 
   revalidatePath(`/results/${studentId}`);
+}
+
+/**
+ * Conduct, attitude, interest, attendance and the form teacher's remark for a
+ * whole class in one save.
+ *
+ * `saveRemarks` writes one student at a time from their own page, which for a
+ * class of forty is forty page visits — so in practice these fields stayed
+ * empty and the report card printed a row of dashes. This also works BEFORE
+ * results are computed, because a form teacher fills this in over the term,
+ * not in the scramble after marking.
+ *
+ * The head's remark is deliberately absent: it stays per-student and
+ * leadership-only, since it is the one line on the card that should not be
+ * written in bulk.
+ */
+export async function saveClassRemarks(
+  _prev: { error?: string; ok?: string },
+  formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const auth = await requireRole(ACADEMIC);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const termId = String(formData.get("termId") ?? "");
+  const classGroupId = String(formData.get("classGroupId") ?? "");
+  if (!termId || !classGroupId) {
+    return { error: "Choose a term and class." };
+  }
+
+  // A teacher may write remarks for a class they teach anything in; leadership
+  // for any class. Subject-level assignment is too narrow here — the form
+  // teacher writes the remark, and they may not teach every subject.
+  if (!canAccess(auth.roles, LEADERSHIP)) {
+    if (!auth.staffId) {
+      return { error: "Your account is not linked to a staff record." };
+    }
+    const teaches = await prisma.teachingAssignment.count({
+      where: { staffId: auth.staffId, classGroupId },
+    });
+    if (teaches === 0) {
+      return { error: "You do not teach in that class." };
+    }
+  }
+
+  type Row = {
+    studentId: string;
+    conduct: string | null;
+    attitude: string | null;
+    interest: string | null;
+    formTeacherRemark: string | null;
+    daysPresent: number | null;
+    daysTotal: number | null;
+  };
+
+  const text = (key: string) => {
+    const value = String(formData.get(key) ?? "").trim();
+    return value ? value.slice(0, 300) : null;
+  };
+
+  const studentIds = [...formData.keys()]
+    .filter((key) => key.startsWith("row:"))
+    .map((key) => key.slice("row:".length));
+
+  const rows: Row[] = [];
+  for (const studentId of studentIds) {
+    const presentRaw = String(formData.get(`daysPresent:${studentId}`) ?? "").trim();
+    const totalRaw = String(formData.get(`daysTotal:${studentId}`) ?? "").trim();
+    const daysPresent = presentRaw ? Number(presentRaw) : null;
+    const daysTotal = totalRaw ? Number(totalRaw) : null;
+
+    if (daysPresent !== null && (!Number.isInteger(daysPresent) || daysPresent < 0)) {
+      return { error: "Days present must be a whole number." };
+    }
+    if (daysTotal !== null && (!Number.isInteger(daysTotal) || daysTotal < 0)) {
+      return { error: "Days in term must be a whole number." };
+    }
+    if (daysPresent !== null && daysTotal !== null && daysPresent > daysTotal) {
+      return { error: "A student cannot be present for more days than the term has." };
+    }
+
+    rows.push({
+      studentId,
+      conduct: text(`conduct:${studentId}`),
+      attitude: text(`attitude:${studentId}`),
+      interest: text(`interest:${studentId}`),
+      formTeacherRemark: text(`formTeacherRemark:${studentId}`),
+      daysPresent,
+      daysTotal,
+    });
+  }
+
+  if (rows.length === 0) {
+    return { error: "Nothing to save." };
+  }
+
+  let written = 0;
+  await tenantTransaction(
+    auth.schoolId,
+    async (tx) => {
+      for (const row of rows) {
+        const { studentId, ...fields } = row;
+        // upsert, not update: these are written during the term, before
+        // computeResults has created any TermResult row to update.
+        await tx.termResult.upsert({
+          where: { termId_studentId: { termId, studentId } },
+          create: { schoolId: auth.schoolId, termId, studentId, classGroupId, ...fields },
+          update: fields,
+        });
+        written += 1;
+      }
+
+      await writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: "results.classRemarks",
+        entity: "ClassGroup",
+        entityId: classGroupId,
+        after: { termId, students: written },
+      });
+    },
+    { timeout: 120_000, maxWait: 20_000 },
+  );
+
+  revalidatePath("/results/remarks");
+  return { ok: `Saved for ${written} student${written === 1 ? "" : "s"}.` };
 }

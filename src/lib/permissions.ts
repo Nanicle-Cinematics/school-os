@@ -39,8 +39,10 @@ export const NAV: NavSection[] = [
     items: [
       { href: "/classes", label: "Classes", roles: [...OFFICE, "TEACHER"] },
       { href: "/subjects", label: "Subjects", roles: [...OFFICE, "TEACHER"] },
+      { href: "/assessments/sheet", label: "Mark sheet", roles: ACADEMIC },
       { href: "/assessments", label: "Assessments", roles: ACADEMIC },
       { href: "/results", label: "Results", roles: ACADEMIC },
+      { href: "/results/remarks", label: "Conduct & remarks", roles: ACADEMIC },
       { href: "/promotions", label: "Promotions", roles: OFFICE },
     ],
   },

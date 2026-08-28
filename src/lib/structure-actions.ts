@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { Prisma, type Stage } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { OFFICE } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
+import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
+import { writeAudit } from "@/lib/audit";
 
 export type StructureState = { error?: string; ok?: string };
 
@@ -24,6 +26,7 @@ function duplicate(error: unknown) {
 }
 
 function refresh() {
+  revalidatePath("/settings/components");
   revalidatePath("/settings/structure");
   revalidatePath("/settings");
   revalidatePath("/classes");
@@ -237,4 +240,138 @@ export async function applyCurriculum(
   return {
     ok: `Added ${result.levelsCreated} levels, ${result.subjectsCreated} subjects and ${result.linksCreated} subject offerings. Anything already there was left alone.`,
   };
+}
+
+/**
+ * The components every subject is marked out of. Leadership sets the school
+ * default; a teacher adjusts any component's total marks on their own sheet.
+ */
+export async function saveComponent(
+  _prev: StructureState,
+  formData: FormData,
+): Promise<StructureState> {
+  const auth = await requireRole(LEADERSHIP);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const id = String(formData.get("id") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const type = String(formData.get("type") ?? "CLASS_TEST");
+  const maxScore = Number(formData.get("maxScore") ?? 0);
+  const orderRaw = String(formData.get("order") ?? "").trim();
+
+  if (!title) {
+    return { error: "Give the component a name, e.g. “Class Test 1”." };
+  }
+  if (!Number.isFinite(maxScore) || maxScore <= 0 || maxScore > 1000) {
+    return { error: "Total marks must be between 1 and 1000." };
+  }
+
+  const isExam = type === "END_OF_TERM_EXAM" || type === "MIDTERM_EXAM";
+  const order = orderRaw ? Number(orderRaw) : undefined;
+
+  try {
+    await tenantTransaction(auth.schoolId, async (tx) => {
+      if (id) {
+        await tx.assessmentTemplate.update({
+          where: { id },
+          data: {
+            title,
+            type: type as "CLASS_TEST",
+            maxScore: new Prisma.Decimal(maxScore),
+            isExam,
+            ...(order !== undefined ? { order } : {}),
+          },
+        });
+      } else {
+        const last = await tx.assessmentTemplate.findFirst({
+          where: { schoolId: auth.schoolId },
+          orderBy: { order: "desc" },
+        });
+        await tx.assessmentTemplate.create({
+          data: {
+            schoolId: auth.schoolId,
+            title,
+            type: type as "CLASS_TEST",
+            maxScore: new Prisma.Decimal(maxScore),
+            isExam,
+            order: order ?? (last?.order ?? 0) + 10,
+          },
+        });
+      }
+
+      await writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: id ? "component.update" : "component.create",
+        entity: "AssessmentTemplate",
+        entityId: id || title,
+        after: { title, type, maxScore },
+      });
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: `There is already a component called “${title}”.` };
+    }
+    throw error;
+  }
+
+  refresh();
+  return {
+    ok: id
+      ? `Saved. Sheets already opened keep their own totals — this changes new ones.`
+      : `${title} added. It appears on sheets opened from now on.`,
+  };
+}
+
+/**
+ * Deleting a component removes it from future sheets only. Marks already
+ * entered live on Assessment rows, which are untouched — a template is a
+ * factory, not the record.
+ */
+export async function deleteComponent(formData: FormData): Promise<void> {
+  const auth = await requireRole(LEADERSHIP);
+  setTenantContext({ schoolId: auth.schoolId });
+  const id = String(formData.get("id") ?? "");
+  if (!id) {
+    return;
+  }
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    const existing = await tx.assessmentTemplate.findUnique({ where: { id } });
+    if (!existing) {
+      return;
+    }
+    await tx.assessmentTemplate.delete({ where: { id } });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "component.delete",
+      entity: "AssessmentTemplate",
+      entityId: id,
+      before: { title: existing.title, maxScore: existing.maxScore.toString() },
+    });
+  });
+
+  refresh();
+}
+
+/** Offered when the list is empty or partial, like the curriculum button. */
+export async function applyDefaultComponents(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _prev: StructureState,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _formData: FormData,
+): Promise<StructureState> {
+  const auth = await requireRole(LEADERSHIP);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const result = await tenantTransaction(auth.schoolId, (tx) =>
+    applyDefaultAssessmentTemplate(tx, auth.schoolId),
+  );
+
+  refresh();
+  if (result.created === 0) {
+    return { ok: "Already set up — nothing was missing." };
+  }
+  return { ok: `Added ${result.created} component${result.created === 1 ? "" : "s"}.` };
 }
