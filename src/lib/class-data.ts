@@ -100,8 +100,59 @@ export async function getClassGroup(id: string) {
       })
     : [];
 
+  // The subjects this class's LEVEL offers — the rows of the assignment editor.
+  // Not every subject in the school: KG must not be offered Mathematics, and a
+  // list of eighteen when the level teaches nine is how the wrong one gets
+  // picked.
+  const offered = await prisma.levelSubject.findMany({
+    where: { levelId: classGroup.levelId },
+    include: { subject: { select: { id: true, name: true, code: true } } },
+    orderBy: [{ order: "asc" }, { subject: { name: "asc" } }],
+  });
+
+  const assignedBySubject = new Map(assignments.map((a) => [a.subjectId, a.staffId]));
+
+  // Last year's teachers, offered as the starting point when this year is
+  // empty — otherwise a rollover means retyping the whole timetable. Nothing is
+  // written until the form is saved.
+  const previousYear = year
+    ? await prisma.academicYear.findFirst({
+        where: { startDate: { lt: year.startDate } },
+        orderBy: { startDate: "desc" },
+        select: { id: true, name: true },
+      })
+    : null;
+
+  const previous =
+    previousYear && assignments.length === 0
+      ? await prisma.teachingAssignment.findMany({
+          where: { classGroupId: id, academicYearId: previousYear.id },
+          select: { subjectId: true, staffId: true },
+        })
+      : [];
+
+  const previousBySubject = new Map(previous.map((a) => [a.subjectId, a.staffId]));
+
+  const subjectRows = offered.map((row) => ({
+    subjectId: row.subject.id,
+    name: row.subject.name,
+    code: row.subject.code,
+    staffId: assignedBySubject.get(row.subject.id) ?? null,
+    previousStaffId: previousBySubject.get(row.subject.id) ?? null,
+  }));
+
   // Across every year, not just the current one — this is the delete guard.
   const totalEnrollments = await prisma.enrollment.count({ where: { classGroupId: id } });
 
-  return { classGroup, year, levels, teachers, roster, assignments, totalEnrollments };
+  return {
+    classGroup,
+    year,
+    levels,
+    teachers,
+    roster,
+    assignments,
+    subjectRows,
+    previousYear: previous.length > 0 ? previousYear : null,
+    totalEnrollments,
+  };
 }

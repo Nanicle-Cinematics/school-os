@@ -80,3 +80,123 @@ export async function deleteClassGroup(formData: FormData): Promise<void> {
   revalidatePath("/classes");
   redirect("/classes");
 }
+
+/**
+ * Set who teaches every subject in one class, in one submit.
+ *
+ * The per-teacher form adds a single subject at a time, which is right for a
+ * correction and hopeless for setup: the GES curriculum gives a level between
+ * four and twelve subjects, so a school with one stream per level needs 104
+ * assignments before a single teacher can open a mark sheet. This writes a
+ * whole class at once, and takes the class's own level as the list of rows so
+ * KG is never offered Mathematics.
+ *
+ * Blank means unassigned, and unassigning is how a mistake is undone — so a row
+ * left empty deletes any assignment that was there. Only the current academic
+ * year is touched; last year's record of who taught what is history and stays.
+ */
+export async function saveClassAssignments(
+  _prev: ClassState,
+  formData: FormData,
+): Promise<ClassState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const classGroupId = String(formData.get("classGroupId") ?? "");
+  if (!classGroupId) {
+    return { error: "No class was submitted." };
+  }
+
+  const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+  if (!year) {
+    return { error: "No academic year is marked current — set one in Settings first." };
+  }
+
+  const classGroup = await prisma.classGroup.findUnique({
+    where: { id: classGroupId },
+    select: { levelId: true },
+  });
+  if (!classGroup) {
+    return { error: "That class no longer exists." };
+  }
+
+  // The submitted teacher for each subject the level offers. Reading the rows
+  // from the database rather than from the form is what stops a forged field
+  // assigning a subject this level does not teach.
+  const offered = await prisma.levelSubject.findMany({
+    where: { levelId: classGroup.levelId },
+    select: { subjectId: true },
+  });
+
+  const wanted = new Map<string, string>();
+  for (const { subjectId } of offered) {
+    const staffId = String(formData.get(`teacher:${subjectId}`) ?? "").trim();
+    if (staffId) {
+      wanted.set(subjectId, staffId);
+    }
+  }
+
+  // Every submitted teacher must actually be teaching staff at this school.
+  if (wanted.size > 0) {
+    const valid = await prisma.staff.count({
+      where: {
+        id: { in: [...new Set(wanted.values())] },
+        deletedAt: null,
+        status: "ACTIVE",
+        isTeaching: true,
+      },
+    });
+    if (valid !== new Set(wanted.values()).size) {
+      return { error: "One of those teachers is no longer on the teaching staff." };
+    }
+  }
+
+  const existing = await prisma.teachingAssignment.findMany({
+    where: { classGroupId, academicYearId: year.id },
+    select: { id: true, subjectId: true, staffId: true },
+  });
+
+  const remove = existing.filter((row) => wanted.get(row.subjectId) !== row.staffId);
+  const add = [...wanted.entries()].filter(
+    ([subjectId, staffId]) =>
+      !existing.some((row) => row.subjectId === subjectId && row.staffId === staffId),
+  );
+
+  if (remove.length === 0 && add.length === 0) {
+    return { ok: "Nothing to change." };
+  }
+
+  await prisma.$transaction(
+    async (tx) => {
+      if (remove.length > 0) {
+        await tx.teachingAssignment.deleteMany({
+          where: { id: { in: remove.map((row) => row.id) } },
+        });
+      }
+      if (add.length > 0) {
+        await tx.teachingAssignment.createMany({
+          data: add.map(([subjectId, staffId]) => ({
+            schoolId: auth.schoolId,
+            academicYearId: year.id,
+            classGroupId,
+            subjectId,
+            staffId,
+          })),
+        });
+      }
+    },
+    { timeout: 30_000, maxWait: 15_000 },
+  );
+
+  revalidatePath(`/classes/${classGroupId}`);
+  revalidatePath("/staff");
+
+  const assigned = wanted.size;
+  const total = offered.length;
+  return {
+    ok:
+      assigned === total
+        ? `All ${total} subjects have a teacher.`
+        : `Saved — ${assigned} of ${total} subjects have a teacher.`,
+  };
+}

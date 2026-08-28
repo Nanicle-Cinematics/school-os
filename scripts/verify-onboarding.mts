@@ -162,7 +162,19 @@ async function clean(slug: string) {
     return;
   }
   await db(() => withBypass(() => prisma.school.delete({ where: { id: school.id } })));
-  console.log(`deleted ${school.name}`);
+
+  // The school's cascade takes the memberships but NOT the logins: User.schoolId
+  // is SetNull, so the proprietor survives as an orphan with no school and no
+  // membership, and a later run of this script would then collide on the email.
+  const stamp = slug.replace(/^qa-/, "");
+  const users = await db(() =>
+    withBypass(() =>
+      prisma.user.deleteMany({
+        where: { email: { in: [`qa-${stamp}@example.com`, `qa-admin-${stamp}@example.com`] } },
+      }),
+    ),
+  );
+  console.log(`deleted ${school.name} and ${users.count} login(s)`);
 }
 
 async function main() {

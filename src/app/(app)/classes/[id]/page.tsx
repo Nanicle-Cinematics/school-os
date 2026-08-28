@@ -8,6 +8,7 @@ import { deleteClassGroup } from "@/lib/class-actions";
 import { Alert, Card, EmptyRow, tableHeadClass, thClass } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditClassForm } from "../class-form";
+import { AssignmentsForm } from "./assignments-form";
 
 export const metadata: Metadata = { title: "Class · School OS" };
 
@@ -24,7 +25,8 @@ export default async function ClassDetailPage({
     notFound();
   }
 
-  const { classGroup, year, levels, teachers, roster, assignments, totalEnrollments } = result;
+  const { classGroup, year, levels, teachers, roster, subjectRows, previousYear, totalEnrollments } =
+    result;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -107,34 +109,22 @@ export default async function ClassDetailPage({
       </Card>
 
       <Card title="Who teaches what here">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Subject</th>
-                <th className={thClass}>Teacher</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {assignments.length === 0 ? (
-                <EmptyRow colSpan={2}>
-                  No teaching assignments for this class yet — set them on a teacher&rsquo;s page.
-                </EmptyRow>
-              ) : (
-                assignments.map((assignment) => (
-                  <tr key={assignment.id}>
-                    <td className="whitespace-nowrap px-4 py-2 text-slate-900">
-                      {assignment.subject.name}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-slate-600">
-                      {assignment.staff.firstName} {assignment.staff.lastName}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        {year ? (
+          <AssignmentsForm
+            classGroupId={classGroup.id}
+            rows={subjectRows}
+            teachers={teachers}
+            previousYearName={previousYear?.name ?? null}
+          />
+        ) : (
+          <p className="px-4 py-6 text-sm text-slate-500">
+            No academic year is marked current, and an assignment belongs to one.{" "}
+            <Link href="/settings/terms" className="font-medium text-slate-900 underline">
+              Add an academic year
+            </Link>{" "}
+            first.
+          </p>
+        )}
       </Card>
 
       <Card title="Danger zone">

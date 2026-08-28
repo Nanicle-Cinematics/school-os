@@ -8,6 +8,11 @@
  *
  *   npm run dev
  *   npm run verify:teacher
+ *
+ * The second half checks that a teaching assignment only counts for its own
+ * academic year. That needs fixtures the demo cannot supply — every seeded
+ * teacher already teaches in every class — so it creates one staff member, one
+ * login and one past academic year, and deletes all three at the end.
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -153,8 +158,145 @@ async function main() {
     }),
   );
 
+  await yearScoping();
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;
+}
+
+/**
+ * An assignment belongs to an academic year, and must not grant marking rights
+ * in any other. This used to be wrong in three places at once — the sheet
+ * pickers, the save guard and the report card's teacher name all queried
+ * `teachingAssignment` with no year filter — so a teacher kept last year's
+ * classes invisibly, since /staff/[id] only ever lists the current year.
+ */
+async function yearScoping() {
+  console.log("");
+  const school = await withBypass(() => prisma.school.findFirst());
+  const year = await withBypass(() =>
+    prisma.academicYear.findFirst({ where: { isCurrent: true } }),
+  );
+  const term = await withBypass(() => prisma.term.findFirst({ where: { isCurrent: true } }));
+  if (!school || !year || !term) {
+    console.log("  --   no current year or term — cannot check year scoping");
+    return;
+  }
+
+  const stamp = Date.now().toString(36);
+  const staff = await withBypass(() =>
+    prisma.staff.create({
+      data: {
+        schoolId: school.id,
+        staffNo: `QA-${stamp}`,
+        firstName: "QA",
+        lastName: "Marker",
+        gender: "FEMALE",
+        isTeaching: true,
+      },
+    }),
+  );
+  const user = await withBypass(() =>
+    prisma.user.create({
+      data: {
+        name: "QA Marker",
+        email: `qa-marker-${stamp}@example.com`,
+        passwordHash: randomBytes(32).toString("hex"),
+        schoolId: school.id,
+      },
+    }),
+  );
+  const membership = await withBypass(() =>
+    prisma.membership.create({
+      data: {
+        schoolId: school.id,
+        userId: user.id,
+        staffId: staff.id,
+        role: "TEACHER",
+        status: "ACTIVE",
+        invitedAt: new Date(),
+        acceptedAt: new Date(),
+      },
+    }),
+  );
+  const priorYear = await withBypass(() =>
+    prisma.academicYear.create({
+      data: {
+        schoolId: school.id,
+        name: `QA Prior Year ${stamp}`,
+        startDate: new Date("2000-09-01"),
+        endDate: new Date("2001-07-31"),
+        isCurrent: false,
+      },
+    }),
+  );
+
+  const classGroup = await withBypass(() => prisma.classGroup.findFirst());
+  const offering = await withBypass(() =>
+    prisma.levelSubject.findFirst({
+      where: { levelId: classGroup!.levelId },
+      select: { subjectId: true },
+    }),
+  );
+
+  const assignment = await withBypass(() =>
+    prisma.teachingAssignment.create({
+      data: {
+        schoolId: school.id,
+        academicYearId: priorYear.id,
+        staffId: staff.id,
+        classGroupId: classGroup!.id,
+        subjectId: offering!.subjectId,
+      },
+    }),
+  );
+
+  const token = randomBytes(32).toString("hex");
+  await withBypass(() =>
+    prisma.session.create({
+      data: {
+        userId: user.id,
+        tokenHash: createHash("sha256").update(token).digest("hex"),
+        activeSchoolId: school.id,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    }),
+  );
+
+  const url = `/assessments/sheet?term=${term.id}&class=${classGroup!.id}&subject=${offering!.subjectId}`;
+  const scores = (html: string) => (html.match(/name="score:/g) ?? []).length;
+  const classPicker = (html: string) =>
+    html.match(/<select name="class"[\s\S]*?<\/select>/)?.[0] ?? "";
+
+  const stale = await get(url, token);
+  check("a previous year's assignment opens no sheet this year", scores(stale.html) === 0,
+    `${scores(stale.html)} score inputs`);
+  check("nor does that class appear in the picker",
+    !classPicker(stale.html).includes(classGroup!.id));
+
+  await withBypass(() =>
+    prisma.teachingAssignment.update({
+      where: { id: assignment.id },
+      data: { academicYearId: year.id },
+    }),
+  );
+
+  const current = await get(url, token);
+  check("the same assignment in the current year does open it", scores(current.html) > 0,
+    `${scores(current.html)} score inputs`);
+  check("and that class appears in the picker",
+    classPicker(current.html).includes(classGroup!.id));
+
+  await withBypass(async () => {
+    await prisma.session.deleteMany({
+      where: { tokenHash: createHash("sha256").update(token).digest("hex") },
+    });
+    await prisma.teachingAssignment.delete({ where: { id: assignment.id } });
+    await prisma.academicYear.delete({ where: { id: priorYear.id } });
+    await prisma.membership.delete({ where: { id: membership.id } });
+    await prisma.staff.delete({ where: { id: staff.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  });
 }
 
 main()

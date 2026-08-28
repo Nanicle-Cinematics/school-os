@@ -118,8 +118,11 @@ export async function getSheetOptions(auth: {
     return { terms, classGroups, subjects, pairs: null };
   }
 
+  // Current year only. The pickers must agree with `mayTeach`, or a teacher is
+  // offered a class the save will then refuse.
+  const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
   const assignments = await prisma.teachingAssignment.findMany({
-    where: { staffId: auth.staffId ?? "" },
+    where: { staffId: auth.staffId ?? "", academicYearId: year?.id ?? "" },
     include: {
       classGroup: { include: { level: { select: { name: true, order: true } } } },
       subject: true,

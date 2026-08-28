@@ -215,8 +215,15 @@ export async function computeClassResults(
     include: { scores: true },
   });
 
+  // The year the term belongs to, not every year on record: this name is frozen
+  // onto SubjectResult and reprints for as long as the report card exists, so a
+  // previous year's teacher must not win the lookup.
+  const term = await tx.term.findUnique({
+    where: { id: termId },
+    select: { academicYearId: true },
+  });
   const teaching = await tx.teachingAssignment.findMany({
-    where: { schoolId, classGroupId },
+    where: { schoolId, classGroupId, academicYearId: term?.academicYearId ?? "" },
     select: { subjectId: true, staffId: true },
   });
   const teacherBySubject = new Map(teaching.map((t) => [t.subjectId, t.staffId]));

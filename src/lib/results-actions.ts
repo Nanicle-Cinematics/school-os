@@ -180,8 +180,12 @@ export async function saveClassRemarks(
     if (!auth.staffId) {
       return { error: "Your account is not linked to a staff record." };
     }
+    const term = await prisma.term.findUnique({
+      where: { id: termId },
+      select: { academicYearId: true },
+    });
     const teaches = await prisma.teachingAssignment.count({
-      where: { staffId: auth.staffId, classGroupId },
+      where: { staffId: auth.staffId, classGroupId, academicYearId: term?.academicYearId ?? "" },
     });
     if (teaches === 0) {
       return { error: "You do not teach in that class." };

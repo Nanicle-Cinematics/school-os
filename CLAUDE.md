@@ -210,6 +210,47 @@ rendering in full for a teacher who typed the URL, because their own
 verify:teacher` signs in as a real teacher and asks for every route by URL,
 which is what caught it — run it after touching any role list.
 
+## Teaching assignments
+
+One row means *this teacher teaches this subject, to this class, in this academic
+year*, unique on that combination. Four things read it:
+
+- the class and subject pickers a teacher is offered (`getSheetOptions`);
+- whether opening or saving a sheet is allowed (`mayTeach` in `sheet-actions`);
+- who may write a class's conduct and remarks — at **class** level, not subject
+  level, because the form teacher may not teach every subject
+  (`saveClassRemarks`);
+- the teacher name frozen onto `SubjectResult` at publish time
+  (`results-engine`), which is what reprints on a report card a year later.
+
+It is **not** the form teacher: that is `ClassGroup.formTeacherId`, set on the
+class page, and it is pastoral. A form teacher with no assignment in their own
+class cannot open a mark sheet or write its remarks.
+
+⚠️ **Always filter assignment queries by academic year.** They were stored per
+year and displayed per year (`/staff/[id]` lists only the current one) but
+enforced across *all* years, so a teacher silently kept the classes they taught
+last year — invisibly, since the screen that would show it filters them out. The
+same omission let a previous year's teacher win the report card's name lookup.
+All four call sites now scope by year: the two guards and the picker take the
+current year, and the results engine takes the *term's* year, not the current
+one, because a term being computed may belong to a year that is no longer
+current. `npm run verify:teacher` proves both directions — a prior-year
+assignment opens nothing, the same row moved to this year opens the sheet.
+
+**Setting them up is per class, not per teacher.** The GES curriculum gives a
+level 4–12 subjects, so a school with one stream per level needs 104 assignments
+before anyone can mark; adding them one at a time from `/staff/[id]` is not a
+setup path, it is a correction path. `/classes/[id]` lists every subject the
+class's **level** offers with a teacher beside each, saved in one submit, plus
+"give every subject to…" for the class-teacher model that KG and lower primary
+actually use. The rows come from `LevelSubject`, so KG is never offered
+Mathematics, and the action re-reads them server-side rather than trusting the
+form. A row left blank deletes its assignment — that is how a mistake is undone.
+Where this year is empty and last year is not, the form pre-fills from last year
+and says so; nothing is written until Save, which is what stops a rollover
+meaning 104 fresh submissions.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against
@@ -225,7 +266,8 @@ npm run verify:invoicing # which fee structure applies, and why a student was sk
 npm run verify:actions   # the server-action guards — needs `npm run dev` running
 npm run verify:isolation # RLS coverage and cross-tenant reads/writes
 npm run verify:onboarding # walks every screen of a school provisioned minutes ago
-npm run verify:teacher   # a teacher reaches the two marking screens and nothing else
+npm run verify:teacher   # a teacher reaches the two marking screens and nothing else,
+                         # and an assignment counts only for its own year
 ```
 
 `verify:actions` is the only one that goes over HTTP, because the guards it

@@ -18,6 +18,7 @@ export type SheetState = { error?: string; ok?: string; savedAt?: string };
  */
 async function mayTeach(
   auth: { roles: Parameters<typeof canAccess>[0]; staffId: string | null },
+  termId: string,
   classGroupId: string,
   subjectId: string,
 ) {
@@ -27,8 +28,23 @@ async function mayTeach(
   if (!auth.staffId) {
     return false;
   }
+  // Scoped to the term's own year. Unfiltered, an assignment from a year the
+  // teacher no longer teaches that class in still opened its sheet — invisibly,
+  // because /staff/[id] only ever lists the current year's rows.
+  const term = await prisma.term.findUnique({
+    where: { id: termId },
+    select: { academicYearId: true },
+  });
+  if (!term) {
+    return false;
+  }
   const count = await prisma.teachingAssignment.count({
-    where: { staffId: auth.staffId, classGroupId, subjectId },
+    where: {
+      staffId: auth.staffId,
+      classGroupId,
+      subjectId,
+      academicYearId: term.academicYearId,
+    },
   });
   return count > 0;
 }
@@ -45,7 +61,7 @@ export async function openSheet(_prev: SheetState, formData: FormData): Promise<
   if (!termId || !classGroupId || !subjectId) {
     return { error: "Choose a term, class and subject." };
   }
-  if (!(await mayTeach(auth, classGroupId, subjectId))) {
+  if (!(await mayTeach(auth, termId, classGroupId, subjectId))) {
     return { error: "You are not assigned to teach that subject in that class." };
   }
 
@@ -91,7 +107,7 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
   const classGroupId = String(formData.get("classGroupId") ?? "");
   const subjectId = String(formData.get("subjectId") ?? "");
 
-  if (!(await mayTeach(auth, classGroupId, subjectId))) {
+  if (!(await mayTeach(auth, termId, classGroupId, subjectId))) {
     return { error: "You are not assigned to teach that subject in that class." };
   }
 
