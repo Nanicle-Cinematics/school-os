@@ -96,6 +96,7 @@ export default async function PrintReportCardsPage({
         <ReportCard
           key={card.termResult.id}
           schoolName={auth.schoolName}
+          schoolMotto={auth.schoolMotto}
           termResult={card.termResult}
           subjectResults={card.subjectResults}
           settings={settings}

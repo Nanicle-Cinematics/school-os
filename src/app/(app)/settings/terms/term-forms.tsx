@@ -47,7 +47,7 @@ export function TermRowForm({ term }: { term: TermRow }) {
             {TERM_LABEL[term.name] ?? term.name}
           </h3>
           {term.isCurrent ? (
-            <span className="rounded bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white">
+            <span className="rounded bg-brand-700 px-1.5 py-0.5 text-xs font-medium text-white">
               current
             </span>
           ) : null}

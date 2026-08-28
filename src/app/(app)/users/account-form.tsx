@@ -80,7 +80,7 @@ export function NewAccountForm({
         onClick={() => setOpen(true)}
         disabled={staff.length === 0}
         title={staff.length === 0 ? "Every member of staff already has a login." : undefined}
-        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+        className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800 disabled:opacity-50"
       >
         Create login
       </button>

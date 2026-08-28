@@ -10,7 +10,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+      className="w-full rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-800 disabled:opacity-60"
     >
       {pending ? "Signing in…" : "Sign in"}
     </button>
@@ -34,7 +34,7 @@ export function LoginForm() {
           autoComplete="username"
           autoCapitalize="none"
           required
-          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600"
         />
       </div>
 
@@ -49,7 +49,7 @@ export function LoginForm() {
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 pr-16 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 pr-16 text-sm outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600"
           />
           {/* Temporary passwords here are generated and dictated over the phone,
               so being able to check what was typed matters more than usual. */}

@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { createSchool, type PlatformState } from "@/lib/platform-actions";
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600";
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -25,7 +25,7 @@ export function NewSchoolForm() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+        className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800"
       >
         Add a school
       </button>
@@ -117,7 +117,7 @@ function SubmitButton() {
   return (
     <button
       type="submit"
-      className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+      className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800"
     >
       Provision school
     </button>

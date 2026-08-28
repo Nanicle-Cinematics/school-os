@@ -12,7 +12,7 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
+        <h1 className="font-display text-2xl text-slate-900">{title}</h1>
         {subtitle ? <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
       {action}
@@ -32,11 +32,11 @@ export function Stat({
   tone?: "default" | "positive" | "negative";
 }) {
   const toneClass =
-    tone === "positive" ? "text-green-700" : tone === "negative" ? "text-red-600" : "text-slate-900";
+    tone === "positive" ? "text-brand-600" : tone === "negative" ? "text-red-600" : "text-slate-900";
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-1.5 text-2xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
+      <p className={`font-display mt-1.5 text-2xl tabular-nums ${toneClass}`}>{value}</p>
       {sub ? <p className="mt-0.5 text-xs text-slate-500">{sub}</p> : null}
     </div>
   );
@@ -83,7 +83,7 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600";
 
 export function Alert({ tone, children }: { tone: "error" | "success"; children: React.ReactNode }) {
   return (
@@ -126,7 +126,7 @@ export function ButtonLink({ href, children }: { href: string; children: React.R
   return (
     <Link
       href={href}
-      className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+      className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800"
     >
       {children}
     </Link>

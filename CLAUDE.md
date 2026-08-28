@@ -261,6 +261,41 @@ A class-teacher level with no form teacher set says that instead of asking
 someone to pick the same name nine times — the fix is the form teacher field,
 not these rows.
 
+## The look
+
+The palette lives in ONE place: the `@theme` block in `src/app/globals.css`.
+Screens are written in Tailwind's colour names, so re-tinting the product is
+editing that block rather than a thousand class attributes — which is what made
+the re-skin affordable. Three groups:
+
+- **`slate-*` is redefined, not replaced.** Tailwind's stock slate is blue-grey
+  and reads cold; these are the same ramp pulled towards green-grey. Every
+  existing `text-slate-600` picked up the warmth for free.
+- **`brand-*` is the deep forest green** — primary buttons, the active nav item,
+  focus rings, the rule and table band on a report card. Every `bg-slate-900` in
+  the app was a primary action with `text-white` on it (checked, all 38), which
+  is why a blanket swap to `bg-brand-700` was safe.
+- **`accent-*` is a muted gold** for the motto and the crest rule. Never body
+  text — it does not carry contrast.
+
+Type is Public Sans for everything read at a glance and **Newsreader** for the
+few places a school's own voice belongs: page titles, dashboard figures, and the
+masthead of a report card or invoice. Apply it with `.font-display`, defined in
+globals.css. Both are self-hosted by `next/font`, so a school on a slow link is
+not waiting on Google.
+
+⚠️ **`logoUrl`, `crestUrl` and `headSignatureUrl` exist on `School` and are still
+not rendered or uploadable.** Until they are, a report card carries the school's
+name and motto but no crest and no signature — the one identity gap left on the
+page a parent actually holds.
+
+`npm run shots` captures the signed-in screens with headless Chrome over CDP
+(no Puppeteer — Node's global WebSocket drives it). It mints a session for the
+demo proprietor, and **disconnects Prisma before opening the browser**: with
+`connection_limit=1` a client left open starves the dev server, and every page
+screenshots as Next's "a server error occurred", which looks exactly like a
+styling bug and is not one.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against

@@ -103,7 +103,7 @@ export default async function StudentDetailPage({
                         {link.guardian.firstName} {link.guardian.lastName}
                       </Link>
                       {link.isPrimary ? (
-                        <span className="ml-2 rounded bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white">
+                        <span className="ml-2 rounded bg-brand-700 px-1.5 py-0.5 text-xs font-medium text-white">
                           primary
                         </span>
                       ) : null}
@@ -310,7 +310,7 @@ export default async function StudentDetailPage({
             <select
               name="status"
               defaultValue="WITHDRAWN"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600"
             >
               <option value="WITHDRAWN">Withdrawn</option>
               <option value="TRANSFERRED">Transferred</option>

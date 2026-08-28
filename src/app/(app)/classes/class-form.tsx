@@ -107,7 +107,7 @@ export function NewClassForm({
         type="button"
         onClick={() => setOpen(true)}
         disabled={levels.length === 0}
-        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+        className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800 disabled:opacity-50"
       >
         Add class
       </button>

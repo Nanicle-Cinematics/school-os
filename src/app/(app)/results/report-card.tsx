@@ -22,12 +22,14 @@ const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", TH
  */
 export function ReportCard({
   schoolName,
+  schoolMotto,
   termResult,
   subjectResults,
   settings,
   breakAfter = false,
 }: {
   schoolName: string;
+  schoolMotto?: string | null;
   termResult: ReportCardTermResult;
   subjectResults: ReportCardSubjectResult[];
   settings: ReportCardSettings;
@@ -42,9 +44,14 @@ export function ReportCard({
         breakAfter ? "print:break-after-page" : ""
       }`}
     >
-      <header className="border-b-2 border-slate-900 pb-4 text-center">
-        <h1 className="text-lg font-bold uppercase tracking-wide text-slate-900">{schoolName}</h1>
-        <p className="mt-0.5 text-sm text-slate-600">Terminal Report</p>
+      <header className="border-b-2 border-brand-700 pb-4 text-center">
+        <h1 className="font-display text-2xl text-slate-900">{schoolName}</h1>
+        {schoolMotto ? (
+          <p className="mt-0.5 font-display text-xs italic text-accent-600">{schoolMotto}</p>
+        ) : null}
+        <p className="mt-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+          Terminal Report
+        </p>
         <p className="text-xs text-slate-500">
           {TERM_NAME[term.name]} Term · {term.academicYear.name}
         </p>
@@ -90,40 +97,40 @@ export function ReportCard({
 
       <table className="mt-4 w-full text-sm">
         <thead>
-          <tr className="border-b border-slate-300 text-xs uppercase tracking-wide text-slate-500">
-            <th className="pb-2 text-left font-medium">Subject</th>
-            <th className="pb-2 text-right font-medium">
+          <tr className="bg-brand-700 text-xs uppercase tracking-wide text-white print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
+            <th className="px-2 py-1.5 text-left font-semibold">Subject</th>
+            <th className="px-2 py-1.5 text-right font-semibold">
               Class ({settings?.classScoreWeight ?? 30}%)
             </th>
-            <th className="pb-2 text-right font-medium">
+            <th className="px-2 py-1.5 text-right font-semibold">
               Exam ({settings?.examScoreWeight ?? 70}%)
             </th>
-            <th className="pb-2 text-right font-medium">Total</th>
-            <th className="pb-2 text-center font-medium">Grade</th>
-            <th className="pb-2 text-right font-medium">Pos.</th>
-            <th className="pb-2 text-left font-medium">Remark</th>
+            <th className="px-2 py-1.5 text-right font-semibold">Total</th>
+            <th className="px-2 py-1.5 text-center font-semibold">Grade</th>
+            <th className="px-2 py-1.5 text-right font-semibold">Pos.</th>
+            <th className="px-2 py-1.5 text-left font-semibold">Remark</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {subjectResults.map((result) => (
             <tr key={result.id}>
-              <td className="py-1.5 text-slate-900">{result.subject.name}</td>
-              <td className="py-1.5 text-right tabular-nums text-slate-600">
+              <td className="px-2 py-1.5 text-slate-900">{result.subject.name}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">
                 {result.classScore ? Number(result.classScore).toFixed(1) : "—"}
               </td>
-              <td className="py-1.5 text-right tabular-nums text-slate-600">
+              <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">
                 {result.examScore ? Number(result.examScore).toFixed(1) : "—"}
               </td>
-              <td className="py-1.5 text-right font-medium tabular-nums text-slate-900">
+              <td className="px-2 py-1.5 text-right font-medium tabular-nums text-slate-900">
                 {result.totalScore ? Number(result.totalScore).toFixed(1) : "—"}
               </td>
-              <td className="py-1.5 text-center font-semibold text-slate-900">
+              <td className="px-2 py-1.5 text-center font-semibold text-slate-900">
                 {result.grade ?? "—"}
               </td>
-              <td className="py-1.5 text-right tabular-nums text-slate-600">
+              <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">
                 {ordinal(result.subjectPosition)}
               </td>
-              <td className="py-1.5 text-slate-600">{result.remark ?? "—"}</td>
+              <td className="px-2 py-1.5 text-slate-600">{result.remark ?? "—"}</td>
             </tr>
           ))}
         </tbody>

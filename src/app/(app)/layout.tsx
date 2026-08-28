@@ -31,11 +31,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <MobileNav sections={sections} />
 
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-xs font-semibold text-white">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-700 text-xs font-semibold text-white">
               {auth.schoolShortName?.slice(0, 2).toUpperCase() ?? "S"}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">{auth.schoolName}</p>
+              <p className="font-display truncate text-[15px] text-slate-900">{auth.schoolName}</p>
               {term ? (
                 <p className="truncate text-xs text-slate-500">
                   {term.name === "FIRST" ? "First" : term.name === "SECOND" ? "Second" : "Third"} Term ·{" "}

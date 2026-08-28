@@ -13,6 +13,7 @@ export type AuthContext = {
   schoolId: string;
   schoolName: string;
   schoolShortName: string | null;
+  schoolMotto: string | null;
   roles: Role[];
   staffId: string | null;
   isPlatformAdmin: boolean;
@@ -55,6 +56,7 @@ export async function requireAuth(): Promise<AuthContext> {
     schoolId: active.schoolId,
     schoolName: active.school.name,
     schoolShortName: active.school.shortName,
+    schoolMotto: active.school.motto,
     roles: memberships.filter((m) => m.schoolId === active.schoolId).map((m) => m.role),
     staffId: active.staffId,
     isPlatformAdmin: user.isPlatformAdmin,

@@ -47,6 +47,7 @@ export default async function ReportCardPage({
 
       <ReportCard
         schoolName={auth.schoolName}
+          schoolMotto={auth.schoolMotto}
         termResult={termResult}
         subjectResults={subjectResults}
         settings={settings}

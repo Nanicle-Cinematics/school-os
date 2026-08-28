@@ -107,7 +107,7 @@ export default async function SettingsPage() {
                       <td className="whitespace-nowrap px-4 py-2 text-slate-600">
                         {TERM_LABEL[term.name] ?? term.name}
                         {term.isCurrent ? (
-                          <span className="ml-2 rounded bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white">
+                          <span className="ml-2 rounded bg-brand-700 px-1.5 py-0.5 text-xs font-medium text-white">
                             current
                           </span>
                         ) : null}
@@ -240,7 +240,7 @@ export default async function SettingsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold text-slate-900">{scale.name}</h3>
                   {scale.id === academic.defaultGradingScaleId ? (
-                    <span className="rounded bg-slate-900 px-1.5 py-0.5 text-xs font-medium text-white">
+                    <span className="rounded bg-brand-700 px-1.5 py-0.5 text-xs font-medium text-white">
                       default
                     </span>
                   ) : null}

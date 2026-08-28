@@ -25,7 +25,7 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
                     onClick={onNavigate}
                     className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm transition ${
                       active
-                        ? "bg-slate-900 font-medium text-white"
+                        ? "bg-brand-700 font-medium text-white"
                         : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                     }`}
                   >
@@ -80,7 +80,7 @@ export function MobileNav({ sections }: { sections: NavSection[] }) {
             type="button"
             aria-label="Close menu"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-slate-900/40"
+            className="absolute inset-0 bg-brand-700/40"
           />
           <div className="relative w-64 overflow-y-auto bg-white p-4">
             <NavLinks sections={sections} onNavigate={() => setOpen(false)} />

@@ -1,8 +1,52 @@
 @import "tailwindcss";
 
-@theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/**
+ * The palette, in one place.
+ *
+ * Every colour in the app comes from here. The screens are written in Tailwind's
+ * `slate-*` and `brand-*` names, so re-tinting the product is editing this block
+ * rather than a thousand class attributes — which is what made a re-skin
+ * affordable at all.
+ */
+@theme {
+  --font-sans: var(--font-sans-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display-serif), Georgia, "Times New Roman", serif;
+
+  /* Neutrals, warmed. Tailwind's stock slate is blue-grey and reads cold and
+     clinical; these are the same ramp pulled towards green-grey so the paper
+     under a report card looks like paper. */
+  --color-slate-50: #f6f7f5;
+  --color-slate-100: #edf0eb;
+  --color-slate-200: #dfe3dd;
+  --color-slate-300: #c6cdc3;
+  --color-slate-400: #8a9990;
+  --color-slate-500: #5b6b62;
+  --color-slate-600: #48564e;
+  --color-slate-700: #37423b;
+  --color-slate-800: #232c27;
+  --color-slate-900: #16211c;
+
+  /* Brand: deep forest green. Primary actions, the active nav item, focus
+     rings, and the rule across the head of a report card. */
+  --color-brand-50: #f0f5f2;
+  --color-brand-100: #dce8e2;
+  --color-brand-200: #b9d1c6;
+  --color-brand-300: #8db4a4;
+  --color-brand-400: #57907c;
+  --color-brand-500: #2f7360;
+  --color-brand-600: #23604e;
+  --color-brand-700: #1b4d3e;
+  --color-brand-800: #163e32;
+  --color-brand-900: #102d25;
+
+  /* Accent: a muted gold, for the motto, the crest rule and the one figure on a
+     screen that matters most. Never for body text — it does not carry contrast. */
+  --color-accent-50: #faf6ec;
+  --color-accent-100: #f6efdd;
+  --color-accent-200: #ead9ae;
+  --color-accent-500: #b5892b;
+  --color-accent-600: #9a7223;
+  --color-accent-700: #7d5c1c;
 }
 
 /* Light-only for now. The admin console is used in bright offices and on cheap
@@ -13,7 +57,15 @@ html {
 }
 
 body {
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+  font-family: var(--font-sans);
+  background: var(--color-slate-50);
+  color: var(--color-slate-900);
+}
+
+/* Page titles, dashboard figures and the head of a report card. Tabular figures
+   so a column of money does not shift as the digits change. */
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }

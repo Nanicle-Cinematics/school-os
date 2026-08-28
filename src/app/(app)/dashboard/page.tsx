@@ -147,7 +147,7 @@ export default async function DashboardPage() {
                 <span className="w-28 shrink-0 truncate text-sm text-slate-700">{level.name}</span>
                 <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                   <span
-                    className="block h-full rounded-full bg-slate-900"
+                    className="block h-full rounded-full bg-brand-700"
                     style={{ width: `${(level.count / maxLevel) * 100}%` }}
                   />
                 </span>

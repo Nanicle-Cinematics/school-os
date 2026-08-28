@@ -65,7 +65,7 @@ export default async function SubjectsPage() {
                       <span
                         className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                           subject.isCore
-                            ? "bg-slate-900 text-white"
+                            ? "bg-brand-700 text-white"
                             : "bg-slate-100 text-slate-500"
                         }`}
                       >

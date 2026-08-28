@@ -93,7 +93,7 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-800"
+          className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800"
         >
           Filter
         </button>
