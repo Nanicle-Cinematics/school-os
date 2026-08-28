@@ -94,59 +94,102 @@ export async function applyGesCurriculum(
     skipped: 0,
   };
 
-  const levelIdByCode = new Map<string, string>();
-  for (const level of GES_LEVELS) {
-    const existing = await tx.level.findFirst({ where: { schoolId, code: level.code } });
-    if (existing) {
-      levelIdByCode.set(level.code, existing.id);
-      result.skipped += 1;
-      continue;
-    }
-    const created = await tx.level.create({ data: { schoolId, ...level } });
-    levelIdByCode.set(level.code, created.id);
-    result.levelsCreated += 1;
+  // Read what is there, write what is missing, in bulk. The row-at-a-time
+  // version of this made ~270 sequential round trips — 11 levels, 18 subjects
+  // and 104 offerings, each preceded by its own existence check — and
+  // `DATABASE_URL` pins `connection_limit=1`, so they queue. On a slow link that
+  // took over seven minutes and blew the provisioning transaction's own timeout,
+  // leaving the school committed but the console reporting failure. Six round
+  // trips cannot do that.
+
+  const existingLevels = await tx.level.findMany({
+    where: { schoolId, code: { in: GES_LEVELS.map((level) => level.code) } },
+    select: { id: true, code: true },
+  });
+  const levelIdByCode = new Map(existingLevels.map((level) => [level.code, level.id]));
+  result.skipped += existingLevels.length;
+
+  const missingLevels = GES_LEVELS.filter((level) => !levelIdByCode.has(level.code));
+  if (missingLevels.length > 0) {
+    const created = await tx.level.createManyAndReturn({
+      data: missingLevels.map((level) => ({ schoolId, ...level })),
+      select: { id: true, code: true },
+    });
+    for (const level of created) levelIdByCode.set(level.code, level.id);
+    result.levelsCreated += created.length;
   }
 
+  const existingSubjects = await tx.subject.findMany({
+    where: { schoolId, code: { in: GES_SUBJECTS.map((subject) => subject.code) } },
+    select: { id: true, code: true },
+  });
+  const subjectIdByCode = new Map(existingSubjects.map((subject) => [subject.code, subject.id]));
+  result.skipped += existingSubjects.length;
+
+  const missingSubjects = GES_SUBJECTS.filter((subject) => !subjectIdByCode.has(subject.code));
+  if (missingSubjects.length > 0) {
+    const created = await tx.subject.createManyAndReturn({
+      data: missingSubjects.map((subject) => ({
+        schoolId,
+        code: subject.code,
+        name: subject.name,
+        order: subject.order,
+        isCore: true,
+      })),
+      select: { id: true, code: true },
+    });
+    for (const subject of created) subjectIdByCode.set(subject.code, subject.id);
+    result.subjectsCreated += created.length;
+  }
+
+  // Offerings the school already has, keyed the way the unique pair is.
+  const subjectIds = [...subjectIdByCode.values()];
+  const existingLinks =
+    subjectIds.length > 0
+      ? await tx.levelSubject.findMany({
+          where: { schoolId, subjectId: { in: subjectIds } },
+          select: { levelId: true, subjectId: true },
+        })
+      : [];
+  const linked = new Set(existingLinks.map((link) => `${link.levelId}:${link.subjectId}`));
+
+  const newLinks: {
+    schoolId: string;
+    levelId: string;
+    subjectId: string;
+    isElective: boolean;
+    countsForAggregate: boolean;
+    order: number;
+  }[] = [];
+
   for (const subject of GES_SUBJECTS) {
-    let record = await tx.subject.findFirst({ where: { schoolId, code: subject.code } });
-    if (record) {
-      result.skipped += 1;
-    } else {
-      record = await tx.subject.create({
-        data: {
-          schoolId,
-          code: subject.code,
-          name: subject.name,
-          order: subject.order,
-          isCore: true,
-        },
-      });
-      result.subjectsCreated += 1;
-    }
+    const subjectId = subjectIdByCode.get(subject.code);
+    if (!subjectId) continue;
 
     for (const levelCode of subject.levels) {
       const levelId = levelIdByCode.get(levelCode);
       if (!levelId) continue;
-
-      const link = await tx.levelSubject.findFirst({
-        where: { levelId, subjectId: record.id },
-      });
-      if (link) {
+      if (linked.has(`${levelId}:${subjectId}`)) {
         result.skipped += 1;
         continue;
       }
-      await tx.levelSubject.create({
-        data: {
-          schoolId,
-          levelId,
-          subjectId: record.id,
-          isElective: false,
-          countsForAggregate: true,
-          order: subject.order,
-        },
+      // Guard against the same pair appearing twice in one batch, which
+      // `createMany` would reject on the unique constraint.
+      linked.add(`${levelId}:${subjectId}`);
+      newLinks.push({
+        schoolId,
+        levelId,
+        subjectId,
+        isElective: false,
+        countsForAggregate: true,
+        order: subject.order,
       });
-      result.linksCreated += 1;
     }
+  }
+
+  if (newLinks.length > 0) {
+    const created = await tx.levelSubject.createMany({ data: newLinks });
+    result.linksCreated += created.count;
   }
 
   return result;

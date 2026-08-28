@@ -68,6 +68,45 @@ async function main() {
     return;
   }
 
+  // Coverage first. Every check below proves isolation for the tables it names,
+  // and proves nothing about a table added since. This is how AssessmentTemplate
+  // shipped unprotected: `npm run db:rls` enumerates tables dynamically, so it
+  // was never wrong — it simply was not re-run after the migration that added
+  // one, and every school's settings screen then listed every other school's
+  // assessment components.
+  const unprotected = await retry(() =>
+    withBypass(() =>
+      prisma.$queryRawUnsafe<{ table: string; rls: boolean; forced: boolean; policies: bigint }[]>(`
+        select c.relname as table,
+               c.relrowsecurity as rls,
+               c.relforcerowsecurity as forced,
+               (select count(*) from pg_policies p
+                 where p.schemaname = 'public' and p.tablename = c.relname) as policies
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        join information_schema.columns col
+          on col.table_schema = 'public'
+         and col.table_name = c.relname
+         and col.column_name = 'schoolId'
+        where n.nspname = 'public' and c.relkind = 'r'
+          -- Same exclusions as scripts/apply-rls.mjs: sign-in happens before a
+          -- tenant is known, so the auth tables cannot be tenant-scoped.
+          and c.relname not in ('User', 'Session')
+          and (not c.relrowsecurity or not c.relforcerowsecurity
+               or (select count(*) from pg_policies p
+                    where p.schemaname = 'public' and p.tablename = c.relname) = 0)
+        order by c.relname
+      `),
+    ),
+  );
+  check(
+    "every table with a schoolId carries RLS, FORCE and a policy",
+    unprotected.length === 0,
+    unprotected.length === 0
+      ? "no gaps"
+      : `${unprotected.map((row) => row.table).join(", ")} — run npm run db:rls`,
+  );
+
   const schools = await retry(() =>
     withBypass(() => prisma.school.findMany({ select: { id: true, name: true } })),
   );

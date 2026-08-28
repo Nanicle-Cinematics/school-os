@@ -43,16 +43,19 @@ export async function applyDefaultAssessmentTemplate(
 ): Promise<TemplateResult> {
   const result: TemplateResult = { created: 0, skipped: 0 };
 
-  for (const component of DEFAULT_COMPONENTS) {
-    const existing = await tx.assessmentTemplate.findFirst({
-      where: { schoolId, title: component.title },
-    });
-    if (existing) {
-      result.skipped += 1;
-      continue;
-    }
-    await tx.assessmentTemplate.create({
-      data: {
+  // One read and one write — see ges-curriculum.ts for why per-row checks are
+  // not affordable inside the provisioning transaction.
+  const existing = await tx.assessmentTemplate.findMany({
+    where: { schoolId, title: { in: DEFAULT_COMPONENTS.map((c) => c.title) } },
+    select: { title: true },
+  });
+  const titles = new Set(existing.map((component) => component.title));
+  result.skipped += existing.length;
+
+  const missing = DEFAULT_COMPONENTS.filter((component) => !titles.has(component.title));
+  if (missing.length > 0) {
+    const created = await tx.assessmentTemplate.createMany({
+      data: missing.map((component) => ({
         schoolId,
         title: component.title,
         type: component.type,
@@ -60,9 +63,9 @@ export async function applyDefaultAssessmentTemplate(
         isExam: component.isExam,
         order: component.order,
         isActive: true,
-      },
+      })),
     });
-    result.created += 1;
+    result.created += created.count;
   }
 
   return result;

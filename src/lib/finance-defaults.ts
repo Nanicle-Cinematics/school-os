@@ -59,26 +59,39 @@ export async function applyDefaultFinanceCategories(
     skipped: 0,
   };
 
-  for (const category of DEFAULT_FEE_CATEGORIES) {
-    const existing = await tx.feeCategory.findFirst({ where: { schoolId, code: category.code } });
-    if (existing) {
-      result.skipped += 1;
-      continue;
-    }
-    await tx.feeCategory.create({ data: { schoolId, ...category, isMandatory: true } });
-    result.feeCategoriesCreated += 1;
+  // Read then bulk-write, for the reason spelled out in ges-curriculum.ts: this
+  // runs inside the provisioning transaction, over a single pooled connection,
+  // and a per-row existence check turns fourteen items into twenty-eight
+  // sequential round trips for no benefit.
+
+  const existingFees = await tx.feeCategory.findMany({
+    where: { schoolId, code: { in: DEFAULT_FEE_CATEGORIES.map((c) => c.code) } },
+    select: { code: true },
+  });
+  const feeCodes = new Set(existingFees.map((c) => c.code));
+  result.skipped += existingFees.length;
+
+  const missingFees = DEFAULT_FEE_CATEGORIES.filter((c) => !feeCodes.has(c.code));
+  if (missingFees.length > 0) {
+    const created = await tx.feeCategory.createMany({
+      data: missingFees.map((category) => ({ schoolId, ...category, isMandatory: true })),
+    });
+    result.feeCategoriesCreated += created.count;
   }
 
-  for (const category of DEFAULT_EXPENSE_CATEGORIES) {
-    const existing = await tx.expenseCategory.findFirst({
-      where: { schoolId, code: category.code },
+  const existingExpenses = await tx.expenseCategory.findMany({
+    where: { schoolId, code: { in: DEFAULT_EXPENSE_CATEGORIES.map((c) => c.code) } },
+    select: { code: true },
+  });
+  const expenseCodes = new Set(existingExpenses.map((c) => c.code));
+  result.skipped += existingExpenses.length;
+
+  const missingExpenses = DEFAULT_EXPENSE_CATEGORIES.filter((c) => !expenseCodes.has(c.code));
+  if (missingExpenses.length > 0) {
+    const created = await tx.expenseCategory.createMany({
+      data: missingExpenses.map((category) => ({ schoolId, ...category })),
     });
-    if (existing) {
-      result.skipped += 1;
-      continue;
-    }
-    await tx.expenseCategory.create({ data: { schoolId, ...category } });
-    result.expenseCategoriesCreated += 1;
+    result.expenseCategoriesCreated += created.count;
   }
 
   return result;

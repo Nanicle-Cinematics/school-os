@@ -90,7 +90,12 @@ export default async function SettingsPage() {
             <tbody className="divide-y divide-slate-100">
               {years.length === 0 ? (
                 <EmptyRow colSpan={5}>
-                  No academic years yet. They are created by the seed or by an import.
+                  No academic years yet — and until one exists nothing can be invoiced, marked or
+                  reported.{" "}
+                  <Link href="/settings/terms" className="font-medium text-slate-900 underline">
+                    Add the first one
+                  </Link>
+                  ; its three terms are generated for you.
                 </EmptyRow>
               ) : (
                 years.flatMap((year) =>

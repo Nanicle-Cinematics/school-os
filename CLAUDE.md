@@ -100,9 +100,9 @@ stable handle and is derived only on create.
 ## Tenancy — enforcement is LIVE
 
 `DB_RLS="on"` and the app connects through `APP_DATABASE_URL` as the restricted
-`school_os_app` role. 39 tables have RLS enabled and FORCED with a
+`school_os_app` role. 40 tables have RLS enabled and FORCED with a
 `tenant_isolation` policy; `npm run db:rls` (re)applies them and is idempotent.
-Verified by `npm run verify:isolation` (8/8) and `npm run verify:actions` (18/18).
+Verified by `npm run verify:isolation` (9/9) and `npm run verify:actions` (43/43).
 
 Four things had to be true at once, and each was broken:
 
@@ -156,6 +156,28 @@ Postgres RLS policies read. Use
 results computation, number-sequence increments) so the GUC and the writes share
 one transaction.
 
+**A new table is not protected until `npm run db:rls` is re-run.** The script
+enumerates tables from the database rather than from a list, so it is never out
+of date — but nothing runs it for you, and a migration that adds a tenant table
+ships that table with no row security at all. This has already happened once:
+`AssessmentTemplate` arrived with the mark sheet and went unprotected, so every
+school's Settings → Assessment components listed every other school's components
+(the count read 18 across three schools instead of 6). `verify:isolation` now
+fails on any table that has a `schoolId` but no RLS, FORCE and policy — run it
+after every migration, and against production after every deploy that carries
+one. The check is first in that suite deliberately: every other assertion proves
+isolation for the tables it names and proves nothing about a table added since.
+
+**Provisioning must stay bulk.** A school is handed 11 levels, 18 subjects, 104
+offerings, 14 finance categories and 6 assessment components, all inside one
+transaction. Written row-at-a-time with an existence check each — as it first
+was — that is ~300 sequential round trips over the single pooled connection
+`DATABASE_URL` pins, which took 465s here and blew the transaction's own 180s
+budget. Worse than slow: the work had already committed, so the console reported
+failure while the school existed, and the retry then failed on a taken URL key.
+Read-then-`createMany` brought it to ~56s on this link. Keep new provisioning
+steps batched, and keep them idempotent on their natural key.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against
@@ -169,6 +191,8 @@ npm run verify:sms       # phone normalisation, GSM-7 vs UCS2 segments, merge fi
 npm run verify:audience  # who a campaign would reach, dedupe, debtor filtering
 npm run verify:invoicing # which fee structure applies, and why a student was skipped
 npm run verify:actions   # the server-action guards — needs `npm run dev` running
+npm run verify:isolation # RLS coverage and cross-tenant reads/writes
+npm run verify:onboarding # walks every screen of a school provisioned minutes ago
 ```
 
 `verify:actions` is the only one that goes over HTTP, because the guards it

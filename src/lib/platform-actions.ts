@@ -6,34 +6,12 @@ import { requirePlatformAdmin } from "@/lib/platform-auth";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { hashPassword, temporaryPassword } from "@/lib/password";
-import { writeAudit } from "@/lib/audit";
 import { slugify } from "@/lib/platform-data";
-import { applyGesCurriculum } from "@/lib/ges-curriculum";
-import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
-import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
+import { provisionSchool, PROVISION_TX_OPTS } from "@/lib/provisioning";
 
 export type PlatformState = { error?: string; ok?: string };
 
 const PLANS: Plan[] = ["TRIAL", "STARTER", "GROWTH", "SCHOOL_PLUS"];
-
-/**
- * The Ghanaian basic-school scale, as a starting point.
- *
- * A school with no grading scale cannot compute a single result, so provisioning
- * one without it hands over an app that looks finished and fails at the first
- * report card. The head can edit the bands, or duplicate and replace it.
- */
-const DEFAULT_BANDS = [
-  { grade: "1", minScore: 80, maxScore: 100, points: 1, remark: "Excellent", isPass: true },
-  { grade: "2", minScore: 70, maxScore: 79.99, points: 2, remark: "Very Good", isPass: true },
-  { grade: "3", minScore: 65, maxScore: 69.99, points: 3, remark: "Good", isPass: true },
-  { grade: "4", minScore: 60, maxScore: 64.99, points: 4, remark: "Credit", isPass: true },
-  { grade: "5", minScore: 55, maxScore: 59.99, points: 5, remark: "Credit", isPass: true },
-  { grade: "6", minScore: 50, maxScore: 54.99, points: 6, remark: "Credit", isPass: true },
-  { grade: "7", minScore: 45, maxScore: 49.99, points: 7, remark: "Pass", isPass: true },
-  { grade: "8", minScore: 40, maxScore: 44.99, points: 8, remark: "Pass", isPass: true },
-  { grade: "9", minScore: 0, maxScore: 39.99, points: 9, remark: "Fail", isPass: false },
-];
 
 export async function createSchool(
   _prev: PlatformState,
@@ -69,7 +47,6 @@ export async function createSchool(
   // every mark in the school, so it is asked at provisioning rather than left
   // to a default the head may never look at.
   const classScoreWeight = weighting === "30" ? 30 : 50;
-  const examScoreWeight = 100 - classScoreWeight;
 
   const password = temporaryPassword();
   const passwordHash = await hashPassword(password);
@@ -77,88 +54,19 @@ export async function createSchool(
   try {
     await withBypass(() =>
       prisma.$transaction(
-        async (tx) => {
-          const school = await tx.school.create({
-            data: {
-              name,
-              slug,
-              shortName: shortName || null,
-              plan,
-              subscriptionStatus: plan === "TRIAL" ? "TRIALING" : "ACTIVE",
-              trialEndsAt:
-                plan === "TRIAL" ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
-            },
-          });
-
-          const scale = await tx.gradingScale.create({
-            data: { schoolId: school.id, name: "Basic School 1–9", isDefault: true },
-          });
-          await tx.gradeBand.createMany({
-            data: DEFAULT_BANDS.map((band) => ({
-              schoolId: school.id,
-              gradingScaleId: scale.id,
-              grade: band.grade,
-              minScore: new Prisma.Decimal(band.minScore),
-              maxScore: new Prisma.Decimal(band.maxScore),
-              points: band.points,
-              remark: band.remark,
-              isPass: band.isPass,
-            })),
-          });
-
-          await tx.schoolSettings.create({
-            data: {
-              schoolId: school.id,
-              classScoreWeight,
-              examScoreWeight,
-              defaultGradingScaleId: scale.id,
-            },
-          });
-
-          const owner = await tx.user.create({
-            data: {
-              name: ownerName,
-              email: ownerEmail,
-              passwordHash,
-              schoolId: school.id,
-            },
-          });
-
-          await tx.membership.create({
-            data: {
-              schoolId: school.id,
-              userId: owner.id,
-              role: "OWNER",
-              status: "ACTIVE",
-              invitedAt: new Date(),
-              acceptedAt: new Date(),
-            },
-          });
-
-          // Every school starts on the national curriculum rather than an
-          // empty ladder: eleven levels KG1–JHS3 and the GES subject offering
-          // for each, transitions included.
-          await applyGesCurriculum(tx, school.id);
-
-          // And on a working bill: a fee structure is priced per item, so a
-          // school with no fee items cannot enter an amount anywhere.
-          await applyDefaultFinanceCategories(tx, school.id);
-
-          // And on a working mark sheet: without components a teacher builds
-          // "Class Test 1" by hand for every subject in every class.
-          await applyDefaultAssessmentTemplate(tx, school.id);
-
-          await writeAudit(tx, {
-            schoolId: school.id,
+        (tx) =>
+          provisionSchool(tx, {
+            name,
+            slug,
+            shortName: shortName || null,
+            plan,
+            classScoreWeight,
+            ownerName,
+            ownerEmail,
+            passwordHash,
             actorUserId: admin.userId,
-            action: "school.provision",
-            entity: "School",
-            entityId: school.id,
-            after: { name, slug, plan, classScoreWeight, owner: ownerEmail },
-          });
-        },
-        // Seeding the curriculum is 11 levels, 18 subjects and 104 offerings.
-        { timeout: 180_000, maxWait: 20_000 },
+          }),
+        PROVISION_TX_OPTS,
       ),
     );
   } catch (error) {

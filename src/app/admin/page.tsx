@@ -136,8 +136,10 @@ export default async function AdminPage() {
         </div>
 
         <p className="text-xs text-slate-400">
-          A newly provisioned school has its settings, a default grading scale and a proprietor
-          login — but no levels, classes or subjects. Those are set up from inside the school, under
+          A newly provisioned school arrives with the GES curriculum — KG 1 to JHS 3 and the
+          subjects each level offers — plus a grading scale, the standard fee items and expense
+          headings, and the assessment components. What it does not have is an academic year, its
+          classes or a single child; those are set up from inside the school, starting under
           Settings.
         </p>
       </div>
