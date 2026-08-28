@@ -79,11 +79,12 @@ model School {
   deletedAt DateTime?
 
   settings            SchoolSettings?
+  assets              SchoolAsset[]
   assessmentTemplates AssessmentTemplate[]
   memberships         Membership[]
-  users       User[]
-  auditLogs   AuditLog[]
-  sequences   NumberSequence[]
+  users               User[]
+  auditLogs           AuditLog[]
+  sequences           NumberSequence[]
 
   academicYears AcademicYear[]
   terms         Term[]
@@ -125,6 +126,38 @@ model School {
   messages         Message[]
 
   @@index([plan, subscriptionStatus])
+}
+
+/// A school's crest, logo or the head's signature, stored as bytes.
+///
+/// Deliberately its own table rather than columns on School: `getSessionUser`
+/// does `include: { school: true }` on EVERY request, and Prisma selects all
+/// scalar fields, so a Bytes column there would drag the image into every page
+/// load. School keeps only the pointer (`crestUrl`, `headSignatureUrl`), which
+/// costs nothing to carry and tells a report card whether to render one at all
+/// without a second query.
+model SchoolAsset {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  kind     SchoolAssetKind
+  mimeType String
+  bytes    Bytes
+  byteSize Int
+
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([schoolId, kind])
+  @@index([schoolId])
+}
+
+enum SchoolAssetKind {
+  CREST
+  LOGO
+  HEAD_SIGNATURE
 }
 
 // Report-card and policy configuration, split out so School stays readable.
@@ -830,12 +863,12 @@ model AssessmentTemplate {
 
   title    String // "Class Test 1", "Group Work 2", "Project Work"
   type     AssessmentType
-  maxScore Decimal @default(100) @db.Decimal(6, 2)
+  maxScore Decimal        @default(100) @db.Decimal(6, 2)
   /// Exam items are scaled to examScoreWeight; everything else shares
   /// classScoreWeight. This is the only thing that distinguishes them.
-  isExam   Boolean @default(false)
-  order    Int     @default(0)
-  isActive Boolean @default(true)
+  isExam   Boolean        @default(false)
+  order    Int            @default(0)
+  isActive Boolean        @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1312,9 +1345,9 @@ enum ExpenseStatus {
 }
 
 model Expense {
-  id         String          @id @default(cuid())
+  id         String           @id @default(cuid())
   schoolId   String
-  school     School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school     School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   // Optional + SetNull rather than Restrict, matching InvoiceItem: deleting a
   // category must never delete spend history, and Restrict would block school
   // teardown. An uncategorised expense is recoverable; a vanished one is not.
@@ -1322,7 +1355,7 @@ model Expense {
   category   ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   // Which term the spend belongs to, so income vs expenditure lines up per term.
   termId     String?
-  term       Term?           @relation(fields: [termId], references: [id], onDelete: SetNull)
+  term       Term?            @relation(fields: [termId], references: [id], onDelete: SetNull)
 
   voucherNo   String
   description String

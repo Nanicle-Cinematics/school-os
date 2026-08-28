@@ -54,7 +54,14 @@ export function InvoiceBill({
         breakAfter ? "print:break-after-page" : ""
       }`}
     >
-      <header className="border-b-2 border-brand-700 pb-3 text-center">
+      <header className="flex items-center gap-4 border-b-2 border-brand-700 pb-3 text-center">
+        {school.crestUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={school.crestUrl} alt="" className="h-14 w-14 shrink-0 object-contain" />
+          </>
+        ) : null}
+        <div className="min-w-0 flex-1">
         <h1 className="font-display text-2xl">{school.name}</h1>
         {school.motto ? (
           <p className="font-display text-xs italic text-accent-600">{school.motto}</p>
@@ -64,6 +71,8 @@ export function InvoiceBill({
         {school.gpsAddress ? (
           <p className="text-xs text-slate-500">GPS: {school.gpsAddress}</p>
         ) : null}
+        </div>
+        {school.crestUrl ? <div className="h-14 w-14 shrink-0" /> : null}
       </header>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">

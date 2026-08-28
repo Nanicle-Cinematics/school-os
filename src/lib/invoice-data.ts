@@ -112,6 +112,7 @@ export async function getBillSchool(schoolId: string) {
     select: {
       name: true,
       motto: true,
+      crestUrl: true,
       address: true,
       town: true,
       district: true,

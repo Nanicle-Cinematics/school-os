@@ -68,6 +68,7 @@ const send = (method, params = {}) =>
   new Promise((res) => { const n = ++id; pending.set(n, res); ws.send(JSON.stringify({ id: n, method, params })); });
 
 await send("Page.enable");
+await send("Runtime.enable");
 await send("Network.enable");
 await send("Network.setCookie", {
   name: "school_os_session", value: token, domain: "localhost", path: "/",
@@ -88,7 +89,18 @@ if (published) {
 for (const [name, path, w, h] of shots) {
   await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 2, mobile: false });
   await send("Page.navigate", { url: `http://localhost:3000${path}` });
-  await sleep(3500);
+  await sleep(2500);
+  // Images are served by a route that does its own database work, so on this
+  // link they land seconds after the HTML. Wait for them rather than guess, or
+  // the capture shows a report card with no crest and it looks like a bug.
+  for (let waited = 0; waited < 20_000; waited += 500) {
+    const { result } = await send("Runtime.evaluate", {
+      expression: "[...document.images].every((i) => i.complete)",
+      returnByValue: true,
+    });
+    if (result?.result?.value === true) break;
+    await sleep(500);
+  }
   const { result } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true });
   if (result?.data) {
     writeFileSync(`${OUT}/${name}.png`, Buffer.from(result.data, "base64"));

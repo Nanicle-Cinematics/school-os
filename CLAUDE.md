@@ -284,10 +284,27 @@ masthead of a report card or invoice. Apply it with `.font-display`, defined in
 globals.css. Both are self-hosted by `next/font`, so a school on a slow link is
 not waiting on Google.
 
-⚠️ **`logoUrl`, `crestUrl` and `headSignatureUrl` exist on `School` and are still
-not rendered or uploadable.** Until they are, a report card carries the school's
-name and motto but no crest and no signature — the one identity gap left on the
-page a parent actually holds.
+**The crest and the head's signature** are uploaded on `/settings/branding` and
+print at the head and foot of a report card, and at the head of a fee invoice.
+
+The bytes live in their own table, `SchoolAsset`, and NOT on `School`:
+`getSessionUser` does `include: { school: true }` on every request and Prisma
+selects every scalar field, so a `Bytes` column there would drag the image into
+every page load. `School` keeps only the pointer (`crestUrl`,
+`headSignatureUrl`), which costs nothing to carry and tells a report card
+whether to render an image at all without a second query. The pointer carries a
+version (`?v=…`) so a replaced crest is never served from a stale cache.
+
+`/api/school-asset/[kind]` serves them, and deliberately does NOT call
+`requireAuth` — that resolves the user, their memberships, the school row and
+the staff record, a heavy join to repeat for a 2 KB image. It reads only which
+school the session is in: 7.6s → 4.3s per image on this link, and the remainder
+is two round trips to Frankfurt, not the query. It answers 404 rather than
+redirecting, because a signed-out browser should get a broken image and not a
+login page decoded as one.
+
+**SVG is refused** on upload. It is a document format that executes script, and
+these files are served to every parent who opens a report card.
 
 `npm run shots` captures the signed-in screens with headless Chrome over CDP
 (no Puppeteer — Node's global WebSocket drives it). It mints a session for the

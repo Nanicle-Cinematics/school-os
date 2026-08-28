@@ -23,6 +23,9 @@ const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", TH
 export function ReportCard({
   schoolName,
   schoolMotto,
+  schoolCrestUrl,
+  headSignatureUrl,
+  headName,
   termResult,
   subjectResults,
   settings,
@@ -30,6 +33,9 @@ export function ReportCard({
 }: {
   schoolName: string;
   schoolMotto?: string | null;
+  schoolCrestUrl?: string | null;
+  headSignatureUrl?: string | null;
+  headName?: string | null;
   termResult: ReportCardTermResult;
   subjectResults: ReportCardSubjectResult[];
   settings: ReportCardSettings;
@@ -44,7 +50,18 @@ export function ReportCard({
         breakAfter ? "print:break-after-page" : ""
       }`}
     >
-      <header className="border-b-2 border-brand-700 pb-4 text-center">
+      <header className="flex items-center gap-4 border-b-2 border-brand-700 pb-4 text-center">
+        {schoolCrestUrl ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={schoolCrestUrl}
+              alt=""
+              className="h-16 w-16 shrink-0 object-contain print:h-14 print:w-14"
+            />
+          </>
+        ) : null}
+        <div className="min-w-0 flex-1">
         <h1 className="font-display text-2xl text-slate-900">{schoolName}</h1>
         {schoolMotto ? (
           <p className="mt-0.5 font-display text-xs italic text-accent-600">{schoolMotto}</p>
@@ -55,6 +72,8 @@ export function ReportCard({
         <p className="text-xs text-slate-500">
           {TERM_NAME[term.name]} Term · {term.academicYear.name}
         </p>
+        </div>
+        {schoolCrestUrl ? <div className="h-16 w-16 shrink-0 print:h-14 print:w-14" /> : null}
       </header>
 
       <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-b border-slate-200 py-4 text-sm sm:grid-cols-3">
@@ -191,6 +210,36 @@ export function ReportCard({
           {term.nextTermBegins ? `Next term begins: ${dateFmt.format(term.nextTermBegins)}` : ""}
         </span>
       </footer>
+
+      {/* Signatures. A terminal report is not finished until it is signed, and
+          the parent's line is what comes back to the school. */}
+      <div className="mt-6 flex items-end justify-between gap-10">
+        <div className="flex-1">
+          {headSignatureUrl ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={headSignatureUrl}
+                alt=""
+                className="mb-0.5 h-10 max-w-[180px] object-contain object-left"
+              />
+            </>
+          ) : (
+            <div className="h-10" />
+          )}
+          <div className="border-t border-slate-900 pt-1">
+            <p className="text-xs font-semibold text-slate-900">{headName ?? "Headteacher"}</p>
+            <p className="text-[11px] text-slate-500">Headteacher</p>
+          </div>
+        </div>
+        <div className="flex-1">
+          <div className="h-10" />
+          <div className="border-t border-slate-300 pt-1">
+            <p className="text-xs font-semibold text-slate-400">Parent / Guardian</p>
+            <p className="text-[11px] text-slate-400">Signature</p>
+          </div>
+        </div>
+      </div>
 
       {guardian ? (
         <p className="mt-3 text-xs text-slate-400">

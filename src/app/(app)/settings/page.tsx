@@ -165,6 +165,21 @@ export default async function SettingsPage() {
       </Card>
 
       <Card
+        title="Crest and signature"
+        action={
+          <Link href="/settings/branding" className="text-sm text-slate-500 hover:text-slate-900">
+            Manage &rarr;
+          </Link>
+        }
+      >
+        <p className="px-4 py-3 text-sm text-slate-500">
+          The crest that heads a report card and fee invoice, and the headteacher&rsquo;s signature
+          at the foot of one. Without them both documents carry the school&rsquo;s name and nothing
+          else of its own.
+        </p>
+      </Card>
+
+      <Card
         title="School structure"
         action={
           <Link href="/settings/structure" className="text-sm text-slate-500 hover:text-slate-900">
