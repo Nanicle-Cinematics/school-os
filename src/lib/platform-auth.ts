@@ -2,6 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
+import { landingFor } from "@/lib/permissions";
 
 export type PlatformContext = {
   userId: string;
@@ -27,7 +28,14 @@ export async function requirePlatformAdmin(): Promise<PlatformContext> {
   if (!user.isPlatformAdmin) {
     // Same destination as an ordinary signed-in user hitting a page they may
     // not see: no hint that this URL is worth probing.
-    redirect("/dashboard");
+    const active = user.memberships[0];
+    redirect(
+      landingFor(
+        active
+          ? user.memberships.filter((m) => m.schoolId === active.schoolId).map((m) => m.role)
+          : [],
+      ),
+    );
   }
 
   return { userId: user.id, name: user.name, email: user.email };

@@ -9,7 +9,7 @@ import { NewSubjectForm } from "./subject-form";
 export const metadata: Metadata = { title: "Subjects · School OS" };
 
 export default async function SubjectsPage() {
-  const auth = await requireRole([...OFFICE, "TEACHER"]);
+  const auth = await requireRole(OFFICE);
   const { subjects, levelCount } = await getSubjectList();
   const canEdit = OFFICE.some((role) => auth.roles.includes(role));
 

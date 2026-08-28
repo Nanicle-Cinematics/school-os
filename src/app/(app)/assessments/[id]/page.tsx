@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getAssessmentForEntry } from "@/lib/assessment-data";
 import { setAssessmentStatus, deleteAssessment } from "@/lib/assessment-actions";
 import { StatusBadge } from "../../ui";
@@ -12,7 +12,7 @@ import { ScoreGrid, type Row } from "./score-grid";
 export const metadata: Metadata = { title: "Score entry · School OS" };
 
 export default async function ScoreEntryPage({ params }: PageProps<"/assessments/[id]">) {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   const { id } = await params;
   const data = await getAssessmentForEntry(id);
 

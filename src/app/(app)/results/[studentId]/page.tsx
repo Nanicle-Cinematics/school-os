@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole, requireAuth } from "@/lib/auth";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getReportCard } from "@/lib/results-data";
 import { saveRemarks } from "@/lib/results-actions";
 import { StatusBadge, inputClass } from "../../ui";
@@ -15,7 +15,7 @@ export default async function ReportCardPage({
   params,
   searchParams,
 }: PageProps<"/results/[studentId]">) {
-  await requireRole(ACADEMIC);
+  await requireRole(LEADERSHIP);
   const auth = await requireAuth();
   const { studentId } = await params;
   const query = await searchParams;

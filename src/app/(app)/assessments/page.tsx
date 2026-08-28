@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC } from "@/lib/permissions";
+import { LEADERSHIP } from "@/lib/permissions";
 import { getTeachingScope, getAssessmentList, getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import {
@@ -27,7 +27,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default async function AssessmentsPage({ searchParams }: PageProps<"/assessments">) {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   const params = await searchParams;
 
   const [scope, terms, currentTerm] = await Promise.all([

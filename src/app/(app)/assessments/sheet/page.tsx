@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getSheet, getSheetOptions } from "@/lib/sheet-data";
 import { PageHeader, Card, Alert, inputClass } from "../../ui";
 import { SheetForm } from "./sheet-form";
@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Mark sheet · School OS" };
 const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", THIRD: "Third" };
 
 export default async function SheetPage({ searchParams }: PageProps<"/assessments/sheet">) {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(MARKING);
   const query = await searchParams;
   const isLeadership = canAccess(auth.roles, LEADERSHIP);
 
@@ -52,10 +52,10 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
         }
         action={
           <Link
-            href="/assessments"
+            href={isLeadership ? "/assessments" : "/results/remarks"}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
           >
-            Single assessments
+            {isLeadership ? "Single assessments" : "Conduct & remarks"}
           </Link>
         }
       />

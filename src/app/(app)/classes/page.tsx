@@ -9,7 +9,7 @@ import { NewClassForm } from "./class-form";
 export const metadata: Metadata = { title: "Classes · School OS" };
 
 export default async function ClassesPage() {
-  const auth = await requireRole([...OFFICE, "TEACHER"]);
+  const auth = await requireRole(OFFICE);
   const { year, levels, classGroups, teachers } = await getClassSetup();
   const canEdit = OFFICE.some((role) => auth.roles.includes(role));
 

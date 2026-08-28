@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { materialiseComponents } from "@/lib/assessment-templates";
 import { writeAudit } from "@/lib/audit";
@@ -35,7 +35,7 @@ async function mayTeach(
 
 /** Create this term's six components for one class and subject. */
 export async function openSheet(_prev: SheetState, formData: FormData): Promise<SheetState> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(MARKING);
   setTenantContext({ schoolId: auth.schoolId });
 
   const termId = String(formData.get("termId") ?? "");
@@ -84,7 +84,7 @@ type Cell = { assessmentId: string; studentId: string; rawScore: number | null; 
  * simply has not reached.
  */
 export async function saveSheet(_prev: SheetState, formData: FormData): Promise<SheetState> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(MARKING);
   setTenantContext({ schoolId: auth.schoolId });
 
   const termId = String(formData.get("termId") ?? "");

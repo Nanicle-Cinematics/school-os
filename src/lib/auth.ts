@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { getSessionUser } from "@/lib/session";
 import { setTenantContext } from "@/lib/tenant-context";
-import { canAccess } from "@/lib/permissions";
+import { canAccess, landingFor } from "@/lib/permissions";
 
 export type AuthContext = {
   userId: string;
@@ -65,7 +65,9 @@ export async function requireAuth(): Promise<AuthContext> {
 export async function requireRole(allowed: Role[]): Promise<AuthContext> {
   const auth = await requireAuth();
   if (!canAccess(auth.roles, allowed)) {
-    redirect("/dashboard");
+    // Not /dashboard: a teacher cannot open that either, and the two refusals
+    // would redirect into each other.
+    redirect(landingFor(auth.roles));
   }
   return auth;
 }
@@ -74,6 +76,10 @@ export async function requireRole(allowed: Role[]): Promise<AuthContext> {
 export async function redirectIfAuthenticated() {
   const result = await getSessionUser();
   if (result && result.user.memberships.length > 0) {
-    redirect("/dashboard");
+    const active = result.user.memberships[0];
+    const roles = result.user.memberships
+      .filter((m) => m.schoolId === active.schoolId)
+      .map((m) => m.role);
+    redirect(landingFor(roles));
   }
 }

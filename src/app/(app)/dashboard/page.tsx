@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
-import { canAccess, FINANCE } from "@/lib/permissions";
+import { canAccess, isTeacherOnly, landingFor, FINANCE } from "@/lib/permissions";
 import { getDashboard, formatCedis } from "@/lib/dashboard-data";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
@@ -28,6 +29,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 export default async function DashboardPage() {
   const auth = await requireAuth();
+  // A class teacher has no business on the school-wide dashboard: it carries
+  // collections, outstanding fees and every class's enrolment.
+  if (isTeacherOnly(auth.roles)) {
+    redirect(landingFor(auth.roles));
+  }
   const data = await getDashboard(auth.schoolId);
   const showMoney = canAccess(auth.roles, FINANCE);
 

@@ -178,6 +178,38 @@ failure while the school existed, and the retry then failed on a taken URL key.
 Read-then-`createMany` brought it to ~56s on this link. Keep new provisioning
 steps batched, and keep them idempotent on their natural key.
 
+## A class teacher sees two screens
+
+A teacher signs in to do one job — enter the term's marks for the subjects they
+teach, and write the conduct and remark for their class — so `TEACHER` appears
+on exactly two routes, `/assessments/sheet` and `/results/remarks`, and nowhere
+else. That is the whole mechanism: `requireRole` then refuses every other page
+without a separate list of prohibitions to keep in step with the app.
+
+- **`MARKING`** (in `permissions.ts`) is those two screens and their actions —
+  `openSheet`, `saveSheet`, `saveClassRemarks`. Everything else that used to be
+  `ACADEMIC` is now `LEADERSHIP`; the `ACADEMIC` constant is gone, because a
+  role list that no longer matches any screen is how the wrong page gets opened.
+- **`isTeacherOnly`** distinguishes a teacher from a head who also teaches. A
+  head keeps the whole app; only a login whose every role is `TEACHER` is
+  narrowed.
+- **`landingFor`** is where sign-in lands and where a refusal sends someone. It
+  must never name a page the same person would be refused from — a teacher
+  bounced off `/students` to `/dashboard` would be bounced again, and the two
+  redirects would chase each other. The login action, `requireRole`,
+  `redirectIfAuthenticated` and the platform gate all go through it.
+- **`/dashboard` keeps `requireAuth` and redirects teachers explicitly** rather
+  than switching to `requireRole`. A nurse or librarian has no listed role but
+  still belongs there, and refusing them would send them back to `/dashboard`
+  forever.
+
+⚠️ **Hiding a nav link is not a guard.** Removing `TEACHER` from the `NAV` entry
+does nothing to the page: `/students`, `/classes` and `/subjects` went on
+rendering in full for a teacher who typed the URL, because their own
+`requireRole([...OFFICE, "TEACHER"])` still admitted them. `npm run
+verify:teacher` signs in as a real teacher and asks for every route by URL,
+which is what caught it — run it after touching any role list.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against
@@ -193,6 +225,7 @@ npm run verify:invoicing # which fee structure applies, and why a student was sk
 npm run verify:actions   # the server-action guards — needs `npm run dev` running
 npm run verify:isolation # RLS coverage and cross-tenant reads/writes
 npm run verify:onboarding # walks every screen of a school provisioned minutes ago
+npm run verify:teacher   # a teacher reaches the two marking screens and nothing else
 ```
 
 `verify:actions` is the only one that goes over HTTP, because the guards it

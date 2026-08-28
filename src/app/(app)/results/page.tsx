@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getResultsOverview } from "@/lib/results-data";
 import { getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
@@ -13,7 +13,7 @@ import { ComputeForm } from "./compute-form";
 export const metadata: Metadata = { title: "Results · School OS" };
 
 export default async function ResultsPage({ searchParams }: PageProps<"/results">) {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   const params = await searchParams;
 
   const [terms, currentTerm] = await Promise.all([getTermsForPicker(), getCurrentTerm()]);

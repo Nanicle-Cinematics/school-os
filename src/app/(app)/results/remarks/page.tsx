@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getClassRemarks, getSheetOptions } from "@/lib/sheet-data";
 import { prisma } from "@/lib/prisma";
 import { PageHeader, Card, Alert, inputClass } from "../../ui";
@@ -25,7 +25,7 @@ function teachingDays(start: Date, end: Date) {
 }
 
 export default async function ClassRemarksPage({ searchParams }: PageProps<"/results/remarks">) {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(MARKING);
   const query = await searchParams;
   const isLeadership = canAccess(auth.roles, LEADERSHIP);
 
@@ -70,10 +70,10 @@ export default async function ClassRemarksPage({ searchParams }: PageProps<"/res
         }
         action={
           <Link
-            href="/results"
+            href={isLeadership ? "/results" : "/assessments/sheet"}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
           >
-            Results
+            {isLeadership ? "Results" : "Mark sheet"}
           </Link>
         }
       />

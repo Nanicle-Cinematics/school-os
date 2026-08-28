@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { landingFor } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { verifyPassword } from "@/lib/password";
@@ -57,7 +58,15 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   );
 
   // Someone with no membership has nowhere to go inside a school.
-  redirect(user.memberships.length === 0 ? "/admin" : "/dashboard");
+  if (user.memberships.length === 0) {
+    redirect("/admin");
+  }
+  const active = user.memberships[0];
+  redirect(
+    landingFor(
+      user.memberships.filter((m) => m.schoolId === active.schoolId).map((m) => m.role),
+    ),
+  );
 }
 
 export async function logout() {

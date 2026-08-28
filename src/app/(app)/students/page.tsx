@@ -29,7 +29,7 @@ const STATUSES = [
 ];
 
 export default async function StudentsPage({ searchParams }: PageProps<"/students">) {
-  const auth = await requireRole([...OFFICE, "TEACHER"]);
+  const auth = await requireRole(OFFICE);
   const params = await searchParams;
 
   const query = typeof params.q === "string" ? params.q.trim() : "";

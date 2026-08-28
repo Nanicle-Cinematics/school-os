@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC } from "@/lib/permissions";
+import { LEADERSHIP } from "@/lib/permissions";
 import { getBroadsheet } from "@/lib/results-data";
 import { ordinal } from "@/lib/results-engine";
 import { Card, StatusBadge, thClass, tableHeadClass } from "../../ui";
@@ -10,7 +10,7 @@ import { Card, StatusBadge, thClass, tableHeadClass } from "../../ui";
 export const metadata: Metadata = { title: "Broadsheet · School OS" };
 
 export default async function BroadsheetPage({ searchParams }: PageProps<"/results/broadsheet">) {
-  await requireRole(ACADEMIC);
+  await requireRole(LEADERSHIP);
   const params = await searchParams;
   const termId = typeof params.term === "string" ? params.term : "";
   const classGroupId = typeof params.class === "string" ? params.class : "";

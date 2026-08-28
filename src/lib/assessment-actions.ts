@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 
@@ -37,7 +37,7 @@ export async function createAssessment(
   _prev: AssessmentState,
   formData: FormData,
 ): Promise<AssessmentState> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   setTenantContext({ schoolId: auth.schoolId });
 
   const termId = String(formData.get("termId") ?? "");
@@ -107,7 +107,7 @@ export async function saveScores(
   _prev: ScoreEntryState,
   formData: FormData,
 ): Promise<ScoreEntryState> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   setTenantContext({ schoolId: auth.schoolId });
   const assessmentId = String(formData.get("assessmentId") ?? "");
 
@@ -197,7 +197,7 @@ export async function saveScores(
 }
 
 export async function setAssessmentStatus(formData: FormData): Promise<void> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   setTenantContext({ schoolId: auth.schoolId });
   const assessmentId = String(formData.get("assessmentId") ?? "");
   const status = String(formData.get("status") ?? "");
@@ -235,7 +235,7 @@ export async function setAssessmentStatus(formData: FormData): Promise<void> {
 }
 
 export async function deleteAssessment(formData: FormData): Promise<void> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   setTenantContext({ schoolId: auth.schoolId });
   const assessmentId = String(formData.get("assessmentId") ?? "");
   if (!assessmentId) {

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
@@ -14,7 +14,7 @@ export async function computeResults(
   _prev: ComputeState,
   formData: FormData,
 ): Promise<ComputeState> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
@@ -61,7 +61,7 @@ export async function computeResults(
  * step that freezes the numbers.
  */
 export async function setResultsStatus(formData: FormData): Promise<void> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
@@ -101,7 +101,7 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
 
 /** Form-master and head remarks, saved per student from the broadsheet. */
 export async function saveRemarks(formData: FormData): Promise<void> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(LEADERSHIP);
   setTenantContext({ schoolId: auth.schoolId });
   const termId = String(formData.get("termId") ?? "");
   const studentId = String(formData.get("studentId") ?? "");
@@ -164,7 +164,7 @@ export async function saveClassRemarks(
   _prev: { error?: string; ok?: string },
   formData: FormData,
 ): Promise<{ error?: string; ok?: string }> {
-  const auth = await requireRole(ACADEMIC);
+  const auth = await requireRole(MARKING);
   setTenantContext({ schoolId: auth.schoolId });
 
   const termId = String(formData.get("termId") ?? "");
