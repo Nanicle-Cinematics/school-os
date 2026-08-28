@@ -10,6 +10,7 @@ import { writeAudit } from "@/lib/audit";
 import { slugify } from "@/lib/platform-data";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
 import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
+import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
 
 export type PlatformState = { error?: string; ok?: string };
 
@@ -142,6 +143,10 @@ export async function createSchool(
           // And on a working bill: a fee structure is priced per item, so a
           // school with no fee items cannot enter an amount anywhere.
           await applyDefaultFinanceCategories(tx, school.id);
+
+          // And on a working mark sheet: without components a teacher builds
+          // "Class Test 1" by hand for every subject in every class.
+          await applyDefaultAssessmentTemplate(tx, school.id);
 
           await writeAudit(tx, {
             schoolId: school.id,

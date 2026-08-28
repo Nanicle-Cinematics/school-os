@@ -87,6 +87,15 @@ const WASSCE_BANDS = [
   { grade: "F9", minScore: 0, maxScore: 44.99, points: 9, remark: "Fail", isPass: false },
 ];
 
+const ASSESSMENT_COMPONENTS = [
+  { title: "Class Test 1", type: "CLASS_TEST" as const, maxScore: 20, isExam: false, order: 10 },
+  { title: "Class Test 2", type: "CLASS_TEST" as const, maxScore: 20, isExam: false, order: 20 },
+  { title: "Group Work 1", type: "GROUP_WORK" as const, maxScore: 10, isExam: false, order: 30 },
+  { title: "Group Work 2", type: "GROUP_WORK" as const, maxScore: 10, isExam: false, order: 40 },
+  { title: "Project Work", type: "PROJECT" as const, maxScore: 20, isExam: false, order: 50 },
+  { title: "Examination", type: "END_OF_TERM_EXAM" as const, maxScore: 100, isExam: true, order: 60 },
+];
+
 const FEE_CATEGORIES = [
   { code: "TUITION", name: "Tuition", order: 1 },
   { code: "PTA", name: "PTA Levy", order: 2 },
@@ -223,6 +232,9 @@ async function main() {
         ],
       },
       houses: { create: HOUSES },
+      // The same six a real school is provisioned with. Without them a teacher
+      // opening a mark sheet in the demo finds nothing to mark.
+      assessmentTemplates: { create: ASSESSMENT_COMPONENTS },
       feeCategories: { create: FEE_CATEGORIES.map((c) => ({ ...c, isMandatory: c.code !== "SPORTS" })) },
       expenseCategories: { create: EXPENSE_CATEGORIES },
       messageTemplates: {
@@ -263,6 +275,7 @@ async function main() {
     include: { terms: { orderBy: { sequence: "asc" } } },
   });
   const term1 = year.terms[0];
+  const term2 = year.terms[1];
 
   console.log("Creating grading scales…");
   const basicScale = await prisma.gradingScale.create({
@@ -596,6 +609,34 @@ async function main() {
       );
     }
   }
+  // Term 2 is the term being marked: the school's six components, open, with
+  // nothing entered. Without this the demo has no markable sheet anywhere —
+  // every term-1 assessment is approved and locked — so the mark sheet cannot
+  // be tried, or tested.
+  if (term2) {
+    for (const level of levels) {
+      const classGroup = level.classGroups[0];
+      for (const code of STAGE_SUBJECTS[level.stage]) {
+        const subjectId = subjectByCode.get(code)!.id;
+        for (const component of ASSESSMENT_COMPONENTS) {
+          assessmentRows.push({
+            schoolId,
+            termId: term2.id,
+            classGroupId: classGroup.id,
+            subjectId,
+            type: component.type,
+            title: component.title,
+            // weight tracks maxScore: the class score is then marks earned over
+            // marks available. See src/lib/assessment-templates.ts.
+            maxScore: money(component.maxScore),
+            weight: money(component.maxScore),
+            status: "OPEN" as const,
+          });
+        }
+      }
+    }
+  }
+
   await prisma.assessment.createMany({ data: assessmentRows });
 
   const savedAssessments = await prisma.assessment.findMany({

@@ -613,6 +613,97 @@ async function billChecks(cookie) {
   check("printing without a term is refused", noTerm.status === 404, `HTTP ${noTerm.status}`);
 }
 
+async function componentChecks(cookie) {
+  console.log("\nAssessment components");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need fixtures to assert against");
+    return;
+  }
+
+  const before = await db(() => prisma.assessmentTemplate.count());
+  const settings = await fetchPage("/settings/components", cookie);
+  check("the components screen renders", settings.status === 200, `${before} components`);
+  check(
+    "it explains that marks are the weighting, with no second concept to set",
+    /no separate weighting to set/.test(settings.html),
+  );
+
+  const add = formWith(settings.html, "Add component");
+  const blank = await postForm("/settings/components", add, { title: "  ", maxScore: "20" }, cookie);
+  check(
+    "a component with no name is refused",
+    says(blank.html, "Give the component a name"),
+    alerts(blank.html)[0],
+  );
+
+  const zero = await postForm("/settings/components", add, { title: "Probe", maxScore: "0" }, cookie);
+  check(
+    "a component worth zero marks is refused — it could never affect a grade",
+    says(zero.html, "Total marks must be between 1 and 1000"),
+    alerts(zero.html)[0],
+  );
+
+  const existing = await db(() => prisma.assessmentTemplate.findFirst({ orderBy: { order: "asc" } }));
+  if (existing) {
+    const dupe = await postForm(
+      "/settings/components",
+      add,
+      { title: existing.title, maxScore: "20" },
+      cookie,
+    );
+    check(
+      "a duplicate component name is refused",
+      says(dupe.html, "already a component called"),
+      alerts(dupe.html)[0],
+    );
+  }
+
+  check(
+    "nothing was written by these refusals",
+    (await db(() => prisma.assessmentTemplate.count())) === before,
+  );
+
+  // The sheet itself: a score above a component's total must never be stored.
+  const assessment = await db(() =>
+    prisma.assessment.findFirst({
+      where: { status: { not: "APPROVED" } },
+      orderBy: { createdAt: "desc" },
+    }),
+  );
+  if (!assessment) {
+    console.log("  --   no open assessment to range-check against");
+    return;
+  }
+  const sheetPath = `/assessments/sheet?term=${assessment.termId}&class=${assessment.classGroupId}&subject=${assessment.subjectId}`;
+  const sheet = await fetchPage(sheetPath, cookie);
+  check("the mark sheet renders", sheet.status === 200, `HTTP ${sheet.status}`);
+
+  const student = await db(() =>
+    prisma.student.findFirst({
+      where: { currentClassGroupId: assessment.classGroupId, status: "ACTIVE", deletedAt: null },
+    }),
+  );
+  if (student && sheet.html.includes("Save the sheet")) {
+    const scores = await db(() => prisma.score.count({ where: { assessmentId: assessment.id } }));
+    const tooBig = Number(assessment.maxScore) + 1;
+    const refused = await postForm(
+      sheetPath,
+      formWith(sheet.html, "Save the sheet"),
+      { [`score:${assessment.id}:${student.id}`]: String(tooBig) },
+      cookie,
+    );
+    check(
+      "a mark above the component's total is refused",
+      says(refused.html, "is above it"),
+      alerts(refused.html)[0],
+    );
+    check(
+      "and the refusal wrote nothing",
+      (await db(() => prisma.score.count({ where: { assessmentId: assessment.id } }))) === scores,
+    );
+  }
+}
+
 async function importChecks(cookie) {
   console.log("\nStudent import (preview only — writes nothing)");
   if (!hasDb) {
@@ -676,6 +767,7 @@ async function main() {
       await structureGuards(token);
       await feeGuards(token);
       await billChecks(token);
+      await componentChecks(token);
       await importChecks(token);
     } finally {
       await closeSession(token);

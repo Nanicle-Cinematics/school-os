@@ -78,8 +78,9 @@ model School {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  settings    SchoolSettings?
-  memberships Membership[]
+  settings            SchoolSettings?
+  assessmentTemplates AssessmentTemplate[]
+  memberships         Membership[]
   users       User[]
   auditLogs   AuditLog[]
   sequences   NumberSequence[]
@@ -796,6 +797,7 @@ model GradeBand {
 enum AssessmentType {
   CLASS_EXERCISE
   CLASS_TEST
+  GROUP_WORK
   HOMEWORK
   PROJECT
   MIDTERM_EXAM
@@ -810,6 +812,38 @@ enum AssessmentStatus {
 }
 
 // One markable item: "Class Test 2 — Mathematics — Basic 5 Gold — Term 1".
+/// The components every subject is marked out of, defined once per school.
+///
+/// Without this a teacher builds "Class Test 1" by hand for each subject in
+/// each class each term — six components across eighteen subjects is work
+/// nobody does twice, so scores end up entered inconsistently or not at all.
+///
+/// `maxScore` doubles as the weight. The results engine weights each item's
+/// percentage by `weight`, so setting weight = maxScore makes the class score
+/// exactly (sum of raw marks / sum of max marks) — marks-based, which is what
+/// "set the total marks for this category" means to a teacher, with no second
+/// concept to explain.
+model AssessmentTemplate {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  title    String // "Class Test 1", "Group Work 2", "Project Work"
+  type     AssessmentType
+  maxScore Decimal @default(100) @db.Decimal(6, 2)
+  /// Exam items are scaled to examScoreWeight; everything else shares
+  /// classScoreWeight. This is the only thing that distinguishes them.
+  isExam   Boolean @default(false)
+  order    Int     @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, title])
+  @@index([schoolId])
+}
+
 model Assessment {
   id           String     @id @default(cuid())
   schoolId     String
@@ -838,6 +872,10 @@ model Assessment {
 
   scores Score[]
 
+  // One "Class Test 1" per class per subject per term. Makes creating the
+  // term's components from the template idempotent — a second run fills gaps
+  // instead of duplicating the sheet.
+  @@unique([termId, classGroupId, subjectId, title])
   @@index([schoolId, termId, classGroupId, subjectId])
 }
 

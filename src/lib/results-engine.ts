@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { isExamType } from "@/lib/assessment-templates";
 import type { TenantTx } from "@/lib/prisma";
 
 type Tx = TenantTx;
@@ -243,7 +244,7 @@ export async function computeClassResults(
           isAbsent: score?.isAbsent ?? false,
           maxScore: assessment.maxScore,
           weight: assessment.weight,
-          isExam: assessment.type === "END_OF_TERM_EXAM" || assessment.type === "MIDTERM_EXAM",
+          isExam: isExamType(assessment.type),
         };
       });
       perStudent.set(studentId, computeSubjectScore(inputs, classWeight, examWeight));
