@@ -1,12 +1,63 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { canAccess, isTeacherOnly, landingFor, FINANCE } from "@/lib/permissions";
-import { getDashboard, formatCedis } from "@/lib/dashboard-data";
+import { getAttention, getDashboard, formatCedis, type AttentionItem } from "@/lib/dashboard-data";
 import { Card, Stat } from "../ui";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
 
+
+
+const DOT: Record<AttentionItem["kind"], string> = {
+  marking: "bg-accent-500",
+  fees: "bg-red-500",
+  results: "bg-brand-500",
+  staffing: "bg-slate-400",
+};
+
+/**
+ * What needs doing, and the link that does it. Deliberately above the money
+ * panels: those report how the term is going, this one changes it.
+ */
+function Attention({ items }: { items: AttentionItem[] }) {
+  return (
+    <Card title="Needs your attention">
+      {items.length === 0 ? (
+        <p className="px-4 py-8 text-center text-sm text-slate-500">
+          Nothing is waiting on you — marking is up to date, results are published and every
+          class has its teachers.
+        </p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {items.map((item) => (
+            <li key={item.kind}>
+              <Link
+                href={item.href}
+                className="group flex items-center gap-3.5 px-4 py-3.5 transition hover:bg-slate-50"
+              >
+                <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[item.kind]}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
+                    {item.tag}
+                  </span>
+                  <span className="mt-0.5 block truncate text-sm font-bold text-slate-900">
+                    {item.title}
+                  </span>
+                  <span className="block truncate text-xs text-slate-500">{item.detail}</span>
+                </span>
+                <span className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-[11.5px] font-bold text-brand-700 transition group-hover:border-brand-200 group-hover:bg-brand-50">
+                  {item.cta}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
 
 export default async function DashboardPage() {
   const auth = await requireAuth();
@@ -17,6 +68,14 @@ export default async function DashboardPage() {
   }
   const data = await getDashboard(auth.schoolId);
   const showMoney = canAccess(auth.roles, FINANCE);
+
+  // Sequential, not alongside getDashboard: DATABASE_URL pins the pool small and
+  // the two fan out into it. The fee counts are handed over rather than re-read.
+  const attention = await getAttention(
+    auth.schoolId,
+    data.term ? { id: data.term.id, academicYearId: data.term.academicYearId } : null,
+    { outstanding: data.outstanding, debtorCount: data.debtorCount },
+  );
 
   const firstName = auth.name.split(" ")[0];
   const maxLevel = Math.max(1, ...data.enrolmentByLevel.map((l) => l.count));
@@ -64,6 +123,8 @@ export default async function DashboardPage() {
           </>
         )}
       </div>
+
+      <Attention items={attention} />
 
       {showMoney ? (
         <div className="grid gap-4 lg:grid-cols-2">

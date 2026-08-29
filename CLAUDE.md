@@ -347,6 +347,39 @@ demo proprietor, and **disconnects Prisma before opening the browser**: with
 screenshots as Next's "a server error occurred", which looks exactly like a
 styling bug and is not one.
 
+## "Needs your attention"
+
+The dashboard's first card is four computed rules, each a sentence and the link
+that resolves it — `getAttention` in `dashboard-data.ts`:
+
+- **Marking** — an assessment in the current term, not `APPROVED`, with fewer
+  scores than its class roster. Approval means finished whatever the score count
+  says, so an APPROVED sheet is never chased.
+- **Results** — `TermResult` rows that are computed but not `PUBLISHED`: a
+  report card nobody can see.
+- **Staffing** — a class whose level offers more subjects than it has teaching
+  assignments for, scoped to the current year. That class has a mark sheet
+  nobody can open.
+- **Fees** — handed the counts the stat cards already computed, so the debtors
+  are not queried twice.
+
+Five aggregate queries, deliberately. This runs on every dashboard load over a
+link where a round trip is seconds, so a rule needing a per-row query does not
+belong here.
+
+⚠️ **The demo seed satisfies three of the four rules**, so they are silent by
+default and a broken one would look identical to a quiet one. `npm run
+verify:attention` therefore has two halves: it recounts each rule the long way,
+then FORCES each condition — removing a teaching assignment, reopening an
+assessment and dropping two of its scores — and asserts each item appears, says
+the right number, and clears when the data is put back. It writes, and restores;
+development databases only.
+
+⚠️ The `Score` value column is **`rawScore`**, not `score`. Writing `score:` in a
+create is silently accepted by `tsx` (esbuild strips types without checking) and
+lands a NULL — which reads as "not marked" rather than failing. Run
+`node_modules/.bin/tsc --noEmit` over scripts, not just the app.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against
