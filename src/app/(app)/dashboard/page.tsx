@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { canAccess, isTeacherOnly, landingFor, FINANCE } from "@/lib/permissions";
 import {
+  getActivity,
   getAttention,
   getCollections,
   getDashboard,
@@ -11,6 +12,7 @@ import {
   type AttentionItem,
 } from "@/lib/dashboard-data";
 import { CollectionsChart } from "./collections-chart";
+import { ActivityFeed } from "./activity-feed";
 import { Card, Stat } from "../ui";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
@@ -87,6 +89,8 @@ export default async function DashboardPage() {
       )
     : null;
 
+  const activity = await getActivity(auth.schoolId);
+
   const attention = await getAttention(
     auth.schoolId,
     data.term ? { id: data.term.id, academicYearId: data.term.academicYearId } : null,
@@ -145,6 +149,8 @@ export default async function DashboardPage() {
       {showMoney && collections ? (
         <CollectionsChart collections={collections} billed={data.billed} />
       ) : null}
+
+      <ActivityFeed items={activity} />
 
       {showMoney ? (
         <div className="grid gap-4 lg:grid-cols-2">

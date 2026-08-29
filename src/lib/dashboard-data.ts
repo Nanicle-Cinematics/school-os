@@ -327,3 +327,137 @@ export async function getCollections(
   // Long terms: the last dozen weeks are the ones anyone is looking at.
   return { weeks: weeks.slice(-12), total, best };
 }
+
+export type ActivityItem = {
+  id: string;
+  /** Drives the icon and its tint. */
+  kind: "money" | "message" | "academic" | "people" | "admin";
+  title: string;
+  detail: string;
+  /** "just now", "12 min", "3 hr", "Tue" — resolved server-side. */
+  when: string;
+};
+
+/**
+ * What has happened in the school lately, read from the audit trail.
+ *
+ * `AuditLog` has been written on every money and grade mutation since the first
+ * commit and never once read for display. Nothing new is recorded here — this
+ * is a reader.
+ *
+ * The `after` payloads are untyped JSON written by twenty-five different call
+ * sites, so every field is read defensively: a feed that throws because one old
+ * row has a missing key is worse than a feed that says less about that row.
+ */
+const ACTIVITY: Record<
+  string,
+  { kind: ActivityItem["kind"]; title: (a: Record<string, unknown>) => string; detail: string }
+> = {
+  "payment.record": {
+    kind: "money",
+    title: (a) => `Payment of ${money(a.amount)} received`,
+    detail: "Receipt issued",
+  },
+  "payment.reverse": { kind: "money", title: () => "A payment was reversed", detail: "Money returned or corrected" },
+  "expense.record": {
+    kind: "money",
+    title: (a) => `Expense of ${money(a.amount)} recorded`,
+    detail: "Cash book",
+  },
+  "expense.cancel": { kind: "money", title: () => "An expense was cancelled", detail: "Cash book" },
+  "invoice.cancel": { kind: "money", title: () => "An invoice was cancelled", detail: "Fees" },
+  "campaign.send": {
+    kind: "message",
+    title: (a) => `SMS sent to ${count(a.recipients)} ${plural(a.recipients, "recipient")}`,
+    detail: "Messages",
+  },
+  "results.compute": { kind: "academic", title: () => "Results computed for a class", detail: "Academics" },
+  "results.status": { kind: "academic", title: () => "Results status changed", detail: "Academics" },
+  "results.remarks": { kind: "academic", title: () => "Conduct and remarks saved", detail: "Academics" },
+  "assessment.create": { kind: "academic", title: () => "An assessment was created", detail: "Academics" },
+  "assessment.status": { kind: "academic", title: () => "An assessment was locked or reopened", detail: "Academics" },
+  "assessment.delete": { kind: "academic", title: () => "An assessment was deleted", detail: "Academics" },
+  "component.delete": { kind: "academic", title: () => "An assessment component was removed", detail: "Settings" },
+  "student.admit": { kind: "people", title: () => "A pupil was admitted", detail: "Students" },
+  "student.enrol": { kind: "people", title: () => "A pupil was placed in a class", detail: "Students" },
+  "student.withdraw": { kind: "people", title: () => "A pupil was withdrawn", detail: "Students" },
+  "student.import": {
+    kind: "people",
+    title: (a) => `${count(a.created)} ${plural(a.created, "pupil")} imported`,
+    detail: "From a spreadsheet",
+  },
+  "promotion.run": {
+    kind: "people",
+    title: (a) => `${count(a.students)} ${plural(a.students, "pupil")} moved up a year`,
+    detail: "Promotions",
+  },
+  "user.create": { kind: "admin", title: () => "A staff login was created", detail: "Users" },
+  "user.roles": { kind: "admin", title: () => "Someone's roles changed", detail: "Users" },
+  "term.update": { kind: "admin", title: () => "Term dates changed", detail: "Settings" },
+  "settings.academic": { kind: "admin", title: () => "Academic settings changed", detail: "Settings" },
+  "school.asset.upload": { kind: "admin", title: () => "The crest or signature was updated", detail: "Settings" },
+  "school.asset.remove": { kind: "admin", title: () => "The crest or signature was removed", detail: "Settings" },
+  "school.provision": { kind: "admin", title: () => "The school was set up", detail: "Nanicle" },
+};
+
+function money(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? formatCedis(n) : "an amount";
+}
+function count(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(n) : "Some";
+}
+function plural(value: unknown, word: string) {
+  return Number(value) === 1 ? word : `${word}s`;
+}
+
+/** Relative time, resolved here so no component reads the clock during render. */
+function ago(then: Date, now: Date) {
+  const mins = Math.floor((now.getTime() - then.getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hr`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(then);
+}
+
+/**
+ * The actions this feed knows how to phrase. `verify:activity` greps every
+ * `writeAudit` call in the codebase and asserts each one appears here — so a new
+ * audited action cannot quietly reach the dashboard as a raw string like
+ * "invoice generate".
+ */
+export const ACTIVITY_ACTIONS = Object.keys(ACTIVITY);
+
+export async function getActivity(schoolId: string, take = 6, now = new Date()) {
+  const rows = await prisma.auditLog.findMany({
+    where: { schoolId },
+    orderBy: { createdAt: "desc" },
+    take,
+    select: {
+      id: true,
+      action: true,
+      after: true,
+      createdAt: true,
+      actor: { select: { name: true } },
+    },
+  });
+
+  return rows.map((row): ActivityItem => {
+    const spec = ACTIVITY[row.action];
+    const payload = (row.after ?? {}) as Record<string, unknown>;
+    const who = row.actor?.name;
+    return {
+      id: row.id,
+      kind: spec?.kind ?? "admin",
+      // An unmapped action still shows: the trail is the record, and a silent
+      // gap in it would be the one thing worth noticing.
+      title: spec ? spec.title(payload) : row.action.replace(/[._]/g, " "),
+      detail: who ? `${spec?.detail ?? "Activity"} · ${who}` : (spec?.detail ?? "Activity"),
+      when: ago(row.createdAt, now),
+    };
+  });
+}

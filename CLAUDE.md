@@ -406,6 +406,32 @@ definite height, and inside a flex row with `items-end` the columns size to thei
 content — so the first version rendered week labels with no bars at all, and it
 looked like missing data rather than broken layout.
 
+## Live activity
+
+The dashboard's activity feed is a READER over `AuditLog`, which every money and
+grade mutation has written since the first commit and which nothing displayed
+until now. `getActivity` adds no records; it phrases existing ones.
+
+Two fragile edges, both guarded by `npm run verify:activity`:
+
+- **The phrase map must cover every action the app writes.** `ACTIVITY_ACTIONS`
+  is exported so the verifier can grep every `action: "..."` in `src/lib` and
+  assert each one has a phrase — otherwise a new `writeAudit` reaches a head
+  teacher's dashboard as "invoice generate". It checks the reverse too: a phrase
+  for an action nobody writes is dead weight. 25 actions today, all covered.
+- **`after` is untyped JSON from twenty-five call sites.** Every field is read
+  defensively (`money()`, `count()`, `plural()`), so one row with a missing key
+  degrades to "Payment of an amount received" instead of taking the dashboard
+  down.
+
+Relative timestamps are resolved in the data layer, not the component — reading
+the clock during render trips `react-hooks/purity`, as `daysUntil` in the app
+layout already had to learn.
+
+⚠️ **The demo seed writes no audit rows** — it inserts directly — so the feed
+shows its empty state on a freshly seeded database. That is correct, not broken.
+To see it populated, insert rows and delete them again.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against
