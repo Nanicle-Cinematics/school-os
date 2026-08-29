@@ -9,7 +9,7 @@ import {
   Card,
   StatusBadge,
   EmptyRow,
-  inputClass,
+  filterClass,
   thClass,
   tableHeadClass,
 } from "../ui";
@@ -67,7 +67,7 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
       />
 
       <form className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
-        <select name="term" defaultValue={termId ?? ""} className={`${inputClass} w-auto`}>
+        <select name="term" defaultValue={termId ?? ""} className={`${filterClass} w-auto`}>
           <option value="">All terms</option>
           {terms.map((term) => (
             <option key={term.id} value={term.id}>
@@ -75,7 +75,7 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
             </option>
           ))}
         </select>
-        <select name="class" defaultValue={classGroupId ?? ""} className={`${inputClass} w-auto`}>
+        <select name="class" defaultValue={classGroupId ?? ""} className={`${filterClass} w-auto`}>
           <option value="">All classes</option>
           {scope.classGroups.map((group) => (
             <option key={group.id} value={group.id}>
@@ -83,7 +83,7 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
             </option>
           ))}
         </select>
-        <select name="subject" defaultValue={subjectId ?? ""} className={`${inputClass} w-auto`}>
+        <select name="subject" defaultValue={subjectId ?? ""} className={`${filterClass} w-auto`}>
           <option value="">All subjects</option>
           {scope.subjects.map((subject) => (
             <option key={subject.id} value={subject.id}>

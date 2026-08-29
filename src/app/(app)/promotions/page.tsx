@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getPromotionPlan, getPromotionSetup, getWholeSchoolPlan } from "@/lib/promotion-data";
-import { Alert, Card, PageHeader, inputClass } from "../ui";
+import { Alert, Card, PageHeader, filterClass } from "../ui";
 import { PromotionForm } from "./promotion-form";
 import { BulkPromotionForm } from "./bulk-form";
 
@@ -58,7 +58,7 @@ export default async function PromotionsPage({ searchParams }: PageProps<"/promo
         <form className="flex flex-wrap items-end gap-3 p-4">
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">Class</span>
-            <select name="class" defaultValue={classGroupId} className={`${inputClass} w-52`}>
+            <select name="class" defaultValue={classGroupId} className={`${filterClass} w-52`}>
               <option value="">Every class (whole school)</option>
               {classGroups.map((group) => (
                 <option key={group.id} value={group.id}>
@@ -70,7 +70,7 @@ export default async function PromotionsPage({ searchParams }: PageProps<"/promo
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">Leaving</span>
-            <select name="from" defaultValue={sourceYearId} className={`${inputClass} w-44`}>
+            <select name="from" defaultValue={sourceYearId} className={`${filterClass} w-44`}>
               {years.map((year) => (
                 <option key={year.id} value={year.id}>
                   {year.name}
@@ -82,7 +82,7 @@ export default async function PromotionsPage({ searchParams }: PageProps<"/promo
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">Entering</span>
-            <select name="to" defaultValue={targetYearId} className={`${inputClass} w-44`}>
+            <select name="to" defaultValue={targetYearId} className={`${filterClass} w-44`}>
               <option value="">Choose a year</option>
               {years.map((year) => (
                 <option key={year.id} value={year.id}>

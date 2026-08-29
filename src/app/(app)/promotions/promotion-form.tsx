@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { runPromotion, type PromotionState } from "@/lib/promotion-actions";
 import type { Decision } from "@/lib/promotion-data";
 import { SubmitButton } from "../submit-button";
-import { Alert, EmptyRow, inputClass, tableHeadClass, thClass } from "../ui";
+import { Alert, EmptyRow, filterClass, tableHeadClass, thClass } from "../ui";
 
 type ClassOption = { id: string; name: string; level: { name: string } };
 
@@ -109,7 +109,7 @@ export function PromotionForm({
                             [row.studentId]: event.target.value as Decision,
                           }))
                         }
-                        className={`${inputClass} w-36`}
+                        className={`${filterClass} w-36`}
                       >
                         {DECISION_LABELS.map(([value, label]) => (
                           <option
@@ -127,7 +127,7 @@ export function PromotionForm({
                         <select
                           name={`class:${row.studentId}`}
                           defaultValue={row.destinationId ?? ""}
-                          className={`${inputClass} w-44`}
+                          className={`${filterClass} w-44`}
                         >
                           {options.length === 0 ? (
                             <option value="">No class exists</option>

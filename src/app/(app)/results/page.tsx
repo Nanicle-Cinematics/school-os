@@ -6,7 +6,7 @@ import { getResultsOverview } from "@/lib/results-data";
 import { getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { setResultsStatus } from "@/lib/results-actions";
-import { PageHeader, Card, EmptyRow, inputClass, thClass, tableHeadClass } from "../ui";
+import { PageHeader, Card, EmptyRow, filterClass, thClass, tableHeadClass } from "../ui";
 import { SubmitButton } from "../submit-button";
 import { ComputeForm } from "./compute-form";
 
@@ -45,7 +45,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
       />
 
       <form className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
-        <select name="term" defaultValue={termId} className={`${inputClass} w-auto`}>
+        <select name="term" defaultValue={termId} className={`${filterClass} w-auto`}>
           {terms.map((option) => (
             <option key={option.id} value={option.id}>
               Term {option.sequence} · {option.academicYear.name}

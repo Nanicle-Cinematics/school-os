@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getStaffList } from "@/lib/staff-data";
-import { EmptyRow, PageHeader, inputClass, tableHeadClass, thClass } from "../ui";
+import { EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
 import { NewStaffForm } from "./staff-form";
 
 export const metadata: Metadata = { title: "Staff · School OS" };
@@ -39,7 +39,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/staff">) {
           name="q"
           defaultValue={query}
           placeholder="Name, staff no. or designation"
-          className={`${inputClass} w-64`}
+          className={`${filterClass} w-64`}
         />
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input

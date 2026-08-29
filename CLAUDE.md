@@ -293,6 +293,20 @@ nav entry needs one. The bottom corner is not decoration — it holds the curren
 term and how many days until it closes, which is the one thing a head teacher
 wants permanently in view.
 
+⚠️ **`inputClass` is `w-full`, and Tailwind orders utilities by its own rules,
+not by the order you write them.** A `${inputClass} w-44` beside it silently
+lost, so every filter row on every list screen stacked one control per line for
+as long as those screens have existed. `filterClass` is the same field with the
+width stripped — derived from `inputClass` so the two cannot drift. Use it for
+anything sized inline; `inputClass` stays for fields that should fill their
+column.
+
+**Rows about a person carry an `Avatar`** — initials in a tinted square — and
+their name and admission number stacked in one cell, rather than a separate
+column of numbers nobody reads top to bottom. `ScoreBadge` colours a mark out of
+100 (green ≥70, amber ≥50, red below) so a teacher scanning the total column
+sees who is struggling without reading a number.
+
 ⚠️ **Only the BEST-matching nav item is active, not every prefix.**
 `/assessments/sheet` starts with `/assessments`, so a plain `startsWith` test lit
 Mark sheet and Assessments at once. `NavLinks` picks the longest matching href

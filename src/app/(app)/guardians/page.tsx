@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getGuardianList } from "@/lib/guardian-data";
-import { EmptyRow, PageHeader, inputClass, tableHeadClass, thClass } from "../ui";
+import { EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
 import { NewGuardianForm } from "./guardian-form";
 
 export const metadata: Metadata = { title: "Guardians · School OS" };
@@ -30,7 +30,7 @@ export default async function GuardiansPage({ searchParams }: PageProps<"/guardi
           name="q"
           defaultValue={query}
           placeholder="Name or phone number"
-          className={`${inputClass} w-64`}
+          className={`${filterClass} w-64`}
         />
         <button
           type="submit"

@@ -107,6 +107,15 @@ export function Field({
 export const inputClass =
   "w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25";
 
+/**
+ * The same field without the width, for inline filter rows.
+ *
+ * `inputClass` is `w-full`, and Tailwind orders utilities by its own rules
+ * rather than by the order you write them — so a `w-44` set beside it silently
+ * lost, and every filter row on every list screen stacked one control per line.
+ */
+export const filterClass = inputClass.replace("w-full ", "");
+
 export function Alert({ tone, children }: { tone: "error" | "success"; children: React.ReactNode }) {
   return (
     <p
@@ -165,6 +174,55 @@ export function EmptyRow({ colSpan, children }: { colSpan: number; children: Rea
   );
 }
 
-export const thClass = "px-4 py-2.5 font-medium";
+export const thClass = "px-4 py-2.5 font-extrabold";
 export const tableHeadClass =
-  "border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500";
+  "border-b border-slate-200 bg-slate-50 text-[10.5px] uppercase tracking-[0.11em] text-slate-400";
+
+/**
+ * Initials in a tinted square. Rows about a person read faster with a fixed
+ * anchor on the left than with a wall of names, and a school has no photographs
+ * to put there.
+ */
+export function Avatar({
+  firstName,
+  lastName,
+  size = "md",
+}: {
+  firstName: string;
+  lastName: string;
+  size?: "sm" | "md";
+}) {
+  const initials = `${firstName.at(0) ?? ""}${lastName.at(0) ?? ""}`.toUpperCase();
+  const box = size === "sm" ? "h-8 w-8 rounded-lg text-[11px]" : "h-9 w-9 rounded-xl text-[12px]";
+  return (
+    <span
+      aria-hidden="true"
+      className={`${box} flex shrink-0 items-center justify-center bg-brand-50 font-extrabold text-brand-700`}
+    >
+      {initials}
+    </span>
+  );
+}
+
+/**
+ * A mark out of 100, coloured by where it falls. A teacher scanning a column
+ * wants to see who is struggling without reading a single number.
+ */
+export function ScoreBadge({ value }: { value: number | null }) {
+  if (value === null) {
+    return <span className="text-sm text-slate-300">—</span>;
+  }
+  const tone =
+    value >= 70
+      ? "bg-brand-50 text-brand-700"
+      : value >= 50
+        ? "bg-accent-50 text-accent-700"
+        : "bg-red-50 text-red-600";
+  return (
+    <span
+      className={`inline-block min-w-[3.25rem] rounded-lg px-2 py-1 text-center text-sm font-extrabold tabular-nums ${tone}`}
+    >
+      {value.toFixed(1)}
+    </span>
+  );
+}

@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { saveSheet, type SheetState } from "@/lib/sheet-actions";
 import { SubmitButton } from "../../submit-button";
-import { Alert } from "../../ui";
+import { Alert, Avatar, ScoreBadge } from "../../ui";
 
 type Column = {
   id: string;
@@ -140,12 +140,12 @@ export function SheetForm({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60">
-              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                Student
+              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2.5 text-left text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
+                Pupil
               </th>
               {columns.map((column) => (
                 <th key={column.id} className="px-2 py-2 text-center align-top">
-                  <p className="text-xs font-medium text-slate-700">{column.title}</p>
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-slate-500">{column.title}</p>
                   <label className="mt-1 flex items-center justify-center gap-1">
                     <span className="sr-only">Total marks for {column.title}</span>
                     <span className="text-xs text-slate-400">/</span>
@@ -160,7 +160,7 @@ export function SheetForm({
                       onChange={(e) =>
                         setMaxima((prev) => ({ ...prev, [column.id]: e.target.value }))
                       }
-                      className="w-14 rounded border border-slate-200 px-1 py-0.5 text-center text-xs tabular-nums disabled:bg-slate-100 disabled:text-slate-400"
+                      className="w-14 rounded-md border border-slate-200 px-1 py-0.5 text-center text-xs font-semibold tabular-nums outline-none focus:border-brand-500 disabled:bg-slate-100 disabled:text-slate-400"
                       aria-label={`Total marks for ${column.title}`}
                     />
                   </label>
@@ -169,13 +169,13 @@ export function SheetForm({
                   ) : null}
                 </th>
               ))}
-              <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-2.5 text-right text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
                 Class ({classWeight})
               </th>
-              <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-2.5 text-right text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
                 Exam ({examWeight})
               </th>
-              <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wide text-slate-500">
+              <th className="px-3 py-2.5 text-center text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
                 Total
               </th>
             </tr>
@@ -193,11 +193,18 @@ export function SheetForm({
               );
               return (
                 <tr key={student.id} className="hover:bg-slate-50/60">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-1.5">
-                    <p className="font-medium text-slate-900">
-                      {student.lastName}, {student.firstName}
-                    </p>
-                    <p className="text-xs text-slate-400">{student.admissionNo}</p>
+                  <td className="sticky left-0 z-10 bg-white px-3 py-2">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar firstName={student.firstName} lastName={student.lastName} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-slate-900">
+                          {student.lastName}, {student.firstName}
+                        </p>
+                        <p className="font-mono text-[11px] text-slate-400">
+                          {student.admissionNo}
+                        </p>
+                      </div>
+                    </div>
                   </td>
 
                   {columns.map((column) => {
@@ -217,7 +224,7 @@ export function SheetForm({
                           onChange={(e) =>
                             setValues((prev) => ({ ...prev, [key]: e.target.value }))
                           }
-                          className="w-16 rounded border border-slate-200 px-1.5 py-1 text-center tabular-nums disabled:bg-slate-100"
+                          className="w-[3.75rem] rounded-lg border-[1.5px] border-slate-200 px-1.5 py-1.5 text-center font-semibold tabular-nums outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-slate-100 disabled:font-normal"
                           aria-label={`${column.title} for ${student.firstName} ${student.lastName}`}
                         />
                         <label className="mt-0.5 flex items-center justify-center gap-1 text-[10px] text-slate-400">
@@ -237,14 +244,14 @@ export function SheetForm({
                     );
                   })}
 
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                     {totals?.classPart != null ? totals.classPart.toFixed(1) : "—"}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">
                     {totals?.examPart != null ? totals.examPart.toFixed(1) : "—"}
                   </td>
-                  <td className="px-3 py-1.5 text-right font-semibold tabular-nums text-slate-900">
-                    {totals ? totals.total.toFixed(1) : "—"}
+                  <td className="px-3 py-2 text-center">
+                    <ScoreBadge value={totals ? totals.total : null} />
                   </td>
                 </tr>
               );

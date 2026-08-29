@@ -34,8 +34,11 @@ await prisma.session.create({ data: {
   userId: owner.userId, tokenHash: createHash("sha256").update(token).digest("hex"),
   activeSchoolId: owner.schoolId, expiresAt: new Date(Date.now() + 3600e3) } });
 
-// A published report card, if one exists — asked for before we let the pool go.
+// Every read happens here, before the pool is released — reopening it while
+// Chrome is browsing starves the dev server and every page 500s.
 const published = await prisma.termResult.findFirst();
+const assignment = await prisma.teachingAssignment.findFirst();
+const currentTerm = await prisma.term.findFirst({ where: { isCurrent: true } });
 await prisma.$disconnect();
 
 const chrome = spawn(CHROME, [
@@ -76,10 +79,20 @@ await send("Network.setCookie", {
 
 const shots = [
   ["dashboard", "/dashboard", 1440, 950],
-  ["marksheet", "/assessments/sheet", 1440, 950],
+  ["students", "/students", 1440, 950],
   ["invoices", "/invoices", 1440, 950],
   ["login", "/login", 1440, 950],
 ];
+
+// An OPEN mark sheet, not the empty picker — the picker shows none of the work.
+if (assignment && currentTerm) {
+  shots.push([
+    "marksheet",
+    `/assessments/sheet?term=${currentTerm.id}&class=${assignment.classGroupId}&subject=${assignment.subjectId}`,
+    1560,
+    950,
+  ]);
+}
 
 if (published) {
   shots.push(["reportcard", `/results/${published.studentId}?term=${published.termId}`, 1000, 1500]);

@@ -6,7 +6,7 @@ import { getExpenseList, getTermCashPosition } from "@/lib/expense-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { cancelExpense } from "@/lib/expense-actions";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Stat, Card, EmptyRow, inputClass, thClass, tableHeadClass } from "../ui";
+import { PageHeader, Stat, Card, EmptyRow, filterClass, thClass, tableHeadClass } from "../ui";
 import { SubmitButton } from "../submit-button";
 import { ExpenseForm } from "./expense-form";
 
@@ -67,7 +67,7 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <form className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
-            <select name="term" defaultValue={termId ?? ""} className={`${inputClass} w-auto`}>
+            <select name="term" defaultValue={termId ?? ""} className={`${filterClass} w-auto`}>
               <option value="">All terms</option>
               {data.terms.map((term) => (
                 <option key={term.id} value={term.id}>
@@ -75,7 +75,7 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
                 </option>
               ))}
             </select>
-            <select name="category" defaultValue={categoryId ?? ""} className={`${inputClass} w-auto`}>
+            <select name="category" defaultValue={categoryId ?? ""} className={`${filterClass} w-auto`}>
               <option value="">All categories</option>
               {data.categories.map((category) => (
                 <option key={category.id} value={category.id}>
@@ -88,7 +88,7 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
               name="q"
               defaultValue={q ?? ""}
               placeholder="Voucher, description or payee"
-              className={`${inputClass} w-56`}
+              className={`${filterClass} w-56`}
             />
             <button
               type="submit"

@@ -6,7 +6,7 @@ import { FINANCE } from "@/lib/permissions";
 import { getInvoiceList, getInvoiceFilterOptions } from "@/lib/invoice-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Stat, Card, StatusBadge, EmptyRow, inputClass, thClass, tableHeadClass } from "../ui";
+import { PageHeader, Stat, Card, StatusBadge, EmptyRow, filterClass, thClass, tableHeadClass } from "../ui";
 import { GenerateForm } from "./generate-form";
 
 export const metadata: Metadata = { title: "Invoices · School OS" };
@@ -75,7 +75,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
       <GenerateForm terms={terms} currentTermId={currentTerm?.id} />
 
       <form className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white p-3">
-        <select name="term" defaultValue={termId ?? ""} className={`${inputClass} w-auto`}>
+        <select name="term" defaultValue={termId ?? ""} className={`${filterClass} w-auto`}>
           <option value="">All terms</option>
           {terms.map((term) => (
             <option key={term.id} value={term.id}>
@@ -84,7 +84,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
           ))}
         </select>
 
-        <select name="status" defaultValue={status ?? ""} className={`${inputClass} w-auto`}>
+        <select name="status" defaultValue={status ?? ""} className={`${filterClass} w-auto`}>
           <option value="">Any status</option>
           {STATUSES.map((value) => (
             <option key={value} value={value}>
@@ -93,7 +93,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
           ))}
         </select>
 
-        <select name="class" defaultValue={classGroupId ?? ""} className={`${inputClass} w-auto`}>
+        <select name="class" defaultValue={classGroupId ?? ""} className={`${filterClass} w-auto`}>
           <option value="">All classes</option>
           {classGroups.map((group) => (
             <option key={group.id} value={group.id}>
@@ -107,7 +107,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
           name="q"
           defaultValue={q ?? ""}
           placeholder="Name, admission or invoice no."
-          className={`${inputClass} w-56`}
+          className={`${filterClass} w-56`}
         />
 
         <button

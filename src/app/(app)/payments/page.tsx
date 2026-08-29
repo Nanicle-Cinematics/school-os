@@ -13,7 +13,7 @@ import {
   StatusBadge,
   EmptyRow,
   Alert,
-  inputClass,
+  filterClass,
   thClass,
   tableHeadClass,
 } from "../ui";
@@ -88,9 +88,9 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
           name="q"
           defaultValue={q ?? ""}
           placeholder="Receipt no., reference or student"
-          className={`${inputClass} w-64`}
+          className={`${filterClass} w-64`}
         />
-        <select name="method" defaultValue={method ?? ""} className={`${inputClass} w-auto`}>
+        <select name="method" defaultValue={method ?? ""} className={`${filterClass} w-auto`}>
           <option value="">Any method</option>
           <option value="CASH">Cash</option>
           <option value="MOBILE_MONEY">Mobile money</option>

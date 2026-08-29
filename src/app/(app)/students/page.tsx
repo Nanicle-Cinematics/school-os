@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE, canAccess } from "@/lib/permissions";
 import { getStudentFormOptions, getStudentList } from "@/lib/student-data";
-import { EmptyRow, PageHeader, inputClass, tableHeadClass, thClass } from "../ui";
+import { Avatar, EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
 import { AdmitStudentForm } from "./student-form";
 
 export const metadata: Metadata = { title: "Students · School OS" };
@@ -89,9 +89,9 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
           name="q"
           defaultValue={query}
           placeholder="Name or admission no."
-          className={`${inputClass} w-56`}
+          className={`${filterClass} w-56`}
         />
-        <select name="class" defaultValue={classGroupId} className={`${inputClass} w-44`}>
+        <select name="class" defaultValue={classGroupId} className={`${filterClass} w-44`}>
           <option value="">All classes</option>
           {classGroups.map((group) => (
             <option key={group.id} value={group.id}>
@@ -99,7 +99,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
             </option>
           ))}
         </select>
-        <select name="status" defaultValue={status} className={`${inputClass} w-36`}>
+        <select name="status" defaultValue={status} className={`${filterClass} w-36`}>
           <option value="">All statuses</option>
           {STATUSES.map((value) => (
             <option key={value} value={value}>
@@ -125,8 +125,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
           <table className="w-full text-left text-sm">
             <thead className={tableHeadClass}>
               <tr>
-                <th className={thClass}>Admission no.</th>
-                <th className={thClass}>Name</th>
+                <th className={thClass}>Pupil</th>
                 <th className={thClass}>Class</th>
                 <th className={thClass}>House</th>
                 <th className={thClass}>Primary guardian</th>
@@ -135,18 +134,26 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
             </thead>
             <tbody className="divide-y divide-slate-100">
               {students.length === 0 ? (
-                <EmptyRow colSpan={6}>No students found.</EmptyRow>
+                <EmptyRow colSpan={5}>No students found.</EmptyRow>
               ) : (
                 students.map((student) => {
                   const guardian = student.guardians[0]?.guardian;
                   return (
                     <tr key={student.id} className="hover:bg-slate-50">
-                      <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-500">
-                        {student.admissionNo}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-900">
-                        <Link href={`/students/${student.id}`} className="hover:underline">
-                          {student.lastName}, {student.firstName}
+                      <td className="whitespace-nowrap px-4 py-2.5">
+                        <Link
+                          href={`/students/${student.id}`}
+                          className="group flex items-center gap-3"
+                        >
+                          <Avatar firstName={student.firstName} lastName={student.lastName} />
+                          <span className="min-w-0">
+                            <span className="block truncate font-bold text-slate-900 group-hover:underline">
+                              {student.lastName}, {student.firstName}
+                            </span>
+                            <span className="block font-mono text-[11px] text-slate-400">
+                              {student.admissionNo}
+                            </span>
+                          </span>
                         </Link>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
@@ -169,7 +176,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5">
                         <span
-                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-extrabold ${
                             STATUS_TONE[student.status] ?? "bg-slate-100 text-slate-500"
                           }`}
                         >
