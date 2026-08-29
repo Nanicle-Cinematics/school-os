@@ -50,7 +50,7 @@ export function ReportCard({
         breakAfter ? "print:break-after-page" : ""
       }`}
     >
-      <header className="flex items-center gap-4 border-b-2 border-brand-700 pb-4 text-center">
+      <header className="flex items-center gap-4 border-b-2 border-brand-800 pb-4 text-center">
         {schoolCrestUrl ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -66,7 +66,7 @@ export function ReportCard({
         {schoolMotto ? (
           <p className="mt-0.5 font-display text-xs italic text-accent-600">{schoolMotto}</p>
         ) : null}
-        <p className="mt-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">
+        <p className="mt-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-800">
           Terminal Report
         </p>
         <p className="text-xs text-slate-500">
@@ -116,7 +116,7 @@ export function ReportCard({
 
       <table className="mt-4 w-full text-sm">
         <thead>
-          <tr className="bg-brand-700 text-xs uppercase tracking-wide text-white print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
+          <tr className="bg-brand-800 text-xs uppercase tracking-wide text-white print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
             <th className="px-2 py-1.5 text-left font-semibold">Subject</th>
             <th className="px-2 py-1.5 text-right font-semibold">
               Class ({settings?.classScoreWeight ?? 30}%)

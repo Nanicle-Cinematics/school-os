@@ -16,7 +16,7 @@ const PLAN_TONE: Record<string, string> = {
   TRIAL: "bg-amber-50 text-amber-700",
   STARTER: "bg-blue-50 text-blue-700",
   GROWTH: "bg-green-50 text-green-700",
-  SCHOOL_PLUS: "bg-brand-700 text-white",
+  SCHOOL_PLUS: "bg-brand-600 text-white",
 };
 
 export default async function AdminPage() {

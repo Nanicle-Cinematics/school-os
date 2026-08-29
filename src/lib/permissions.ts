@@ -26,9 +26,32 @@ export type NavItem = {
   href: string;
   label: string;
   roles: Role[];
+  /** Key into the icon set in `nav.tsx`. The rail is icon-first. */
+  icon: NavIcon;
   /** Rendered but not yet implemented — links to a stub page. */
   stub?: boolean;
 };
+
+export type NavIcon =
+  | "dashboard"
+  | "students"
+  | "guardians"
+  | "staff"
+  | "houses"
+  | "classes"
+  | "subjects"
+  | "sheet"
+  | "assessments"
+  | "results"
+  | "remarks"
+  | "promotions"
+  | "fees"
+  | "invoices"
+  | "payments"
+  | "expenses"
+  | "messages"
+  | "users"
+  | "settings";
 
 export type NavSection = {
   heading: string;
@@ -38,44 +61,44 @@ export type NavSection = {
 export const NAV: NavSection[] = [
   {
     heading: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard", roles: [...OFFICE, "ACCOUNTANT"] }],
+    items: [{ href: "/dashboard", label: "Dashboard", icon: "dashboard", roles: [...OFFICE, "ACCOUNTANT"] }],
   },
   {
     heading: "People",
     items: [
-      { href: "/students", label: "Students", roles: OFFICE },
-      { href: "/guardians", label: "Guardians", roles: OFFICE },
-      { href: "/staff", label: "Staff", roles: OFFICE },
-      { href: "/houses", label: "Houses", roles: OFFICE },
+      { href: "/students", label: "Students", icon: "students", roles: OFFICE },
+      { href: "/guardians", label: "Guardians", icon: "guardians", roles: OFFICE },
+      { href: "/staff", label: "Staff", icon: "staff", roles: OFFICE },
+      { href: "/houses", label: "Houses", icon: "houses", roles: OFFICE },
     ],
   },
   {
     heading: "Academics",
     items: [
-      { href: "/classes", label: "Classes", roles: OFFICE },
-      { href: "/subjects", label: "Subjects", roles: OFFICE },
-      { href: "/assessments/sheet", label: "Mark sheet", roles: MARKING },
-      { href: "/assessments", label: "Assessments", roles: LEADERSHIP },
-      { href: "/results", label: "Results", roles: LEADERSHIP },
-      { href: "/results/remarks", label: "Conduct & remarks", roles: MARKING },
-      { href: "/promotions", label: "Promotions", roles: OFFICE },
+      { href: "/classes", label: "Classes", icon: "classes", roles: OFFICE },
+      { href: "/subjects", label: "Subjects", icon: "subjects", roles: OFFICE },
+      { href: "/assessments/sheet", label: "Mark sheet", icon: "sheet", roles: MARKING },
+      { href: "/assessments", label: "Assessments", icon: "assessments", roles: LEADERSHIP },
+      { href: "/results", label: "Results", icon: "results", roles: LEADERSHIP },
+      { href: "/results/remarks", label: "Conduct & remarks", icon: "remarks", roles: MARKING },
+      { href: "/promotions", label: "Promotions", icon: "promotions", roles: OFFICE },
     ],
   },
   {
     heading: "Finance",
     items: [
-      { href: "/fees", label: "Fee structure", roles: FINANCE },
-      { href: "/invoices", label: "Invoices", roles: FINANCE },
-      { href: "/payments", label: "Payments", roles: FINANCE },
-      { href: "/expenses", label: "Expenses", roles: FINANCE },
+      { href: "/fees", label: "Fee structure", icon: "fees", roles: FINANCE },
+      { href: "/invoices", label: "Invoices", icon: "invoices", roles: FINANCE },
+      { href: "/payments", label: "Payments", icon: "payments", roles: FINANCE },
+      { href: "/expenses", label: "Expenses", icon: "expenses", roles: FINANCE },
     ],
   },
   {
     heading: "School",
     items: [
-      { href: "/messages", label: "Messages", roles: OFFICE },
-      { href: "/users", label: "Users", roles: OFFICE },
-      { href: "/settings", label: "Settings", roles: [...LEADERSHIP, "ADMIN"] },
+      { href: "/messages", label: "Messages", icon: "messages", roles: OFFICE },
+      { href: "/users", label: "Users", icon: "users", roles: OFFICE },
+      { href: "/settings", label: "Settings", icon: "settings", roles: [...LEADERSHIP, "ADMIN"] },
     ],
   },
 ];

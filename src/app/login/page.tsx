@@ -11,7 +11,7 @@ export default async function LoginPage() {
     <main className="flex min-h-full items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-700 font-display text-lg text-white">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 font-heading text-lg text-white">
             S
           </div>
           <h1 className="text-xl font-semibold text-slate-900">Sign in to School OS</h1>

@@ -90,7 +90,7 @@ export default async function PrintInvoicesPage({ searchParams }: PageProps<"/in
             href={`/invoices/print?term=${termId}${classGroupId ? `&class=${classGroupId}` : ""}${
               unpaidOnly ? "" : "&unpaid=1"
             }`}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             {unpaidOnly ? "Include settled bills" : "Only those still owing"}
           </Link>

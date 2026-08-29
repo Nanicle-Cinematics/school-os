@@ -69,7 +69,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
             <div className="flex items-center gap-2">
               <Link
                 href="/students/import"
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Import
               </Link>
@@ -109,7 +109,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
         </select>
         <button
           type="submit"
-          className="whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          className="whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           Filter
         </button>

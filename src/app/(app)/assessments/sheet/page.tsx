@@ -53,7 +53,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
         action={
           <Link
             href={isLeadership ? "/assessments" : "/results/remarks"}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             {isLeadership ? "Single assessments" : "Conduct & remarks"}
           </Link>
@@ -105,7 +105,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
 
           <button
             type="submit"
-            className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800"
+            className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
           >
             Open sheet
           </button>

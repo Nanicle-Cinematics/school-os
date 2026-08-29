@@ -3,29 +3,10 @@ import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { canAccess, isTeacherOnly, landingFor, FINANCE } from "@/lib/permissions";
 import { getDashboard, formatCedis } from "@/lib/dashboard-data";
+import { Card, Stat } from "../ui";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
-      {sub ? <p className="mt-0.5 text-xs text-slate-500">{sub}</p> : null}
-    </div>
-  );
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white">
-      <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
 
 export default async function DashboardPage() {
   const auth = await requireAuth();
@@ -69,6 +50,7 @@ export default async function DashboardPage() {
               label="Outstanding"
               value={formatCedis(data.outstanding)}
               sub={`${data.debtorCount} students owing`}
+              tone={data.outstanding > 0 ? "attention" : "default"}
             />
           </>
         ) : (
@@ -147,7 +129,7 @@ export default async function DashboardPage() {
                 <span className="w-28 shrink-0 truncate text-sm text-slate-700">{level.name}</span>
                 <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                   <span
-                    className="block h-full rounded-full bg-brand-700"
+                    className="block h-full rounded-full bg-brand-600"
                     style={{ width: `${(level.count / maxLevel) * 100}%` }}
                   />
                 </span>

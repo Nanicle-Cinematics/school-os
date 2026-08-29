@@ -15,7 +15,7 @@ export default function NoAccessPage() {
         <form action={logout} className="mt-5">
           <button
             type="submit"
-            className="w-full rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-800"
+            className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
           >
             Sign out
           </button>

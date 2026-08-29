@@ -15,38 +15,44 @@
   /* Neutrals, warmed. Tailwind's stock slate is blue-grey and reads cold and
      clinical; these are the same ramp pulled towards green-grey so the paper
      under a report card looks like paper. */
-  --color-slate-50: #f6f7f5;
-  --color-slate-100: #edf0eb;
-  --color-slate-200: #dfe3dd;
-  --color-slate-300: #c6cdc3;
-  --color-slate-400: #8a9990;
-  --color-slate-500: #5b6b62;
+  --color-slate-50: #f4f7f4;
+  --color-slate-100: #eaefea;
+  --color-slate-200: #e4eae5;
+  --color-slate-300: #c8d2ca;
+  --color-slate-400: #8a9a92;
+  --color-slate-500: #586b61;
   --color-slate-600: #48564e;
   --color-slate-700: #37423b;
   --color-slate-800: #232c27;
-  --color-slate-900: #16211c;
+  --color-slate-900: #0f1f19;
 
-  /* Brand: deep forest green. Primary actions, the active nav item, focus
-     rings, and the rule across the head of a report card. */
-  --color-brand-50: #f0f5f2;
-  --color-brand-100: #dce8e2;
-  --color-brand-200: #b9d1c6;
-  --color-brand-300: #8db4a4;
-  --color-brand-400: #57907c;
-  --color-brand-500: #2f7360;
-  --color-brand-600: #23604e;
-  --color-brand-700: #1b4d3e;
-  --color-brand-800: #163e32;
-  --color-brand-900: #102d25;
+  /* Brand. Two jobs: brand-600 is the live green that primary actions wear, and
+     brand-800/900 are the near-black greens the navigation rail is built from.
+     They are one family so the rail and the buttons read as the same school. */
+  --color-brand-50: #edf7f2;
+  --color-brand-100: #d6ece1;
+  --color-brand-200: #a9d8c4;
+  --color-brand-300: #74bda1;
+  --color-brand-400: #3ea37f;
+  --color-brand-500: #17936b;
+  --color-brand-600: #12805c;
+  --color-brand-700: #0e6a4c;
+  --color-brand-800: #0b5138;
+  --color-brand-900: #063324;
 
-  /* Accent: a muted gold, for the motto, the crest rule and the one figure on a
-     screen that matters most. Never for body text — it does not carry contrast. */
-  --color-accent-50: #faf6ec;
-  --color-accent-100: #f6efdd;
-  --color-accent-200: #ead9ae;
-  --color-accent-500: #b5892b;
-  --color-accent-600: #9a7223;
-  --color-accent-700: #7d5c1c;
+  /* Accent: gold, and rationed. It marks the one figure on a screen that decides
+     what someone does next — the outstanding balance, the busiest week, the
+     active rail item, the motto on a report card. Nowhere else, or it stops
+     meaning anything. 600 and 700 are the only two with enough contrast for
+     text on white. */
+  --color-accent-50: #fdf8ec;
+  --color-accent-100: #faeece;
+  --color-accent-200: #f2d999;
+  --color-accent-300: #e9b44c;
+  --color-accent-400: #e4a936;
+  --color-accent-500: #e0a32e;
+  --color-accent-600: #b07d1d;
+  --color-accent-700: #8a6116;
 }
 
 /* Light-only for now. The admin console is used in bright offices and on cheap
@@ -62,10 +68,21 @@ body {
   color: var(--color-slate-900);
 }
 
-/* Page titles, dashboard figures and the head of a report card. Tabular figures
-   so a column of money does not shift as the digits change. */
+/* Serif, and now only for the two things that get printed: the masthead of a
+   report card and of a fee invoice. The app's own headings are bold sans — a
+   serif page title read fine on paper and looked apologetic on a dashboard. */
 .font-display {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+
+/* App headings: tight, heavy, tabular where they are numbers. */
+.font-heading {
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+/* When dark mode is built it is BLACK, not a dark green — the green stays as
+   the brand accent against it. The blocker is not the palette: 69 hardcoded
+   `bg-white` across 51 files have to route through a surface token first. */

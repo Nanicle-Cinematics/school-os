@@ -53,7 +53,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/staff">) {
         </label>
         <button
           type="submit"
-          className="whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          className="whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           Apply
         </button>

@@ -12,7 +12,7 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="font-display text-2xl text-slate-900">{title}</h1>
+        <h1 className="font-heading text-2xl text-slate-900">{title}</h1>
         {subtitle ? <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p> : null}
       </div>
       {action}
@@ -25,18 +25,40 @@ export function Stat({
   value,
   sub,
   tone = "default",
+  trend,
 }: {
   label: string;
   value: string;
   sub?: string;
-  tone?: "default" | "positive" | "negative";
+  tone?: "default" | "positive" | "negative" | "attention";
+  /** A period-on-period movement, shown as a chip beside the label. */
+  trend?: { value: string; up: boolean };
 }) {
   const toneClass =
-    tone === "positive" ? "text-brand-600" : tone === "negative" ? "text-red-600" : "text-slate-900";
+    tone === "positive"
+      ? "text-brand-600"
+      : tone === "negative"
+        ? "text-red-600"
+        : tone === "attention"
+          ? "text-accent-600"
+          : "text-slate-900";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`font-display mt-1.5 text-2xl tabular-nums ${toneClass}`}>{value}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(12,40,28,0.04),0_8px_24px_rgba(12,40,28,0.05)]">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
+          {label}
+        </p>
+        {trend ? (
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
+              trend.up ? "bg-brand-50 text-brand-600" : "bg-red-50 text-red-600"
+            }`}
+          >
+            {trend.up ? "↑" : "↓"} {trend.value}
+          </span>
+        ) : null}
+      </div>
+      <p className={`font-heading mt-2 text-[28px] tabular-nums ${toneClass}`}>{value}</p>
       {sub ? <p className="mt-0.5 text-xs text-slate-500">{sub}</p> : null}
     </div>
   );
@@ -52,10 +74,10 @@ export function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(12,40,28,0.04),0_8px_24px_rgba(12,40,28,0.05)]">
       {title ? (
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
+          <h2 className="text-[14.5px] font-extrabold tracking-tight text-slate-900">{title}</h2>
           {action}
         </div>
       ) : null}
@@ -83,7 +105,7 @@ export function Field({
 }
 
 export const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600";
+  "w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25";
 
 export function Alert({ tone, children }: { tone: "error" | "success"; children: React.ReactNode }) {
   return (
@@ -113,7 +135,7 @@ const STATUS_TONE: Record<string, string> = {
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium ${
+      className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-extrabold ${
         STATUS_TONE[status] ?? "bg-slate-100 text-slate-500"
       }`}
     >
@@ -126,7 +148,7 @@ export function ButtonLink({ href, children }: { href: string; children: React.R
   return (
     <Link
       href={href}
-      className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800"
+      className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
     >
       {children}
     </Link>

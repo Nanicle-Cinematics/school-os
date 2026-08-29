@@ -271,18 +271,38 @@ the re-skin affordable. Three groups:
 - **`slate-*` is redefined, not replaced.** Tailwind's stock slate is blue-grey
   and reads cold; these are the same ramp pulled towards green-grey. Every
   existing `text-slate-600` picked up the warmth for free.
-- **`brand-*` is the deep forest green** — primary buttons, the active nav item,
-  focus rings, the rule and table band on a report card. Every `bg-slate-900` in
-  the app was a primary action with `text-white` on it (checked, all 38), which
-  is why a blanket swap to `bg-brand-700` was safe.
-- **`accent-*` is a muted gold** for the motto and the crest rule. Never body
-  text — it does not carry contrast.
+- **`brand-*` does two jobs.** `brand-600` is the live green primary actions wear;
+  `brand-800`/`900` are the near-black greens the navigation rail is built from.
+  One family, so the rail and the buttons read as the same school. Print keeps
+  the deep end — `brand-800` — because a live green prints thin.
+- **`accent-*` is gold, and rationed.** It marks the one figure on a screen that
+  decides what someone does next: the outstanding balance, the active rail item,
+  the motto on a report card. Nowhere else, or it stops meaning anything. Only
+  600 and 700 have enough contrast for text on white.
 
-Type is Public Sans for everything read at a glance and **Newsreader** for the
-few places a school's own voice belongs: page titles, dashboard figures, and the
-masthead of a report card or invoice. Apply it with `.font-display`, defined in
-globals.css. Both are self-hosted by `next/font`, so a school on a slow link is
-not waiting on Google.
+Type is **Plus Jakarta Sans** for the app — it carries the 800 weight the
+headings need and tabular figures that keep a column of cedis from shifting.
+**Newsreader** stays, but ONLY for print: the masthead of a report card and of a
+fee invoice (`.font-display`). A serif page title read well on paper and looked
+apologetic on a dashboard, so the app's headings are `.font-heading` — bold sans,
+tight tracking. Both are self-hosted by `next/font`.
+
+**The rail** (`nav.tsx`) is icon-first and carries the school's identity, so the
+header does not repeat it. `NavItem.icon` keys into the icon set there; a new
+nav entry needs one. The bottom corner is not decoration — it holds the current
+term and how many days until it closes, which is the one thing a head teacher
+wants permanently in view.
+
+⚠️ **Only the BEST-matching nav item is active, not every prefix.**
+`/assessments/sheet` starts with `/assessments`, so a plain `startsWith` test lit
+Mark sheet and Assessments at once. `NavLinks` picks the longest matching href
+across all sections. Note React emits `aria-current` BEFORE `href`, which will
+break a naive test regex.
+
+**Dark mode, when it is built, is BLACK** — not a dark green. The green stays as
+the brand accent against it. The blocker is not the palette: 69 hardcoded
+`bg-white` across 51 files (plus 86 `border-slate-200`, 68 `bg-slate-50`) have to
+route through a surface token first, or the theme will half-work.
 
 **The crest and the head's signature** are uploaded on `/settings/branding` and
 print at the head and foot of a report card, and at the head of a fee invoice.

@@ -54,7 +54,7 @@ export function InvoiceBill({
         breakAfter ? "print:break-after-page" : ""
       }`}
     >
-      <header className="flex items-center gap-4 border-b-2 border-brand-700 pb-3 text-center">
+      <header className="flex items-center gap-4 border-b-2 border-brand-800 pb-3 text-center">
         {school.crestUrl ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -77,7 +77,7 @@ export function InvoiceBill({
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-brand-700">Fee Invoice</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-brand-800">Fee Invoice</p>
           <p className="text-xs text-slate-600">
             {TERM_NAME[invoice.term.name] ?? invoice.term.name} Term ·{" "}
             {invoice.term.academicYear.name}
@@ -155,7 +155,7 @@ export function InvoiceBill({
         </tbody>
       </table>
 
-      <dl className="mt-3 ml-auto max-w-xs space-y-1 border-t-2 border-brand-700 pt-2 text-sm">
+      <dl className="mt-3 ml-auto max-w-xs space-y-1 border-t-2 border-brand-800 pt-2 text-sm">
         <div className="flex justify-between">
           <dt className="text-slate-600">Subtotal</dt>
           <dd className="tabular-nums">{formatCedis(invoice.subtotal)}</dd>
@@ -182,7 +182,7 @@ export function InvoiceBill({
             <dd className="tabular-nums">−{formatCedis(invoice.amountPaid)}</dd>
           </div>
         ) : null}
-        <div className="flex justify-between border-t-2 border-brand-700 pt-1">
+        <div className="flex justify-between border-t-2 border-brand-800 pt-1">
           <dt className="text-base font-semibold">Balance due</dt>
           <dd className="text-base font-bold tabular-nums">{formatCedis(invoice.balance)}</dd>
         </div>

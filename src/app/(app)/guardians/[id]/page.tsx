@@ -95,7 +95,7 @@ export default async function GuardianDetailPage({
                     <td className="whitespace-nowrap px-4 py-2 text-slate-600">
                       {link.relationship.toLowerCase()}
                       {link.isPrimary ? (
-                        <span className="ml-2 rounded bg-brand-700 px-1.5 py-0.5 text-xs font-medium text-white">
+                        <span className="ml-2 rounded bg-brand-600 px-1.5 py-0.5 text-xs font-medium text-white">
                           primary
                         </span>
                       ) : null}

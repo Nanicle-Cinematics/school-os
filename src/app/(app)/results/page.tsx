@@ -54,7 +54,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-brand-800"
+          className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
         >
           Show
         </button>

@@ -22,7 +22,7 @@ export function SubmitButton({
     "rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed";
   const tone =
     variant === "primary"
-      ? "bg-brand-700 text-white hover:bg-brand-800"
+      ? "bg-brand-600 text-white hover:bg-brand-700"
       : variant === "danger"
         ? "border border-red-200 bg-white text-red-700 hover:bg-red-50"
         : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50";

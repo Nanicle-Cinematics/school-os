@@ -52,7 +52,7 @@ export default async function BrandingPage() {
         <Link href="/settings" className="text-sm text-slate-500 hover:text-slate-900">
           ← Settings
         </Link>
-        <h1 className="font-display mt-1 text-2xl text-slate-900">Crest and signature</h1>
+        <h1 className="font-heading mt-1 text-2xl text-slate-900">Crest and signature</h1>
         <p className="mt-0.5 text-sm text-slate-500">
           What makes a report card look like it came from this school and no other.
         </p>

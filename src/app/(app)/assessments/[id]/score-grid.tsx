@@ -61,7 +61,7 @@ export function ScoreGrid({
                       disabled={readOnly}
                       placeholder="—"
                       aria-label={`Score for ${row.name}`}
-                      className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm tabular-nums outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-600 disabled:bg-slate-50 disabled:text-slate-400"
+                      className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm tabular-nums outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50 disabled:text-slate-400"
                     />
                   </td>
                   <td className="px-4 py-2">
