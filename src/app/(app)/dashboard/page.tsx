@@ -3,7 +3,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { canAccess, isTeacherOnly, landingFor, FINANCE } from "@/lib/permissions";
-import { getAttention, getDashboard, formatCedis, type AttentionItem } from "@/lib/dashboard-data";
+import {
+  getAttention,
+  getCollections,
+  getDashboard,
+  formatCedis,
+  type AttentionItem,
+} from "@/lib/dashboard-data";
+import { CollectionsChart } from "./collections-chart";
 import { Card, Stat } from "../ui";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
@@ -71,6 +78,15 @@ export default async function DashboardPage() {
 
   // Sequential, not alongside getDashboard: DATABASE_URL pins the pool small and
   // the two fan out into it. The fee counts are handed over rather than re-read.
+  const collections = showMoney
+    ? await getCollections(
+        auth.schoolId,
+        data.term
+          ? { id: data.term.id, startDate: data.term.startDate, endDate: data.term.endDate }
+          : null,
+      )
+    : null;
+
   const attention = await getAttention(
     auth.schoolId,
     data.term ? { id: data.term.id, academicYearId: data.term.academicYearId } : null,
@@ -125,6 +141,10 @@ export default async function DashboardPage() {
       </div>
 
       <Attention items={attention} />
+
+      {showMoney && collections ? (
+        <CollectionsChart collections={collections} billed={data.billed} />
+      ) : null}
 
       {showMoney ? (
         <div className="grid gap-4 lg:grid-cols-2">

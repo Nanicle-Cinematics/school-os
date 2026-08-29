@@ -233,3 +233,97 @@ export async function getAttention(
 
   return items;
 }
+
+export type CollectionWeek = {
+  /** 1-based week of the term. */
+  index: number;
+  label: string;
+  /** Human range, for the hover. */
+  range: string;
+  amount: number;
+  /** Share of the term's best week, 0–1, which is what the bar height shows. */
+  share: number;
+  isCurrent: boolean;
+};
+
+export type Collections = {
+  weeks: CollectionWeek[];
+  total: number;
+  best: number;
+};
+
+const WEEK = 7 * 24 * 60 * 60 * 1000;
+const dayMonth = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+
+/**
+ * Fees collected, by week of the term.
+ *
+ * Buckets ALLOCATIONS against this term's invoices, not payments by date. The
+ * two differ: a payment made in week 3 can settle last term's arrears, and the
+ * "Collected" stat card reads `invoice.amountPaid`. Bucketing allocations makes
+ * the bars sum to exactly that figure — which `verify:collections` asserts,
+ * because a chart that disagrees with the number above it is worse than no
+ * chart.
+ *
+ * One query. The rows are two small columns bounded by a single term.
+ */
+export async function getCollections(
+  schoolId: string,
+  term: { id: string; startDate: Date; endDate: Date } | null,
+  now = new Date(),
+): Promise<Collections> {
+  if (!term) {
+    return { weeks: [], total: 0, best: 0 };
+  }
+
+  const allocations = await prisma.paymentAllocation.findMany({
+    where: { schoolId, invoice: { termId: term.id } },
+    select: { amount: true, payment: { select: { paidAt: true } } },
+  });
+
+  const start = term.startDate.getTime();
+  const termWeeks = Math.max(1, Math.ceil((term.endDate.getTime() - start) / WEEK));
+  // Weeks that have actually happened — an empty tail of future weeks reads as
+  // a collapse in collections rather than as a term still running.
+  const elapsed = Math.min(termWeeks, Math.max(1, Math.ceil((now.getTime() - start) / WEEK)));
+
+  const sums = new Array<number>(termWeeks).fill(0);
+  let total = 0;
+  for (const row of allocations) {
+    const amount = Number(row.amount);
+    total += amount;
+    // Money allocated to this term but paid before it opened belongs to week 1.
+    const offset = row.payment.paidAt.getTime() - start;
+    const index = Math.min(termWeeks - 1, Math.max(0, Math.floor(offset / WEEK)));
+    sums[index] += amount;
+  }
+
+  // The window covers the weeks that have happened AND every week holding money.
+  // A payment can be dated ahead of today — a bursar entering Friday's takings on
+  // Monday, a term whose fees were settled before it opened — and trimming to
+  // "weeks elapsed" alone would hide that money from a chart whose own subtitle
+  // still counts it.
+  const lastWithMoney = sums.reduce((last, amount, i) => (amount > 0 ? i : last), -1);
+  const shown = sums.slice(0, Math.max(elapsed, lastWithMoney + 1));
+  const best = Math.max(0, ...shown);
+
+  // Only a term actually under way has a current week.
+  const withinTerm = now.getTime() >= start && now.getTime() <= term.endDate.getTime();
+  const currentIndex = withinTerm ? Math.floor((now.getTime() - start) / WEEK) : -1;
+
+  const weeks = shown.map((amount, i) => {
+    const from = new Date(start + i * WEEK);
+    const to = new Date(Math.min(start + (i + 1) * WEEK - 1, term.endDate.getTime()));
+    return {
+      index: i + 1,
+      label: `Wk ${i + 1}`,
+      range: `${dayMonth.format(from)} – ${dayMonth.format(to)}`,
+      amount,
+      share: best > 0 ? amount / best : 0,
+      isCurrent: i === currentIndex,
+    };
+  });
+
+  // Long terms: the last dozen weeks are the ones anyone is looking at.
+  return { weeks: weeks.slice(-12), total, best };
+}

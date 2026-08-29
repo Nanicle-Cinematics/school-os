@@ -380,6 +380,32 @@ create is silently accepted by `tsx` (esbuild strips types without checking) and
 lands a NULL — which reads as "not marked" rather than failing. Run
 `node_modules/.bin/tsc --noEmit` over scripts, not just the app.
 
+## The weekly collections chart
+
+Buckets **allocations against this term's invoices**, not payments by date. The
+two differ — a payment made in week 3 can settle last term's arrears — and the
+"Collected" stat card reads `invoice.amountPaid`. Bucketing allocations makes the
+bars sum to exactly that figure, which `verify:collections` asserts: a chart that
+quietly disagrees with the number printed above it is worse than no chart.
+
+Design decisions worth keeping:
+
+- **The accent marks the CURRENT week, not the biggest one.** Colour has to
+  follow the entity rather than its rank, or the highlight jumps around as money
+  comes in and stops meaning anything.
+- **One series, so no legend** — the card title names it. Two values are printed
+  (current week, best week); the rest are on hover, and all of them are in an
+  `sr-only` table.
+- **The window covers weeks elapsed OR any week holding money**, whichever
+  reaches further. Trimming to "weeks elapsed" alone hid a week whose payments
+  were dated ahead of today — the seed does exactly this — leaving bars summing
+  to zero under a subtitle reading GH₵26,542.
+
+⚠️ **Bar heights are in PIXELS.** A percentage height needs a parent with a
+definite height, and inside a flex row with `items-end` the columns size to their
+content — so the first version rendered week labels with no bars at all, and it
+looked like missing data rather than broken layout.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against
