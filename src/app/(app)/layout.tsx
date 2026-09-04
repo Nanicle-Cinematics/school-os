@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth";
 import { navFor, roleLabel } from "@/lib/permissions";
+import { canSearch } from "@/lib/search-data";
 import { logout } from "@/lib/auth-actions";
 import { prisma } from "@/lib/prisma";
 import { Sidebar, MobileNav, type RailTerm } from "./nav";
@@ -33,6 +34,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     : null;
 
   const school = { name: auth.schoolName, shortName: auth.schoolShortName };
+  // A teacher has two screens and nothing to search; the box would be a door to
+  // a page that redirects them straight back.
+  const showSearch = canSearch(auth.roles);
 
   const initials = auth.name
     .split(" ")
@@ -64,6 +68,32 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
               <p className="truncate text-sm font-semibold text-amber-600">No current term set</p>
             )}
           </div>
+
+          {showSearch ? (
+            <form method="get" action="/search" className="ml-2 hidden min-w-0 flex-1 md:block">
+              <label className="relative block max-w-sm">
+                <span className="sr-only">Search the school</span>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20.5 20.5 16.7 16.7" />
+                </svg>
+                <input
+                  type="search"
+                  name="q"
+                  placeholder="Search a pupil, receipt or invoice"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/25"
+                />
+              </label>
+            </form>
+          ) : null}
 
           <div className="ml-auto flex items-center gap-3">
             <div className="hidden text-right sm:block">

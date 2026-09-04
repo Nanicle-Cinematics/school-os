@@ -38,6 +38,7 @@ await prisma.session.create({ data: {
 // Chrome is browsing starves the dev server and every page 500s.
 const published = await prisma.termResult.findFirst();
 const assignment = await prisma.teachingAssignment.findFirst();
+const aPupil = await prisma.student.findFirst({ where: { deletedAt: null }, select: { lastName: true } });
 const currentTerm = await prisma.term.findFirst({ where: { isCurrent: true } });
 await prisma.$disconnect();
 
@@ -83,6 +84,10 @@ const shots = [
   ["invoices", "/invoices", 1440, 950],
   ["login", "/login", 1440, 950],
 ];
+
+if (aPupil) {
+  shots.push(["search", `/search?q=${encodeURIComponent(aPupil.lastName)}`, 1440, 950]);
+}
 
 // An OPEN mark sheet, not the empty picker — the picker shows none of the work.
 if (assignment && currentTerm) {
