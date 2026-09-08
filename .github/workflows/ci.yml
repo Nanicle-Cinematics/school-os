@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Daily. Prod schema changes are applied by hand (`db push`, no migrations),
+    # so drift is introduced outside any pipeline — a timer is the only thing
+    # that bounds how long it can go unnoticed. SchoolAsset managed ten days.
+    - cron: "0 6 * * *"
 
 # A newer push makes an in-flight run pointless; don't pay for both.
 concurrency:
@@ -92,5 +97,83 @@ jobs:
       - name: Invoicing — fee-structure matching and why a student was skipped
         run: npm run verify:invoicing
 
+      # A table with a schoolId has NO row security until `npm run db:rls` is
+      # re-run, and nothing runs it for you. That is how AssessmentTemplate
+      # (2026-08-28) and then SchoolAsset (2026-09-07) both reached production
+      # unprotected — the second went unnoticed for ten days. Nothing failed:
+      # the suites above run unscoped as the owner with DB_RLS=off, and the
+      # production guard in src/lib/prisma.ts only checks that the isolation
+      # env vars are SET, never that a policy exists. So a booting site and a
+      # green CI run both proved nothing about coverage.
+      #
+      # These two steps close that. The database is the throwaway service
+      # container, so no credentials are involved: apply the policies, then
+      # assert coverage. verify:isolation's FIRST check is the coverage
+      # assertion — every table with a schoolId carries RLS, FORCE and a policy
+      # — so a PR adding a tenant table without one fails here, naming the
+      # table, instead of shipping a cross-tenant read.
+      #
+      # These run last because the suites above deliberately exercise an
+      # unprotected database; applying RLS earlier would change what they test.
+      # Shell env overrides --env-file in Node, so DB_RLS=on wins over the
+      # DB_RLS="off" written into .env above without needing a second file.
+      - name: Apply row-level security
+        run: npm run db:rls
+        env:
+          # Without this, apply-rls.mjs invents a random password for the role
+          # and prints it, which no later step could use.
+          APP_DB_PASSWORD: ci-app-role-not-a-real-secret
+
+      - name: Tenant isolation — RLS coverage, cross-tenant reads and writes
+        run: npm run verify:isolation
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+
       - name: Build
         run: npm run build
+
+  # The job above proves the RLS machinery works; it CANNOT prove production is
+  # protected, because it runs `db:rls` on its own throwaway database, so a newly
+  # added tenant table is always protected there. Verified by adding a canary
+  # table on 2026-09-08: the run stayed green at 42 tables.
+  #
+  # The bug both incidents actually were is drift between the schema and
+  # PRODUCTION — a `db push` by hand with no `db:rls` after it. Only production
+  # can answer that, so this job asks it. Read-only: audit-rls.mjs runs no DDL,
+  # deliberately, so a forgotten step is reported rather than silently repaired.
+  prod-rls:
+    name: Production RLS coverage
+    runs-on: ubuntu-latest
+    # Not on pull requests: secrets are unavailable to fork PRs, and a PR has
+    # not deployed anything yet.
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Audit production RLS coverage
+        env:
+          # The OWNER connection (session pooler, 5432). Add under
+          # Settings → Secrets and variables → Actions. Until it exists this
+          # step skips rather than fails, so the check can be merged before the
+          # credential is rotated and stored.
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "PROD_DIRECT_URL is not set — skipping the production audit."
+            echo "Add it under Settings → Secrets and variables → Actions to enable this."
+            exit 0
+          fi
+          npm run audit:rls
