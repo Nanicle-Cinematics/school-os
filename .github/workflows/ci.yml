@@ -9,6 +9,10 @@ on:
     # so drift is introduced outside any pipeline — a timer is the only thing
     # that bounds how long it can go unnoticed. SchoolAsset managed ten days.
     - cron: "0 6 * * *"
+  # Run the production audit on demand: `gh workflow run CI`, or the Run workflow
+  # button. Wanted the moment you deploy a schema change rather than waiting for
+  # 06:00 UTC — and it is how this guard was first proved to work at all.
+  workflow_dispatch:
 
 # A newer push makes an in-flight run pointless; don't pay for both.
 concurrency:
