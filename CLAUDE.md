@@ -159,14 +159,47 @@ one transaction.
 **A new table is not protected until `npm run db:rls` is re-run.** The script
 enumerates tables from the database rather than from a list, so it is never out
 of date — but nothing runs it for you, and a migration that adds a tenant table
-ships that table with no row security at all. This has already happened once:
-`AssessmentTemplate` arrived with the mark sheet and went unprotected, so every
-school's Settings → Assessment components listed every other school's components
-(the count read 18 across three schools instead of 6). `verify:isolation` now
-fails on any table that has a `schoolId` but no RLS, FORCE and policy — run it
-after every migration, and against production after every deploy that carries
-one. The check is first in that suite deliberately: every other assertion proves
-isolation for the tables it names and proves nothing about a table added since.
+ships that table with no row security at all. This has already happened **twice**:
+
+- `AssessmentTemplate` arrived with the mark sheet and went unprotected, so every
+  school's Settings → Assessment components listed every other school's
+  components (the count read 18 across three schools instead of 6).
+- `SchoolAsset` arrived with the crest and signature on 2026-08-28 and was still
+  unprotected in production on 2026-09-07 — ten days, noticed only because the
+  prod table count had gone 40 → 41. Nothing failed in between, which is the
+  whole problem: the production guard in `src/lib/prisma.ts` checks only that
+  `APP_DATABASE_URL` and `DB_RLS=on` are **set**, never that a policy exists, so
+  a site that boots proves nothing about coverage.
+
+`verify:isolation` fails on any table that has a `schoolId` but no RLS, FORCE and
+policy. The check is first in that suite deliberately: every other assertion
+proves isolation for the tables it names and proves nothing about a table added
+since.
+
+**CI runs it on every PR**, against the throwaway service container — `db:rls`
+then `verify:isolation`, after the other suites (which deliberately exercise an
+unprotected database) and before the build.
+
+⚠️ **That job cannot catch a newly added tenant table, and must not be trusted
+to.** CI runs `db:rls` every time, and the script enumerates tables from the
+database, so a new model is created and protected in the same run and the
+coverage check passes. Verified by pushing a canary tenant table on 2026-09-08:
+the run stayed green at 42 tables. What that job does protect is the
+*machinery* — the Prisma extension, the GUCs, `tenant-context`, `apply-rls.mjs`
+itself — which has broken before, four ways in one afternoon.
+
+**The `prod-rls` job is the one that catches the real bug.** Both incidents were
+drift between the schema and PRODUCTION: a `db push` by hand with no `db:rls`
+after it. Only production knows, so that job asks production — daily, and on
+every push to main — via `npm run audit:rls` (`scripts/audit-rls.mjs`). It is
+read-only by design: it reports and fails rather than quietly applying, because a
+run that repaired drift and reported success would hide the forgotten step
+exactly as before. It needs the `PROD_DIRECT_URL` secret; without it the step
+skips rather than fails.
+
+Running `apply-rls.mjs` against prod after a deploy that carries a new tenant
+table is still the fix. The daily audit bounds how long forgetting it goes
+unnoticed; it does not remove the step.
 
 **Provisioning must stay bulk.** A school is handed 11 levels, 18 subjects, 104
 offerings, 14 finance categories and 6 assessment components, all inside one
