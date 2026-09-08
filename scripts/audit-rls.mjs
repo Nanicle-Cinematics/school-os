@@ -31,6 +31,11 @@ const UNSCOPED = ["User", "Session", "_prisma_migrations"];
 const prisma = new PrismaClient({ datasources: { db: { url } } });
 
 try {
+  // `School` is scoped by its own `id`, not by a `schoolId` column, so a query
+  // that looks only for `schoolId` misses it — and it is the table holding the
+  // tenant list. apply-rls.mjs protects it explicitly (`enable("School", "id")`),
+  // which is also why its count is one higher than a schoolId-only count: the
+  // 40 vs 41 that looked like drift on 2026-09-08 and was not.
   const rows = await prisma.$queryRawUnsafe(
     `
     select c.relname as table_name,
@@ -40,12 +45,17 @@ try {
              where p.schemaname = 'public' and p.tablename = c.relname) as policies
       from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
-      join information_schema.columns col
-        on col.table_schema = 'public'
-       and col.table_name = c.relname
-       and col.column_name = 'schoolId'
      where n.nspname = 'public' and c.relkind = 'r'
        and c.relname <> all($1::text[])
+       and (
+         c.relname = 'School'
+         or exists (
+           select 1 from information_schema.columns col
+            where col.table_schema = 'public'
+              and col.table_name = c.relname
+              and col.column_name = 'schoolId'
+         )
+       )
      order by c.relname
     `,
     UNSCOPED,
@@ -53,7 +63,9 @@ try {
 
   const gaps = rows.filter((r) => !r.rls || !r.forced || r.policies === 0);
 
-  console.log(`tenant tables: ${rows.length}`);
+  // Count the same way apply-rls.mjs reports it, so the two are comparable and
+  // a mismatch means real drift rather than two different definitions.
+  console.log(`tenant tables (incl. School): ${rows.length}`);
   console.log(`gaps: ${gaps.length}`);
 
   if (gaps.length > 0) {
