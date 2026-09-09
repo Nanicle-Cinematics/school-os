@@ -19,6 +19,8 @@ export type AuthContext = {
   headName: string | null;
   roles: Role[];
   staffId: string | null;
+  /** The Guardian this login represents, for a parent. Null for staff. */
+  guardianId: string | null;
   isPlatformAdmin: boolean;
 };
 
@@ -52,6 +54,16 @@ export async function requireAuth(): Promise<AuthContext> {
 
   setTenantContext({ schoolId: active.schoolId });
 
+  // One user can hold SEVERAL memberships in the same school — the unique key is
+  // (school, user, role) — and `active` is only the first of them. The person
+  // record therefore has to be gathered across all of this school's memberships,
+  // not read off that one row: a proprietor whose own child attends holds both
+  // OWNER (staffId set, guardianId null) and PARENT (the reverse), and whichever
+  // happened to sort first would otherwise decide what the app thinks they are.
+  const here = memberships.filter((m) => m.schoolId === active.schoolId);
+  const staffId = here.find((m) => m.staffId)?.staffId ?? null;
+  const guardianId = here.find((m) => m.guardianId)?.guardianId ?? null;
+
   return {
     userId: user.id,
     name: user.name,
@@ -63,8 +75,12 @@ export async function requireAuth(): Promise<AuthContext> {
     schoolCrestUrl: active.school.crestUrl,
     headSignatureUrl: active.school.headSignatureUrl,
     headName: active.school.headName,
-    roles: memberships.filter((m) => m.schoolId === active.schoolId).map((m) => m.role),
-    staffId: active.staffId,
+    roles: here.map((m) => m.role),
+    staffId,
+    // Scalar on Membership, so this needs no extra include in getSessionUser.
+    // It is the ONLY trustworthy source of "which family is this" — never take
+    // a guardian id from a URL or a form field.
+    guardianId,
     isPlatformAdmin: user.isPlatformAdmin,
   };
 }

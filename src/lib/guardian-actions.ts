@@ -8,6 +8,8 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { normalisePhone } from "@/lib/sms-shared";
+import { hashPassword, temporaryPassword } from "@/lib/password";
+import { writeAudit } from "@/lib/audit";
 
 export type GuardianState = { error?: string; ok?: string };
 
@@ -170,4 +172,116 @@ export async function deleteGuardian(formData: FormData): Promise<void> {
   await prisma.guardian.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/guardians");
   redirect("/guardians");
+}
+
+/**
+ * Give a guardian a login to the parent portal.
+ *
+ * This lives here rather than on /users deliberately. A PARENT membership is
+ * worthless — and lands on /no-access — unless `guardianId` is set, and /users
+ * never knows which guardian is meant. Creating it from the guardian's own
+ * record is what guarantees the link exists, so ASSIGNABLE_ROLES stays free of
+ * PARENT on purpose.
+ *
+ * Signing in by phone is the default because that is how most Ghanaian parents
+ * will use it; email is accepted when the school has one.
+ */
+export async function createGuardianLogin(
+  _prev: GuardianState,
+  formData: FormData,
+): Promise<GuardianState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const guardianId = String(formData.get("guardianId") ?? "");
+  if (!guardianId) {
+    return { error: "Which guardian is this login for?" };
+  }
+
+  const guardian = await prisma.guardian.findUnique({ where: { id: guardianId } });
+  if (!guardian) {
+    return { error: "That guardian no longer exists." };
+  }
+
+  const existing = await prisma.membership.count({
+    where: { schoolId: auth.schoolId, guardianId },
+  });
+  if (existing > 0) {
+    return { error: `${guardian.firstName} ${guardian.lastName} already has a portal login.` };
+  }
+
+  // A login with no children attached would sign in to an empty portal, which
+  // reads as though the school had lost the child. Refuse it with the fix.
+  const links = await prisma.studentGuardian.count({
+    where: { guardianId, student: { deletedAt: null } },
+  });
+  if (links === 0) {
+    return {
+      error: "Link at least one pupil to this guardian first — the portal would otherwise be empty.",
+    };
+  }
+
+  const email = String(formData.get("email") ?? guardian.email ?? "").trim().toLowerCase();
+  const phone = String(formData.get("phone") ?? guardian.phone ?? "").trim();
+  const normalised = phone ? normalisePhone(phone) : null;
+
+  if (!email && !normalised) {
+    return { error: "An email address or a Ghanaian mobile number is needed to sign in." };
+  }
+  if (phone && !normalised) {
+    return { error: "That phone number is not a Ghanaian mobile number, e.g. 0244123456." };
+  }
+
+  // User.email and User.phone are globally unique, so a parent with children at
+  // two schools would collide here. Say so plainly rather than surfacing a
+  // Prisma constraint error.
+  const clash = await prisma.user.findFirst({
+    where: {
+      OR: [...(email ? [{ email }] : []), ...(normalised ? [{ phone: normalised }] : [])],
+    },
+    select: { id: true },
+  });
+  if (clash) {
+    return { error: "That phone number or email already has an account on School OS." };
+  }
+
+  const password = temporaryPassword();
+  const passwordHash = await hashPassword(password);
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        name: `${guardian.firstName} ${guardian.lastName}`,
+        email: email || null,
+        phone: normalised,
+        passwordHash,
+        schoolId: auth.schoolId,
+      },
+    });
+
+    await tx.membership.create({
+      data: {
+        schoolId: auth.schoolId,
+        userId: user.id,
+        role: "PARENT",
+        guardianId,
+      },
+    });
+
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "guardian.login.create",
+      entity: "Guardian",
+      entityId: guardianId,
+      after: { guardianName: `${guardian.firstName} ${guardian.lastName}` },
+    });
+  });
+
+  revalidatePath(`/guardians/${guardianId}`);
+  // The password is shown once, here, because there is nowhere to look it up
+  // later — the same contract as a staff login.
+  return {
+    ok: `Portal login created. Temporary password: ${password} — give it to ${guardian.firstName} and ask them to change it.`,
+  };
 }

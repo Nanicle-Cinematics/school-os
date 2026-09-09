@@ -77,5 +77,11 @@ export async function getGuardian(id: string) {
     take: 500,
   });
 
-  return { guardian, students };
+  // Whether this guardian already has a parent-portal sign-in. Counted rather
+  // than included on the guardian, because a Membership belongs to the login
+  // side of the model and dragging it into every guardian read would widen a
+  // query used by the list screen too.
+  const logins = await prisma.membership.count({ where: { guardianId: id } });
+
+  return { guardian, students, hasLogin: logins > 0 };
 }

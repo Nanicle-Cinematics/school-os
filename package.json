@@ -25,6 +25,7 @@
     "verify:isolation": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-isolation.mts",
     "verify:onboarding": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-onboarding.mts",
     "verify:teacher": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-teacher.mts",
+    "verify:parent": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-parent.mts",
     "verify:attention": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-attention.mts",
     "verify:collections": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-collections.mts",
     "verify:activity": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-activity.mts",

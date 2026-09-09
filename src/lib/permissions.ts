@@ -103,6 +103,20 @@ export const NAV: NavSection[] = [
   },
 ];
 
+/**
+ * The parent portal. A guardian signs in to see their OWN children and nothing
+ * else — so, like MARKING, this is a short list of routes rather than a list of
+ * prohibitions.
+ *
+ * Note what this constant does NOT do: it decides which *routes* a parent may
+ * open, not which *rows* they may read. Row security here is per family, and
+ * Postgres RLS scopes by school, so every parent-facing query must additionally
+ * filter to the guardian's own children in the application. See requireGuardian
+ * and requireMyChild in portal-auth.ts — a route guard alone would let a parent
+ * read another family's child by changing the id in the URL.
+ */
+export const PARENT_PORTAL: Role[] = ["PARENT"];
+
 export function canAccess(roles: Role[], allowed: Role[]) {
   return roles.some((role) => allowed.includes(role));
 }
@@ -116,6 +130,15 @@ export function isTeacherOnly(roles: Role[]) {
 }
 
 /**
+ * Someone whose only role is PARENT. Unlike a teacher, a parent is never also
+ * staff in practice — but a proprietor whose own child attends the school would
+ * hold both, and must keep the whole app, so this is `every` rather than `some`.
+ */
+export function isParentOnly(roles: Role[]) {
+  return roles.length > 0 && roles.every((role) => role === "PARENT");
+}
+
+/**
  * Where a sign-in lands, and where a refused page sends someone.
  *
  * This must never point at a screen the same person would then be refused from:
@@ -124,7 +147,9 @@ export function isTeacherOnly(roles: Role[]) {
  * action, `requireRole`, `redirectIfAuthenticated` and the platform gate alike.
  */
 export function landingFor(roles: Role[]) {
-  return isTeacherOnly(roles) ? "/assessments/sheet" : "/dashboard";
+  if (isParentOnly(roles)) return "/portal";
+  if (isTeacherOnly(roles)) return "/assessments/sheet";
+  return "/dashboard";
 }
 
 export function navFor(roles: Role[]): NavSection[] {

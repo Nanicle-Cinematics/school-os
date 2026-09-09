@@ -366,6 +366,11 @@ const ACTIVITY: Record<
   },
   "expense.cancel": { kind: "money", title: () => "An expense was cancelled", detail: "Cash book" },
   "invoice.cancel": { kind: "money", title: () => "An invoice was cancelled", detail: "Fees" },
+  "guardian.login.create": {
+    kind: "people",
+    title: (a) => `${text(a.guardianName) ?? "A guardian"} was given a parent portal login`,
+    detail: "Guardians",
+  },
   "campaign.send": {
     kind: "message",
     title: (a) => `SMS sent to ${count(a.recipients)} ${plural(a.recipients, "recipient")}`,
@@ -410,6 +415,10 @@ function count(value: unknown) {
 }
 function plural(value: unknown, word: string) {
   return Number(value) === 1 ? word : `${word}s`;
+}
+/** A name out of untyped audit JSON, or null so the caller can phrase around it. */
+function text(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 /** Relative time, resolved here so no component reads the clock during render. */
