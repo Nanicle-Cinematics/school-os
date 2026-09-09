@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireMyChild } from "@/lib/portal-auth";
 import { getChildHeader, getChildFinance, getPublishedTerms } from "@/lib/portal-data";
 import { formatCedis } from "@/lib/money";
+import { termLabel } from "@/lib/academic-year";
 import { ChildHeader } from "../child-header";
 
 export const metadata = { title: "My child · School OS" };
@@ -67,7 +68,7 @@ export default async function ChildOverviewPage({ params }: PageProps<"/portal/[
         {latest ? (
           <>
             <p className="mt-2 text-lg font-extrabold text-slate-900">
-              {latest.term.name} Term · {latest.term.academicYear.name}
+              {termLabel(latest.term.name)} Term · {latest.term.academicYear.name}
             </p>
             <p className="mt-1 text-sm text-slate-500">
               {latest.average != null ? `Average ${Number(latest.average).toFixed(1)}%` : "Published"}

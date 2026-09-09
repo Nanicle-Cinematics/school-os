@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireMyChild } from "@/lib/portal-auth";
 import { getChildHeader, getPublishedTerms } from "@/lib/portal-data";
+import { termLabel } from "@/lib/academic-year";
 import { ChildHeader } from "../../child-header";
 
 export const metadata = { title: "Report cards · School OS" };
@@ -46,7 +47,7 @@ export default async function ChildResultsPage({
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold text-slate-900">
-                    {t.term.name} Term · {t.term.academicYear.name}
+                    {termLabel(t.term.name)} Term · {t.term.academicYear.name}
                   </p>
                   <p className="truncate text-sm text-slate-500">
                     {t.publishedAt ? `Published ${dateFmt.format(t.publishedAt)}` : "Published"}
