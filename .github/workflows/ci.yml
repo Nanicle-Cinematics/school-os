@@ -23,6 +23,9 @@ jobs:
   verify:
     name: Lint, seed and verify the engines
     runs-on: ubuntu-latest
+    # The server-backed guards drive the app over HTTP; if one wedges, fail in
+    # 20 minutes rather than sitting on a runner for GitHub's 6-hour default.
+    timeout-minutes: 20
 
     # A throwaway Postgres, seeded from scratch each run. The engine suites read
     # real rows — money reconciliation, grading, debtor filtering — so they need
@@ -136,6 +139,62 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # verify:teacher, verify:parent and verify:actions were left out of CI
+      # because they "need a running dev server". They do not — they need HTTP,
+      # and they already take VERIFY_BASE_URL. So CI starts the build it just
+      # made and points them at it.
+      #
+      # This matters most for verify:parent. A parent seeing only their OWN
+      # children is enforced in application code, not by Postgres: RLS scopes to
+      # the school, and two families are the same tenant. So unlike every other
+      # isolation property here, nothing in the database backstops a mistake —
+      # leaving it to "someone remembers to run it" made the portal's whole
+      # security model a manual check.
+      #
+      # Started with the RLS env so the server runs as production does, against
+      # the restricted role with policies applied by the step above.
+      - name: Start the built app
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+        run: |
+          npm run start > /tmp/server.log 2>&1 &
+          echo $! > /tmp/server.pid
+          for i in $(seq 1 60); do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login)" = "200" ]; then
+              echo "app answering after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the app never became ready:"; cat /tmp/server.log; exit 1
+
+      - name: Role guards — a teacher and a parent see only their own screens
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: |
+          npm run verify:teacher
+          npm run verify:parent
+
+      - name: Server-action guards — refusals and previews
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:actions
+
+      # if: always() so a failing guard still stops the app and shows its log —
+      # a server left running would hang the job, and the log is usually where
+      # the actual reason is.
+      - name: Stop the app
+        if: always()
+        run: |
+          kill "$(cat /tmp/server.pid)" 2>/dev/null || true
+          echo "--- server log (tail) ---"
+          tail -40 /tmp/server.log || true
 
   # The job above proves the RLS machinery works; it CANNOT prove production is
   # protected, because it runs `db:rls` on its own throwaway database, so a newly
