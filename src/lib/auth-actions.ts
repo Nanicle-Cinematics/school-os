@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { landingFor } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
+import { normalisePhone } from "@/lib/sms-shared";
 import { verifyPassword } from "@/lib/password";
 import { createSession, destroySession } from "@/lib/session";
 
@@ -19,11 +20,22 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   // Sign in by email or phone — many parents and staff have no email address.
+  //
+  // The phone is matched BOTH as typed and normalised. normalisePhone stores
+  // 0540000035 as 233540000035, so matching only the raw string meant a parent
+  // typing their number the way every Ghanaian knows it was told "incorrect
+  // email/phone or password" — indistinguishable from a wrong password, and
+  // with no way for them to guess the stored form.
+  const asPhone = normalisePhone(identifier);
   const user = await withBypass(() =>
     prisma.user.findFirst({
       where: {
         deletedAt: null,
-        OR: [{ email: identifier }, { phone: identifier }],
+        OR: [
+          { email: identifier },
+          { phone: identifier },
+          ...(asPhone && asPhone !== identifier ? [{ phone: asPhone }] : []),
+        ],
       },
       include: { memberships: { where: { status: "ACTIVE" } } },
     }),

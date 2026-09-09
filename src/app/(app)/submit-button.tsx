@@ -16,7 +16,13 @@ export function SubmitButton({
   /** Lets one form drive two actions, e.g. "preview" alongside "send". */
   formAction?: (formData: FormData) => void | Promise<void>;
 }) {
-  const { pending } = useFormStatus();
+  // `action` says WHICH action is in flight. Without comparing it, every
+  // SubmitButton in a form shows its pending label on any submit — so the
+  // messages screen said "Sending…" while you were only previewing, and the
+  // parent-invite screen said "Creating…" while you were only checking. On
+  // buttons that spend money or create accounts that is genuinely alarming.
+  const status = useFormStatus();
+  const pending = status.pending && (!formAction || status.action === formAction);
 
   const base =
     "rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed";
