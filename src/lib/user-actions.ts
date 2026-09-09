@@ -69,6 +69,8 @@ export async function createUserAccount(
           email: email || null,
           phone: phone || null,
           passwordHash,
+          // Temporary: the layouts divert this login to /account/password.
+          mustChangePassword: true,
           schoolId: auth.schoolId,
         },
       });
@@ -261,7 +263,12 @@ export async function resetUserPassword(
   const passwordHash = await hashPassword(password);
 
   await tenantTransaction(auth.schoolId, async (tx) => {
-    await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+    // An admin reset also hands out a temporary password, so the same rule
+    // applies: it gets the account in once, then must be replaced.
+    await tx.user.update({
+      where: { id: userId },
+      data: { passwordHash, mustChangePassword: true },
+    });
     // Every existing session is invalidated — a reset is usually a response to
     // a lost or shared password, and leaving old sessions alive defeats it.
     await tx.session.deleteMany({ where: { userId } });

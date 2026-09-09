@@ -403,6 +403,11 @@ const ACTIVITY: Record<
   "school.asset.upload": { kind: "admin", title: () => "The crest or signature was updated", detail: "Settings" },
   "school.asset.remove": { kind: "admin", title: () => "The crest or signature was removed", detail: "Settings" },
   "school.provision": { kind: "admin", title: () => "The school was set up", detail: "Nanicle" },
+  "user.password.change": {
+    kind: "admin",
+    title: () => "A password was changed",
+    detail: "Security",
+  },
 };
 
 function money(value: unknown) {

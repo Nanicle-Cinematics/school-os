@@ -282,6 +282,33 @@ async function main() {
     }
 
     console.log("");
+    // A temporary password must stop being a way in once it has been used. The
+    // layouts divert such a session to /account/password and nothing else — and
+    // that page lives OUTSIDE both route groups precisely so the redirect cannot
+    // land on itself, which is the failure this asserts against.
+    await withBypass(() =>
+      prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: true } }),
+    );
+    const diverted = await get("/portal", token);
+    check(
+      "a temporary password diverts the portal to /account/password",
+      diverted.status >= 300 && diverted.status < 400 &&
+        (diverted.location ?? "").includes("/account/password"),
+      `status ${diverted.status} -> ${diverted.location}`,
+    );
+    const changeScreen = await get("/account/password", token);
+    check(
+      "the change-password screen itself opens (no redirect loop)",
+      changeScreen.status === 200,
+      `status ${changeScreen.status}`,
+    );
+    await withBypass(() =>
+      prisma.user.update({ where: { id: user.id }, data: { mustChangePassword: false } }),
+    );
+    const back = await get("/portal", token);
+    check("clearing the flag restores the portal", back.status === 200, `status ${back.status}`);
+
+    console.log("");
     for (const path of FORBIDDEN) {
       const r = await get(path, token);
       const refused = r.status >= 300 && r.status < 400;

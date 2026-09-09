@@ -243,6 +243,43 @@ rendering in full for a teacher who typed the URL, because their own
 verify:teacher` signs in as a real teacher and asks for every route by URL,
 which is what caught it — run it after touching any role list.
 
+## Passwords
+
+Every account is created with a **temporary** password: the office reads it out
+once and it is never recoverable. Until 2026-09-09 that password was also
+*permanent* — the app had no change-password screen at all, for staff or
+parents, and the guardian-login banner even told the office to "ask them to
+change it", which was not something the software could do.
+
+`/account/password` now does it, and `User.mustChangePassword` forces it.
+
+⚠️ **The page lives OUTSIDE both `(app)` and `(portal)` deliberately.** Both
+layouts divert a flagged session to it; if it sat inside either group that
+redirect would land on itself and the two would chase each other — the same trap
+`landingFor` exists to avoid for teachers. `verify:parent` asserts the divert
+*and* that the page itself opens, so a future move back inside a group fails
+loudly.
+
+**Everything that issues a temporary password sets the flag** — `createUserAccount`,
+`resetUserPassword`, `createGuardianLogin`, and `provisionSchool` for a school's
+very first proprietor. Add the flag to any new one, or that account keeps a
+read-aloud password forever.
+
+`changePassword` requires the CURRENT password (a session left open on a shared
+phone must not be enough to take the account over) and deletes every OTHER
+session on success, so a password changed *because* it leaked actually ends the
+leak. It clears the flag and stamps `passwordChangedAt`.
+
+`mustChangePassword` rides on `AuthContext` rather than being queried in the
+layouts: `getSessionUser` uses `include: { user: … }`, which already selects
+every user scalar, so reading it costs nothing. Querying it separately added a
+round trip to every page load, which on this link is seconds.
+
+**Not built yet:** forgot-password (a parent who loses theirs must ring the
+office for a reset), SMS delivery of the temporary password, and bulk creation
+of parent logins. A 400-pupil school is currently ~400 trips through the
+guardian form.
+
 ## The parent portal
 
 A guardian signs in and sees their own children: what is owed, the receipts the
@@ -541,7 +578,8 @@ npm run verify:onboarding # walks every screen of a school provisioned minutes a
 npm run verify:teacher   # a teacher reaches the two marking screens and nothing else,
                          # and an assignment counts only for its own year
 npm run verify:parent    # a parent sees their own children and NOT another family's,
-                         # and never an unpublished report card
+                         # never an unpublished report card, and a temporary
+                         # password diverts to /account/password
 ```
 
 `verify:actions` is the only one that goes over HTTP, because the guards it

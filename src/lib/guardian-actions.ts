@@ -255,6 +255,8 @@ export async function createGuardianLogin(
         email: email || null,
         phone: normalised,
         passwordHash,
+        // Temporary: the portal diverts this login to /account/password.
+        mustChangePassword: true,
         schoolId: auth.schoolId,
       },
     });
@@ -282,6 +284,6 @@ export async function createGuardianLogin(
   // The password is shown once, here, because there is nowhere to look it up
   // later — the same contract as a staff login.
   return {
-    ok: `Portal login created. Temporary password: ${password} — give it to ${guardian.firstName} and ask them to change it.`,
+    ok: `Portal login created. Temporary password: ${password} — give it to ${guardian.firstName}. They will be asked to choose their own the first time they sign in.`,
   };
 }

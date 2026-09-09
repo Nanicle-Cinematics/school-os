@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { navFor, roleLabel } from "@/lib/permissions";
 import { canSearch } from "@/lib/search-data";
@@ -17,6 +18,14 @@ function daysUntil(date: Date) {
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   // Establishes the tenant context for every query below this layout.
   const auth = await requireAuth();
+
+  // Same rule for staff: a login created by the office carries a temporary
+  // password, and it stops working as a way in once seen. /account/password is
+  // outside this group so the redirect has somewhere to land.
+  if (auth.mustChangePassword) {
+    redirect("/account/password");
+  }
+
   const sections = navFor(auth.roles);
 
   // The current term drives almost every screen, so the rail keeps it in view.

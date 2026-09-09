@@ -251,6 +251,12 @@ model User {
 
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
+
+  // Set whenever the account is handed a TEMPORARY password — on creation, and
+  // on an admin reset. The layouts divert such a session to /account/password
+  // and nothing else, so a password the office read aloud cannot stay in use.
+  mustChangePassword Boolean   @default(false)
+  passwordChangedAt  DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?

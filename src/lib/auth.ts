@@ -21,6 +21,8 @@ export type AuthContext = {
   staffId: string | null;
   /** The Guardian this login represents, for a parent. Null for staff. */
   guardianId: string | null;
+  /** Still holding the temporary password the office issued. */
+  mustChangePassword: boolean;
   isPlatformAdmin: boolean;
 };
 
@@ -81,6 +83,10 @@ export async function requireAuth(): Promise<AuthContext> {
     // It is the ONLY trustworthy source of "which family is this" — never take
     // a guardian id from a URL or a form field.
     guardianId,
+    // Already loaded — getSessionUser includes every user scalar — so the
+    // layouts can divert a temporary password without a second round trip,
+    // which on this link would cost seconds on every page.
+    mustChangePassword: user.mustChangePassword,
     isPlatformAdmin: user.isPlatformAdmin,
   };
 }
