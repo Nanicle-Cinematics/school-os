@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getGuardianList } from "@/lib/guardian-data";
-import { EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
+import { ButtonLink, EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
 import { NewGuardianForm } from "./guardian-form";
 
 export const metadata: Metadata = { title: "Guardians · School OS" };
@@ -21,7 +21,12 @@ export default async function GuardiansPage({ searchParams }: PageProps<"/guardi
         subtitle={
           query ? `${guardians.length} matching “${query}” of ${total}` : `${total} on file`
         }
-        action={<NewGuardianForm />}
+        action={
+          <div className="flex items-center gap-2">
+            <ButtonLink href="/guardians/invites">Invite to portal</ButtonLink>
+            <NewGuardianForm />
+          </div>
+        }
       />
 
       <form className="flex gap-2">
