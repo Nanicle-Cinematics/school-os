@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { previewInvites, sendInvites, type InviteState } from "@/lib/portal-invite-actions";
 import { Alert, Card, Field, filterClass } from "../../ui";
 import { SubmitButton } from "../../submit-button";
@@ -23,18 +23,68 @@ export function InviteForm({
   const [state, formAction] = useActionState<InviteState, FormData>(previewInvites, {});
   const [sendState, sendAction] = useActionState<InviteState, FormData>(sendInvites, {});
 
-  // CONTROLLED on purpose. Left uncontrolled, the select reset to "Every class"
-  // when useActionState re-rendered the form after a preview — so the card read
-  // "Create 3 logins" for one class while the field underneath said every class,
-  // and pressing it would have created 43 and sent 43 texts. The preview and the
-  // run must be the same audience, and that means the value has to survive the
-  // re-render.
   const [classGroupId, setClassGroupId] = useState("");
+  const selectRef = useRef<HTMLSelectElement>(null);
 
-  const shown = sendState.result ? sendState : state;
+  // ⚠️ React RESETS a form's DOM fields once its action completes, and being
+  // CONTROLLED does not save this select from it: the re-render carries the same
+  // `value` prop it had before, React sees no change and leaves the reset node
+  // alone. So after a preview the field silently showed "Every class" again while
+  // the card above still read "3 logins will be created" — and pressing Create
+  // invited all 43 guardians in the school. Put the choice back after every run.
+  useEffect(() => {
+    if (selectRef.current) selectRef.current.value = classGroupId;
+  }, [classGroupId, state, sendState]);
+
+  const previewed = state.preview;
+
+  // Say the class out loud wherever a number appears. "3 logins" and "43 logins"
+  // look equally reasonable on their own; "3 logins for Kindergarten 1 A" does not.
+  const classLabel = (id: string | null | undefined) =>
+    id ? (classes.find((c) => c.id === id)?.label ?? "that class") : "every class";
+
+  /**
+   * Which card the screen is currently about.
+   *
+   * `useActionState` keeps a result forever, so after one class was invited the
+   * Done card sat on top of every later preview and the next class could not be
+   * checked at all without reloading the page — on a screen whose whole design is
+   * "a class at a time". Previewing again therefore puts the run's result away.
+   */
+  const [ranFor, setRanFor] = useState<string | null>(null);
+  const done = ranFor !== null ? sendState.result : undefined;
+  // A run that REFUSES has no result, so the screen must still be showing the
+  // run's state — otherwise it falls back to the preview's and the refusal is
+  // rendered nowhere at all, which is how a guard comes to fire in silence.
+  const ran = ranFor !== null;
+
+  const previewAgain = useCallback(
+    (formData: FormData) => {
+      setRanFor(null);
+      return formAction(formData);
+    },
+    [formAction],
+  );
+
+  // The run's audience is the one the SERVER previewed, carried in React state —
+  // never re-read from the form, for the reason above. `expectedCount` goes with
+  // it so the action can refuse outright if the school no longer matches what
+  // was on screen; a login is not something to create on a stale count.
+  const runInvites = useCallback(
+    (formData: FormData) => {
+      formData.set("classGroupId", previewed?.classGroupId ?? "");
+      formData.set("expectedCount", String(previewed?.count ?? ""));
+      setRanFor(classLabel(previewed?.classGroupId));
+      return sendAction(formData);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [previewed?.classGroupId, previewed?.count, sendAction],
+  );
+
+  const shown = ran ? sendState : state;
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={previewAgain} className="space-y-4">
       <Card title="Who to invite">
         <div className="space-y-3 p-4">
           {!smsLive ? (
@@ -47,6 +97,7 @@ export function InviteForm({
 
           <Field label="Class">
             <select
+              ref={selectRef}
               name="classGroupId"
               className={filterClass}
               value={classGroupId}
@@ -66,18 +117,21 @@ export function InviteForm({
             number, are skipped and listed below.
           </p>
 
-          <SubmitButton pendingLabel="Checking…">Preview</SubmitButton>
+          <SubmitButton formAction={previewAgain} pendingLabel="Checking…">
+            Preview
+          </SubmitButton>
         </div>
       </Card>
 
       {shown.error ? <Alert tone="error">{shown.error}</Alert> : null}
 
-      {state.preview && !sendState.result ? (
+      {state.preview && !done ? (
         <Card title="What will happen">
           <div className="space-y-3 p-4">
             <p className="text-sm text-slate-900">
               <span className="font-bold">{state.preview.count}</span> login
-              {state.preview.count === 1 ? "" : "s"} will be created
+              {state.preview.count === 1 ? "" : "s"} will be created for{" "}
+              <span className="font-bold">{classLabel(state.preview.classGroupId)}</span>
               {smsLive ? (
                 <>
                   {" "}and texted — {state.preview.segments} SMS segment
@@ -121,9 +175,10 @@ export function InviteForm({
             ) : null}
 
             {state.preview.count > 0 ? (
-              <SubmitButton formAction={sendAction} pendingLabel="Creating…">
+              <SubmitButton formAction={runInvites} pendingLabel="Creating…">
                 Create {state.preview.count} login
-                {state.preview.count === 1 ? "" : "s"}
+                {state.preview.count === 1 ? "" : "s"} for{" "}
+                {classLabel(state.preview.classGroupId)}
                 {smsLive ? " and text them" : ""}
               </SubmitButton>
             ) : null}
@@ -131,28 +186,29 @@ export function InviteForm({
         </Card>
       ) : null}
 
-      {sendState.result ? (
+      {done ? (
         <Card title="Done">
           <div className="space-y-3 p-4">
             <p className="text-sm text-slate-900">
-              <span className="font-bold">{sendState.result.created}</span> login
-              {sendState.result.created === 1 ? "" : "s"} created,{" "}
-              <span className="font-bold">{sendState.result.texted}</span> texted.
-              {sendState.result.remaining > 0
-                ? ` ${sendState.result.remaining} still to do — run it again.`
+              <span className="font-bold">{done.created}</span> login
+              {done.created === 1 ? "" : "s"} created for{" "}
+              <span className="font-bold">{ranFor}</span>,{" "}
+              <span className="font-bold">{done.texted}</span> texted.
+              {done.remaining > 0
+                ? ` ${done.remaining} still to do — run it again.`
                 : ""}
             </p>
 
-            {sendState.result.undelivered.length > 0 ? (
+            {done.undelivered.length > 0 ? (
               <>
                 <Alert tone="error">
-                  {sendState.result.undelivered.length} password
-                  {sendState.result.undelivered.length === 1 ? " was" : "s were"} not
+                  {done.undelivered.length} password
+                  {done.undelivered.length === 1 ? " was" : "s were"} not
                   delivered. This is the only time they are shown — write them down
                   and give them to the parent.
                 </Alert>
                 <ul className="space-y-1 text-sm">
-                  {sendState.result.undelivered.map((u) => (
+                  {done.undelivered.map((u) => (
                     <li key={u.phone} className="rounded-lg bg-slate-50 p-2">
                       <span className="font-semibold text-slate-900">{u.name}</span>{" "}
                       <span className="text-slate-500">{u.phone}</span>

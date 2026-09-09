@@ -63,6 +63,18 @@ transport, health, payroll. Single-campus by design — there is no `Branch` mod
 - **Disk is tight** (~12 GB free). A corrupted `node_modules` from a full disk
   shows up as esbuild `EBADMACHO` / errno 88; fix with
   `rm -rf node_modules package-lock.json && npm cache clean --force && npm install`.
+- ⚠️ **React RESETS a form's fields once its action completes, and making an
+  input CONTROLLED does not stop it.** The re-render carries the same `value`
+  prop as before, React sees no change, and the reset DOM node is left alone —
+  so a field silently returns to its default while the card above still reports
+  what the *previous* value produced. On `/guardians/invites` that meant a screen
+  reading "Create 3 logins" whose select had gone back to "Every class": pressing
+  it invited all 43 guardians in the school. **A second action in the same form
+  must never re-read a field for its audience.** Take it from the state the first
+  action returned, `formData.set` it in a wrapper around the dispatch, and have
+  the action refuse if the count no longer matches what was shown. Re-apply the
+  value to the DOM in an effect as well, or the screen goes on lying about what
+  it is about to do.
 
 ## The GES curriculum is the onboarding baseline
 

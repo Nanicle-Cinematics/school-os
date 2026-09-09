@@ -27,6 +27,13 @@ export type InviteState = {
   error?: string;
   /** Set after a preview; nothing has been written. */
   preview?: {
+    /**
+     * The audience this preview was computed for, echoed back so the run can be
+     * asked for exactly it. The screen must not re-read the class from the form:
+     * React resets a form's fields once its action completes, so by the time the
+     * Create button is pressed the select has quietly returned to "Every class".
+     */
+    classGroupId: string | null;
     count: number;
     skipped: InviteSkip[];
     segments: number;
@@ -66,6 +73,7 @@ export async function previewInvites(
           ? "Nobody here can be invited yet — see the reasons below."
           : "No guardians found for that class.",
       preview: {
+        classGroupId,
         count: 0,
         skipped: plan.skipped,
         segments: 0,
@@ -81,6 +89,7 @@ export async function previewInvites(
 
   return {
     preview: {
+      classGroupId,
       count: willSend,
       skipped: plan.skipped,
       segments: perMessage * willSend,
@@ -109,10 +118,34 @@ export async function sendInvites(_prev: InviteState, formData: FormData): Promi
     return { error: "Nobody here can be invited." };
   }
 
+  const batchSize = Math.min(plan.candidates.length, BATCH_LIMIT);
+
+  /**
+   * Create exactly the number the office was shown, or nothing at all.
+   *
+   * This is what stands between a mis-submitted field and a whole school's worth
+   * of accounts: the screen once offered "Create 3 logins" while the form beneath
+   * it had reverted to every class, and the run created 43. A count that no longer
+   * matches means the audience is not the one that was checked — whether the form
+   * lost the class or a pupil was admitted in between — and the answer to that is
+   * to look again, not to guess which was meant.
+   */
+  const expected = Number(formData.get("expectedCount"));
+  if (!Number.isInteger(expected) || expected <= 0) {
+    return { error: "Check who will be invited first — then create the logins." };
+  }
+  if (expected !== batchSize) {
+    return {
+      error:
+        `This would create ${batchSize} login${batchSize === 1 ? "" : "s"}, but you were shown ` +
+        `${expected}. Nothing has been created — press Preview again to see who is now on the list.`,
+    };
+  }
+
   const settings = await prisma.schoolSettings.findUnique({ where: { schoolId: auth.schoolId } });
   const smsLive = Boolean(settings?.smsEnabled && settings?.smsProvider);
 
-  const batch = plan.candidates.slice(0, BATCH_LIMIT);
+  const batch = plan.candidates.slice(0, batchSize);
   let created = 0;
   let texted = 0;
   const undelivered: NonNullable<InviteState["result"]>["undelivered"] = [];
