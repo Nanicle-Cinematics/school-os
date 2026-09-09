@@ -206,7 +206,7 @@ jobs:
   # can answer that, so this job asks it. Read-only: audit-rls.mjs runs no DDL,
   # deliberately, so a forgotten step is reported rather than silently repaired.
   prod-rls:
-    name: Production RLS coverage
+    name: Production checks — RLS coverage and schema drift
     runs-on: ubuntu-latest
     # Not on pull requests: secrets are unavailable to fork PRs, and a PR has
     # not deployed anything yet.
@@ -240,3 +240,46 @@ jobs:
             exit 0
           fi
           npm run audit:rls
+
+      # Production's schema is changed BY HAND — there are no migrations, and
+      # `db push` needs the owner password, which as of 2026-09-09 is lost (the
+      # last schema change was applied by pasting SQL into Supabase's editor).
+      # So nothing at all connected the repo's schema to the database's, and the
+      # only thing standing between a forgotten ALTER and a 500 on every
+      # authenticated page was somebody remembering. main auto-deploys.
+      #
+      # `migrate diff` exits 2 when they disagree, and prints the SQL that would
+      # reconcile them — which is exactly what you paste into the SQL editor.
+      # Verified against a real Supabase database that it does NOT report false
+      # drift for RLS policies, the school_os_app role, or Supabase's own
+      # objects; and that a deliberately added field makes it exit 2.
+      - name: Schema drift — does production match prisma/schema.prisma?
+        env:
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "PROD_DIRECT_URL is not set — skipping the drift check."
+            exit 0
+          fi
+          set +e
+          node_modules/.bin/prisma migrate diff \
+            --from-url "$DIRECT_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script --exit-code > /tmp/drift.sql 2>/tmp/drift.err
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "production matches prisma/schema.prisma"
+            exit 0
+          fi
+          if [ "$code" = "2" ]; then
+            echo "DRIFT: production does not match prisma/schema.prisma."
+            echo "Paste this into the Supabase SQL editor to reconcile it:"
+            echo "---"
+            cat /tmp/drift.sql
+            echo "---"
+            exit 1
+          fi
+          echo "migrate diff failed (exit $code):"
+          cat /tmp/drift.err
+          exit 1

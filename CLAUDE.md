@@ -201,6 +201,28 @@ Running `apply-rls.mjs` against prod after a deploy that carries a new tenant
 table is still the fix. The daily audit bounds how long forgetting it goes
 unnoticed; it does not remove the step.
 
+**The same job also checks for SCHEMA drift.** Production's schema is changed by
+hand — there are no migrations, and `db push` needs the owner password, which is
+lost (see Passwords). So nothing connected the repo's schema to the database's,
+and the only thing between a forgotten `ALTER` and a 500 on every authenticated
+page was somebody remembering. `prisma migrate diff --exit-code` fails the job
+and prints the SQL that reconciles them — paste that straight into Supabase's SQL
+editor, which needs no password.
+
+⚠️ **To change the production schema without the owner password:** diff the two
+datamodels offline — this needs no database at all —
+
+```bash
+git show main:prisma/schema.prisma > /tmp/old.prisma
+node_modules/.bin/prisma migrate diff \
+  --from-schema-datamodel /tmp/old.prisma \
+  --to-schema-datamodel prisma/schema.prisma --script
+```
+
+then run that SQL in the Supabase SQL editor and confirm with an
+`information_schema.columns` select BEFORE merging. `main` auto-deploys, so a
+column the code expects and the database lacks is an outage, not a degradation.
+
 **Provisioning must stay bulk.** A school is handed 11 levels, 18 subjects, 104
 offerings, 14 finance categories and 6 assessment components, all inside one
 transaction. Written row-at-a-time with an existence check each — as it first
