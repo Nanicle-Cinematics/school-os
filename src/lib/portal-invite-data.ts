@@ -38,6 +38,15 @@ export type InvitePlan = {
 };
 
 /**
+ * 233540000035 -> 0540000035. Phones are stored normalised, but that is not a
+ * form any Ghanaian recognises — and the office reads these numbers aloud.
+ * Shared so the SMS and the on-screen list cannot show different things.
+ */
+export function localPhone(stored: string) {
+  return stored.startsWith("233") ? `0${stored.slice(3)}` : stored;
+}
+
+/**
  * The message a parent receives. Built inline rather than from a
  * MessageTemplate on purpose: a missing template makes queueTransactionalSms
  * return silently, and an invitation that silently does not send leaves an
@@ -50,12 +59,9 @@ export function inviteMessage(args: {
   password: string;
   url: string;
 }) {
-  // The number is shown the way a Ghanaian reads it (0244…), not the stored
-  // 233… form. Login matches both, so either works — but a parent should not be
-  // asked to type a format they have never seen.
-  const local = args.identifier.startsWith("233")
-    ? `0${args.identifier.slice(3)}`
-    : args.identifier;
+  // Shown the way a Ghanaian reads it. Login matches both forms, so either
+  // works — but a parent should not be asked to type one they have never seen.
+  const local = localPhone(args.identifier);
   return (
     `${args.schoolName}: your parent portal is ready. ` +
     `Sign in at ${args.url} with ${local} and password ${args.password}. ` +
