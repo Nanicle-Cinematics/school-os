@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireMyChild } from "@/lib/portal-auth";
 import { getChildHeader, getChildFinance } from "@/lib/portal-data";
 import { formatCedis } from "@/lib/money";
+import { termLabel } from "@/lib/academic-year";
 import { ChildHeader } from "../../child-header";
 
 export const metadata = { title: "School fees · School OS" };
@@ -44,8 +45,11 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
           {owing ? formatCedis(outstanding) : "Paid up"}
         </p>
         <p className="mt-1 text-sm text-slate-500">
-          {formatCedis(paidTotal)} received across {payments.length} receipt
-          {payments.length === 1 ? "" : "s"}
+          {payments.length === 0
+            ? "No payments received yet."
+            : `${formatCedis(paidTotal)} received across ${payments.length} receipt${
+                payments.length === 1 ? "" : "s"
+              }`}
         </p>
       </div>
 
@@ -61,7 +65,7 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
               <li key={inv.id} className="rounded-2xl border border-slate-200 bg-white p-4">
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-bold text-slate-900">
-                    {inv.term.name} Term · {inv.term.academicYear.name}
+                    {termLabel(inv.term.name)} Term · {inv.term.academicYear.name}
                   </p>
                   <p
                     className={`shrink-0 font-bold tabular-nums ${

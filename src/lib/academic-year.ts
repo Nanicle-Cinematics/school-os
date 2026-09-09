@@ -23,3 +23,22 @@ export function splitIntoTerms(start: Date, end: Date) {
     return { sequence, name: SEQUENCE_NAME[sequence], startDate: termStart, endDate: termEnd };
   });
 }
+
+/**
+ * "FIRST" → "First". A term's name is a Prisma enum, so it renders as a SHOUTED
+ * word unless mapped — "FIRST Term · 2026/2027" reached the parent portal that
+ * way, on a bill.
+ *
+ * Lives here because the same three-line map had been copy-pasted into eight
+ * screens; a ninth screen that simply forgot it is exactly how the enum leaked
+ * to a parent. Prefer this to writing the map again.
+ */
+const TERM_LABELS: Record<string, string> = {
+  FIRST: "First",
+  SECOND: "Second",
+  THIRD: "Third",
+};
+
+export function termLabel(name: string) {
+  return TERM_LABELS[name] ?? name;
+}
