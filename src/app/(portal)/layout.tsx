@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { logout } from "@/lib/auth-actions";
 import { requireGuardian } from "@/lib/portal-auth";
 
@@ -16,6 +17,13 @@ import { requireGuardian } from "@/lib/portal-auth";
  */
 export default async function PortalLayout({ children }: LayoutProps<"/">) {
   const ctx = await requireGuardian();
+
+  // A parent signed in with the temporary password the office read to them gets
+  // one screen until they replace it. /account/password sits outside this route
+  // group precisely so this redirect cannot land on itself.
+  if (ctx.mustChangePassword) {
+    redirect("/account/password");
+  }
 
   return (
     <div className="flex min-h-full flex-col bg-slate-50">
