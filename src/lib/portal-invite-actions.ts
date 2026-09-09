@@ -10,7 +10,7 @@ import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
 import { sendSms } from "@/lib/sms";
 import { countSegments, RATE_PER_SEGMENT } from "@/lib/sms-shared";
-import { getInvitePlan, inviteMessage, type InviteSkip } from "@/lib/portal-invite-data";
+import { getInvitePlan, inviteMessage, localPhone, type InviteSkip } from "@/lib/portal-invite-data";
 
 /**
  * One run creates at most this many logins.
@@ -164,7 +164,7 @@ export async function sendInvites(_prev: InviteState, formData: FormData): Promi
         error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
           ? "that phone number already has a School OS account"
           : "the login could not be created";
-      undelivered.push({ name: c.name, phone: c.phone, password: "—", why });
+      undelivered.push({ name: c.name, phone: localPhone(c.phone), password: "—", why });
       continue;
     }
     created += 1;
@@ -172,7 +172,7 @@ export async function sendInvites(_prev: InviteState, formData: FormData): Promi
     if (!smsLive) {
       undelivered.push({
         name: c.name,
-        phone: c.phone,
+        phone: localPhone(c.phone),
         password,
         why: "SMS is switched off for this school",
       });
@@ -217,7 +217,7 @@ export async function sendInvites(_prev: InviteState, formData: FormData): Promi
       // the only route the password has — so it is shown, once, here.
       undelivered.push({
         name: c.name,
-        phone: c.phone,
+        phone: localPhone(c.phone),
         password,
         why: sent.dryRun ? "no SMS gateway configured (dry run)" : (sent.error ?? "the text failed"),
       });
