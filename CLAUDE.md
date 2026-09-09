@@ -243,6 +243,64 @@ rendering in full for a teacher who typed the URL, because their own
 verify:teacher` signs in as a real teacher and asks for every route by URL,
 which is what caught it — run it after touching any role list.
 
+## The parent portal
+
+A guardian signs in and sees their own children: what is owed, the receipts the
+school has issued, and the report cards it has **published**. Nothing else.
+
+Routes live in their own group, `src/app/(portal)`, with their own layout — no
+navigation rail, no search, no term countdown. Those are tools for running a
+school, and a parent checking a balance on a phone should not be handed chrome
+that implies they can act on the school's behalf.
+
+⚠️ **RLS does NOT isolate one family from another.** Postgres scopes every query
+to the school, and two parents at the same school are the same tenant — so the
+`tenant_isolation` policy is satisfied by another family's child exactly as
+readily as by their own. Family isolation is application code, and it lives in
+ONE place: `src/lib/portal-auth.ts`.
+
+- `requireGuardian()` resolves the children from the SESSION's guardian id.
+- `requireMyChild(studentId)` checks a URL id against that set and calls
+  `notFound()` otherwise — **404, not 403**, so a parent cannot tell "not yours"
+  from "does not exist" and enumerate the roll one id at a time.
+- Every function in `portal-data.ts` takes ids the session resolved, never an id
+  from the request.
+
+`Membership.guardianId` is the only trustworthy answer to "which family is
+this". Note that one user can hold several memberships in the same school — the
+unique key is (school, user, role) — so `requireAuth` gathers `staffId` and
+`guardianId` across all of the active school's memberships rather than reading
+them off whichever row sorted first. A proprietor whose own child attends holds
+both, and the old code would have picked one at random.
+
+**Publication is a second, independent check.** `getReportCard` in
+results-data.ts deliberately does not filter by status — staff may read a draft,
+that is what the approval flow is for. The portal therefore goes through
+`getPublishedReportCard`, which confirms `status: "PUBLISHED"` BEFORE fetching
+anything and returns null (rendered as 404) otherwise, so the portal never
+confirms that an unpublished result exists.
+
+**A parent login is created from the guardian's own record**, not from `/users`.
+A PARENT membership without `guardianId` signs in to `/no-access`, and `/users`
+never knows which guardian is meant — so `ASSIGNABLE_ROLES` still excludes
+PARENT on purpose, and `createGuardianLogin` on `/guardians/[id]` is the way in.
+It refuses a guardian with no children linked, because that login would open an
+empty portal that reads as though the school had lost the child.
+
+⚠️ **`/dashboard` is guarded by hand, and that is where this leaked.** It uses
+`requireAuth` plus explicit redirects rather than `requireRole`, because a nurse
+or librarian holds no listed role and still belongs there. The first release of
+the portal added `isParentOnly` everywhere EXCEPT that page, so any guardian who
+typed `/dashboard` got the school's attention list, collections chart and
+activity feed — a 200, fully rendered. `npm run verify:parent` caught it on its
+first run. Anyone whose home is elsewhere must be named in that check.
+
+`npm run verify:parent` (needs `npm run dev`) signs in as a real parent and asks
+for another family's child BY URL, plus every staff route, plus an unpublished
+report card. 33 checks. It creates one user and one membership and deletes both;
+where the seed publishes nothing it forces a draft to PUBLISHED, looks, and
+restores it — so no check silently skips.
+
 ## Teaching assignments
 
 One row means *this teacher teaches this subject, to this class, in this academic
@@ -482,6 +540,8 @@ npm run verify:isolation # RLS coverage and cross-tenant reads/writes
 npm run verify:onboarding # walks every screen of a school provisioned minutes ago
 npm run verify:teacher   # a teacher reaches the two marking screens and nothing else,
                          # and an assignment counts only for its own year
+npm run verify:parent    # a parent sees their own children and NOT another family's,
+                         # and never an unpublished report card
 ```
 
 `verify:actions` is the only one that goes over HTTP, because the guards it

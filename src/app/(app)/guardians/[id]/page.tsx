@@ -9,6 +9,7 @@ import { Alert, Card, EmptyRow, tableHeadClass, thClass } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditGuardianForm } from "../guardian-form";
 import { LinkStudentForm } from "./link-form";
+import { GuardianLoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Guardian · School OS" };
 
@@ -37,7 +38,7 @@ export default async function GuardianDetailPage({
     notFound();
   }
 
-  const { guardian, students } = result;
+  const { guardian, students, hasLogin } = result;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -122,6 +123,16 @@ export default async function GuardianDetailPage({
             </tbody>
           </table>
         </div>
+      </Card>
+
+      <Card title="Parent portal">
+        <GuardianLoginForm
+          guardianId={guardian.id}
+          phone={guardian.phone}
+          email={guardian.email}
+          hasLogin={hasLogin}
+          childCount={guardian.students.length}
+        />
       </Card>
 
       <Card title="Link another child">
