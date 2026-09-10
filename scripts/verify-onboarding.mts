@@ -304,6 +304,18 @@ async function main() {
       problems.push(`${route} answered ${page.status}`);
     } else if (!text.trim()) {
       problems.push(`${route} rendered no text at all`);
+    } else if (route === "/dashboard" && text.includes("Nothing is waiting on you")) {
+      /**
+       * ⚠️ A card can be worse than empty: it can be wrong. Every rule behind
+       * "Needs your attention" counts something a NEW school does not have yet,
+       * so all four stayed silent and a school with no calendar, no classes and
+       * no pupils was told nothing was waiting on it — on the first screen it
+       * ever sees. A screen offering nothing to click is caught above; this
+       * catches a screen that offers reassurance instead.
+       */
+      problems.push(
+        "/dashboard tells a school with nothing set up that nothing is waiting on it",
+      );
     } else if (a.forms + a.buttons.length + a.links.length === 0) {
       // A screen with nothing to press is either broken or a dead end, and this
       // script cannot tell the difference — which is reason enough to look.
