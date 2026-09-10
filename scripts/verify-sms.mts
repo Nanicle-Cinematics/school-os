@@ -2,7 +2,14 @@
  * Checks the SMS helpers that decide who gets a message and what it costs.
  * Run: npm run verify:sms
  */
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { normalisePhone, countSegments, renderTemplate, estimateCost } from "@/lib/sms-shared";
+import {
+  DEFAULT_MESSAGE_TEMPLATES,
+  TRANSACTIONAL,
+  defaultTemplateBody,
+} from "@/lib/message-defaults";
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = "") {
@@ -65,6 +72,54 @@ const oneSeg = estimateCost("Short message", 100);
 const twoSeg = estimateCost("a".repeat(200), 100);
 check("100 recipients, 1 segment", Math.abs(oneSeg - 3.5) < 0.001, `GHS ${oneSeg.toFixed(2)}`);
 check("doubles with a second segment", Math.abs(twoSeg - 7.0) < 0.001, `GHS ${twoSeg.toFixed(2)}`);
+
+// ── Every name the app sends by is a template it actually ships ─────────────
+// A MessageTemplate is found by NAME, and a name that misses does not raise —
+// it sends nothing at all. So a literal that drifts from the shipped list is
+// indistinguishable from a school having no templates, which is the bug this
+// whole file exists to stop coming back.
+console.log("\nTransactional template names");
+
+function walk(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    return statSync(full).isDirectory() ? walk(full) : full.endsWith(".ts") ? [full] : [];
+  });
+}
+
+const shipped = new Set(DEFAULT_MESSAGE_TEMPLATES.map((t) => t.name));
+const sentBy = new Set<string>();
+for (const file of walk("src/lib")) {
+  for (const m of readFileSync(file, "utf8").matchAll(/templateName: "([^"]+)"/g)) {
+    sentBy.add(m[1]);
+  }
+}
+const unknown = [...sentBy].filter((name) => !shipped.has(name));
+check(
+  "no send site names a template that is not shipped",
+  unknown.length === 0,
+  unknown.length ? `unknown: ${unknown.join(", ")}` : `${sentBy.size} literal name(s), all shipped`,
+);
+
+const missingTransactional = Object.values(TRANSACTIONAL).filter((name) => !shipped.has(name));
+check(
+  "every TRANSACTIONAL name is shipped",
+  missingTransactional.length === 0,
+  missingTransactional.join(", "),
+);
+
+// The fallback is what a school with no templates actually sends, so it has to
+// render — a stray merge field here reaches a parent as an empty gap.
+const receipt = renderTemplate(defaultTemplateBody(TRANSACTIONAL.paymentReceived) ?? "", {
+  guardian_name: "Ama Mensah",
+  student_name: "Kofi Mensah",
+  amount: "250.00",
+  balance: "487.00",
+  receipt_no: "RCPT/0001",
+  school_name: "St. Mary's",
+});
+check("the packaged receipt renders", receipt.includes("GHS 250.00") && receipt.includes("RCPT/0001"), receipt);
+check("and leaves no unfilled merge field", !receipt.includes("{{"), receipt);
 
 console.log(`\n${failures === 0 ? "All checks passed" : `${failures} FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

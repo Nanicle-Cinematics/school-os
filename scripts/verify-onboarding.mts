@@ -240,11 +240,30 @@ async function main() {
       expenseCategories: await prisma.expenseCategory.count({ where: { schoolId: school.id } }),
       assessmentTemplates: await prisma.assessmentTemplate.count({ where: { schoolId: school.id } }),
       gradeBands: await prisma.gradeBand.count({ where: { schoolId: school.id } }),
+      // A receipt is found by NAME: no template meant no text and no complaint.
+      messageTemplates: await prisma.messageTemplate.count({ where: { schoolId: school.id } }),
     })),
   );
 
   console.log(`\nProvisioned ${school.name} (${slug}) in ${(provisionMs / 1000).toFixed(1)}s — proprietor ${ownerEmail}`);
   console.log(`A day-one school contains: ${JSON.stringify(counts, null, 0)}\n`);
+
+  /**
+   * Take the proprietor past the change-password wall before walking.
+   *
+   * `provisionSchool` gives a school's first login a TEMPORARY password, and
+   * both layouts divert a flagged session to /account/password — so every route
+   * below answered `307 -> /account/password` and this walk silently stopped
+   * inspecting anything at all. It still reported, screen by screen, in the
+   * shape of a healthy run: a title, no forms, no buttons, which is exactly what
+   * an onboarding dead end looks like. The redirect is correct behaviour and is
+   * covered by verify:parent; what this script is for is what a school SEES.
+   */
+  await db(() =>
+    withBypass(() =>
+      prisma.user.update({ where: { id: owner.id }, data: { mustChangePassword: false } }),
+    ),
+  );
 
   const token = await openSession(owner.id, school.id);
 

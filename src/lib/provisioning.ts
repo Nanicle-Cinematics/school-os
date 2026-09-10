@@ -5,6 +5,7 @@ import type { TenantTx } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
 import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
+import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
 
 /**
@@ -128,6 +129,11 @@ export async function provisionSchool(tx: TenantTx, input: ProvisionInput) {
   // And on a working mark sheet: without components a teacher builds
   // "Class Test 1" by hand for every subject in every class.
   await applyDefaultAssessmentTemplate(tx, school.id);
+
+  // And on the texts it sends without composing them. A receipt is found by
+  // NAME, so a school with no templates does not send a broken receipt — it
+  // sends nothing, and says nothing about it.
+  await applyDefaultMessageTemplates(tx, school.id);
 
   await writeAudit(tx, {
     schoolId: school.id,
