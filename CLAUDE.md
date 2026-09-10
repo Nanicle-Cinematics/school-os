@@ -264,6 +264,25 @@ Three things keep it fixed, and the middle one is the important one:
   on one that is not shipped — a misspelled name is indistinguishable from having
   no templates. Prefer the `TRANSACTIONAL` constants to a literal.
 
+**Publishing a class texts its parents**, obeying Settings → SMS. Only the pupils
+that run actually publishes are told: `setResultsStatus` reads which `TermResult`
+rows are not yet PUBLISHED *before* it updates them, because publishing is
+idempotent and a head may press it twice — a second "your child's report is
+ready" is a second bill and a confused parent. A partly-published class therefore
+texts only the pupils newly added to it.
+
+⚠️ **`notifyOnPayment` and `notifyOnResultPublish` were dead switches.** The
+settings form wrote them and showed them back, and nothing read either — so a
+school that unticked "text a receipt when a payment is recorded" went on texting
+receipts. `queueTransactionalSms` now takes the `gate` it obeys, as a required
+argument, so a new automatic text cannot forget to have one.
+
+⚠️ **Send in bulk or don't send.** The obvious per-parent loop took **27 seconds
+for two parents** on this link — no gateway configured, all of it round trips —
+because each recipient re-read the template and wrote its row alone. Read the
+template once, `createMany` the rows, and put the outcomes back with two updates:
+7 queries whatever the class size, so only the gateway calls scale.
+
 ⚠️ **Anything the app sends by itself belongs in `transactional-sms.ts`, not in a
 `"use server"` module.** `queueTransactionalSms` lived in message-actions.ts,
 which made it a registered server action taking a school id, a phone number and a

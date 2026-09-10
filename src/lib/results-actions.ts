@@ -7,6 +7,7 @@ import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
+import { textResultsPublished } from "@/lib/transactional-sms";
 
 export type ComputeState = { error?: string; ok?: string };
 
@@ -77,7 +78,24 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
     return;
   }
 
-  await tenantTransaction(auth.schoolId, async (tx) => {
+  const newlyPublished = await tenantTransaction(auth.schoolId, async (tx) => {
+    /**
+     * Who this run actually publishes, read BEFORE the update.
+     *
+     * Publishing is idempotent and a head may press it again — after a late
+     * correction, or simply twice. The text that goes out must not be: a second
+     * "your child's report is ready" is a second bill to the school and a
+     * confusing message to the parent, so only rows that were not already
+     * PUBLISHED are told about.
+     */
+    const publishing =
+      status === "PUBLISHED"
+        ? await tx.termResult.findMany({
+            where: { termId, classGroupId, status: { not: "PUBLISHED" } },
+            select: { studentId: true },
+          })
+        : [];
+
     const updated = await tx.termResult.updateMany({
       where: { termId, classGroupId },
       data: {
@@ -94,7 +112,21 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
       entityId: classGroupId,
       after: { termId, status, affected: updated.count },
     });
+
+    return publishing.map((r) => r.studentId);
   });
+
+  // After the commit, and best-effort: a gateway that is down must not undo a
+  // publication. Obeys Settings → SMS, which until now promised this and did
+  // nothing.
+  if (status === "PUBLISHED") {
+    await textResultsPublished({
+      schoolId: auth.schoolId,
+      schoolName: auth.schoolName,
+      termId,
+      studentIds: newlyPublished,
+    });
+  }
 
   revalidatePath("/results");
 }
