@@ -149,6 +149,15 @@ explicitly and still saw nothing when the GUC was empty.
 **`connection_limit`**: with RLS on, every model op becomes a transaction, which
 `connection_limit=1` cannot serve (P2024). The app role's URL uses 10.
 
+⚠️ **A long-lived `next dev` can lose the tenant context**, and the symptom is
+not an error. After ~8 hours and many Fast Refreshes, every tenant-scoped read
+returned EMPTY — `/students` said "0 on roll" for a 44-pupil school, and
+`/settings` answered **404**, because its `if (!school) notFound()` is the only
+place an empty read is checked rather than rendered as "nothing here yet". The
+database, the policies and the role were all fine: the same queries through
+`src/lib/prisma.ts` in a script returned everything. Restart before believing a
+tenancy bug that a script cannot reproduce.
+
 **Restarting `next dev` is a trap.** It detects a running server and silently
 serves the old one — including its old `.env` — printing "You can access the
 existing server". `pkill -f "next dev"` does not match the listener. Kill by port
@@ -234,6 +243,33 @@ node_modules/.bin/prisma migrate diff \
 then run that SQL in the Supabase SQL editor and confirm with an
 `information_schema.columns` select BEFORE merging. `main` auto-deploys, so a
 column the code expects and the database lacks is an outage, not a degradation.
+
+**A school is provisioned with its standard MESSAGES too**, from
+`src/lib/message-defaults.ts` (4 templates, idempotent on `name`) — added
+2026-09-10, after the invite screen's write-up pointed at the hole it fixes.
+Provisioning created none, and a `MessageTemplate` is found by **name**, so
+`queueTransactionalSms` met every real school with a missing template and
+returned: **no school outside the demo seed has ever sent a payment receipt, and
+nothing anywhere said so.** The compose screen's "start from a template" picker
+was empty for the same reason — the visible half of the same gap.
+
+Three things keep it fixed, and the middle one is the important one:
+
+- `provisionSchool` applies them, and `/messages` offers them to a school created
+  before this existed (idempotent, so it also restores one that was deleted).
+- **`queueTransactionalSms` falls back to the packaged wording** when the school
+  has no template of that name. Silence is the failure that cannot be noticed: a
+  parent does not chase a receipt they were never promised.
+- `verify:sms` reads every `templateName: "…"` literal out of `src/lib` and fails
+  on one that is not shipped — a misspelled name is indistinguishable from having
+  no templates. Prefer the `TRANSACTIONAL` constants to a literal.
+
+⚠️ **Anything the app sends by itself belongs in `transactional-sms.ts`, not in a
+`"use server"` module.** `queueTransactionalSms` lived in message-actions.ts,
+which made it a registered server action taking a school id, a phone number and a
+body, with no `requireRole` of its own — every caller had one, so nothing looked
+wrong. It also could not be imported by a verify script, because the module
+reaches `next/navigation`.
 
 **Provisioning must stay bulk.** A school is handed 11 levels, 18 subjects, 104
 offerings, 14 finance categories and 6 assessment components, all inside one

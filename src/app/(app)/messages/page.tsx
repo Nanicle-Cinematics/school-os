@@ -6,6 +6,8 @@ import { getMessagingSetup, getMessageStats } from "@/lib/message-data";
 import { formatCedis } from "@/lib/money";
 import { PageHeader, Stat, Card, StatusBadge, EmptyRow, thClass, tableHeadClass } from "../ui";
 import { Compose } from "./compose";
+import { StandardMessages } from "./standard-messages";
+import { DEFAULT_MESSAGE_TEMPLATES } from "@/lib/message-defaults";
 
 export const metadata: Metadata = { title: "Messages · School OS" };
 
@@ -55,6 +57,13 @@ export default async function MessagesPage() {
         />
         <Stat label="Spend" value={formatCedis(stats.cost)} sub="estimated" />
       </div>
+
+      <StandardMessages
+        missing={
+          DEFAULT_MESSAGE_TEMPLATES.filter((d) => !templates.some((t) => t.name === d.name)).length
+        }
+        total={templates.length}
+      />
 
       <Compose
         templates={templates}

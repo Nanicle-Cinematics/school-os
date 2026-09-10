@@ -11,7 +11,8 @@ import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import { allocateFifo, recalcInvoice } from "@/lib/invoice-engine";
 import { writeAudit } from "@/lib/audit";
-import { queueTransactionalSms } from "@/lib/message-actions";
+import { queueTransactionalSms } from "@/lib/transactional-sms";
+import { TRANSACTIONAL } from "@/lib/message-defaults";
 import { normalisePhone } from "@/lib/sms";
 
 export type PaymentState = { error?: string; ok?: string };
@@ -157,7 +158,7 @@ export async function recordPayment(
     );
     await queueTransactionalSms({
       schoolId: auth.schoolId,
-      templateName: "Payment Received",
+      templateName: TRANSACTIONAL.paymentReceived,
       toPhone: normalisePhone(receiptDetails.guardian.phone),
       studentId: receiptDetails.studentId,
       guardianId: receiptDetails.guardian.id,

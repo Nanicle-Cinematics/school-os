@@ -10,6 +10,7 @@ import { prisma, tenantTransaction } from "@/lib/prisma";
 import { resolveAudience, type AudienceFilter } from "@/lib/message-data";
 import { renderTemplate, countSegments, estimateCost, sendSms, RATE_PER_SEGMENT } from "@/lib/sms";
 import { writeAudit } from "@/lib/audit";
+import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 
 export type PreviewState = {
   error?: string;
@@ -229,64 +230,37 @@ async function dispatchQueued(campaignId: string, schoolId: string, senderId: st
   return { sent, failed, dryRun, schoolId };
 }
 
+export type TemplatesState = { error?: string; ok?: string };
+
 /**
- * Fire-and-forget transactional SMS: payment receipts, results published.
- * Never throws into the caller — a failed text must not roll back a payment.
+ * Give this school the standard messages it should have been provisioned with.
+ *
+ * Every school created before those were seeded has an empty template table —
+ * an empty "start from a template" picker, and, until the fallback above, silent
+ * receipts. Idempotent, so it fills a gap left by a deleted template without
+ * touching wording the school has edited.
  */
-export async function queueTransactionalSms(args: {
-  schoolId: string;
-  templateName: string;
-  toPhone: string | null;
-  context: Record<string, string | number | null | undefined>;
-  studentId?: string;
-  guardianId?: string;
-}) {
-  try {
-    const settings = await prisma.schoolSettings.findUnique({ where: { schoolId: args.schoolId } });
-    if (!settings?.smsEnabled || !args.toPhone) {
-      return;
-    }
+export async function applyStandardMessages(
+  // useActionState requires both; the list is fixed and the school comes from
+  // the session, so neither is read.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _prev: TemplatesState,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _formData: FormData,
+): Promise<TemplatesState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
 
-    const template = await prisma.messageTemplate.findFirst({
-      where: { schoolId: args.schoolId, name: args.templateName },
-    });
-    if (!template) {
-      return;
-    }
+  const result = await tenantTransaction(auth.schoolId, (tx) =>
+    applyDefaultMessageTemplates(tx, auth.schoolId),
+  );
 
-    const body = renderTemplate(template.body, args.context);
-    const { segments } = countSegments(body);
+  revalidatePath("/messages");
 
-    const message = await prisma.message.create({
-      data: {
-        schoolId: args.schoolId,
-        channel: "SMS",
-        toPhone: args.toPhone,
-        body,
-        studentId: args.studentId ?? null,
-        guardianId: args.guardianId ?? null,
-        provider: settings.smsProvider,
-        status: "QUEUED",
-        segments,
-        cost: new Prisma.Decimal((segments * RATE_PER_SEGMENT).toFixed(4)),
-      },
-    });
-
-    const result = await sendSms(args.toPhone, body, {
-      provider: settings.smsProvider,
-      senderId: settings.smsSenderId,
-    });
-
-    await prisma.message.update({
-      where: { id: message.id },
-      data: {
-        status: result.ok ? "SENT" : "FAILED",
-        providerRef: result.providerRef ?? null,
-        error: result.error ?? (result.dryRun ? "Dry run — no gateway configured" : null),
-        sentAt: result.ok ? new Date() : null,
-      },
-    });
-  } catch {
-    // Deliberately swallowed. The payment succeeded; the text is best-effort.
+  if (result.created === 0) {
+    return { ok: "Nothing to add — the standard messages are already here." };
   }
+  return {
+    ok: `Added ${result.created} message${result.created === 1 ? "" : "s"}. Edit the wording to suit the school — the merge fields in braces are filled in when it sends.`,
+  };
 }

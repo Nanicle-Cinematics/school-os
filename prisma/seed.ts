@@ -9,6 +9,9 @@
  */
 import { PrismaClient, Prisma } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
+// The same list provisioning gives a real school, so the demo cannot drift
+// from what a paying school actually gets.
+import { DEFAULT_MESSAGE_TEMPLATES } from "../src/lib/message-defaults";
 
 // Seed over DIRECT_URL (session pooler), not DATABASE_URL. The runtime URL
 // carries connection_limit=1, which is right for the app but starves a seed:
@@ -148,32 +151,6 @@ const STAFF_SEED = [
   { first: "Patience", last: "Kumi", gender: "FEMALE", designation: "School Secretary", teaching: false, role: "ADMIN" },
 ];
 
-const MESSAGE_TEMPLATES = [
-  {
-    name: "Payment Received",
-    body:
-      "Dear {{guardian_name}}, we have received GHS {{amount}} for {{student_name}}. " +
-      "Outstanding balance: GHS {{balance}}. Receipt No: {{receipt_no}}. Thank you. - {{school_name}}",
-  },
-  {
-    name: "Fee Reminder",
-    body:
-      "Dear {{guardian_name}}, {{student_name}} has an outstanding balance of GHS {{balance}} " +
-      "for {{term}}. Kindly settle on or before {{due_date}}. - {{school_name}}",
-  },
-  {
-    name: "Results Published",
-    body:
-      "Dear {{guardian_name}}, {{student_name}}'s {{term}} report is now ready. " +
-      "Log in to the parent portal to view it. - {{school_name}}",
-  },
-  {
-    name: "Term Reopening",
-    body:
-      "Dear Parent, {{school_name}} reopens on {{reopening_date}} for {{term}}. " +
-      "Please ensure {{student_name}} reports on time. Thank you.",
-  },
-];
 
 // Deterministic pseudo-random so re-seeding gives the same demo data.
 function makeRng(seed: number) {
@@ -238,7 +215,7 @@ async function main() {
       feeCategories: { create: FEE_CATEGORIES.map((c) => ({ ...c, isMandatory: c.code !== "SPORTS" })) },
       expenseCategories: { create: EXPENSE_CATEGORIES },
       messageTemplates: {
-        create: MESSAGE_TEMPLATES.map((t) => ({ ...t, channel: "SMS" as const, isSystem: true })),
+        create: DEFAULT_MESSAGE_TEMPLATES.map((t) => ({ ...t, channel: "SMS" as const, isSystem: true })),
       },
     },
   });
