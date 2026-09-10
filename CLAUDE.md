@@ -232,6 +232,41 @@ the run stayed green at 42 tables. What that job does protect is the
 *machinery* — the Prisma extension, the GUCs, `tenant-context`, `apply-rls.mjs`
 itself — which has broken before, four ways in one afternoon.
 
+⚠️ **RLS is not the only way in — the GRANTS matter more.** On 2026-09-10 a
+Supabase dialog (not anything in this repo) turned up that `anon` and
+`authenticated` — the roles PostgREST exposes to anyone holding the project's
+publishable anon key — held DELETE, INSERT, SELECT, TRUNCATE and UPDATE on every
+table in `public`, production included. Two things that protection did not cover:
+
+- **`User` and `Session` carry no `schoolId`**, so they were never in the set the
+  audit checks. `INSERT` on `Session` is account takeover: the app authenticates
+  by looking up `sha256(cookie)` there, so a row with a chosen `tokenHash` and any
+  `userId` signs you in as that person, no password involved.
+- **TRUNCATE is not subject to row security.** Policies govern
+  SELECT/INSERT/UPDATE/DELETE only, so `Student` and `Guardian` could have been
+  emptied despite being correctly protected.
+
+Nothing in School OS authenticates as either role — there is no Supabase client
+in the codebase at all — so the privileges were pure inheritance from Supabase's
+defaults. Revoked in production the same day, **including the default privileges**,
+which is what would otherwise re-grant them on every table created later:
+
+```sql
+revoke all on all tables in schema public from anon, authenticated;
+revoke all on all sequences in schema public from anon, authenticated;
+revoke all on all routines in schema public from anon, authenticated;
+revoke usage on schema public from anon, authenticated;
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke all on sequences from anon, authenticated;
+alter default privileges in schema public revoke all on routines from anon, authenticated;
+```
+
+`audit:rls` now fails when either role holds any privilege in `public`, so the
+nightly job catches a re-grant rather than a dialog box catching it a year later.
+⚠️ A table created in the Supabase SQL editor still needs its own
+`GRANT … TO school_os_app` and, if it is not tenant-scoped, `ENABLE ROW LEVEL
+SECURITY` plus a policy for that role — see `PasswordReset`.
+
 **The `prod-rls` job is the one that catches the real bug.** Both incidents were
 drift between the schema and PRODUCTION: a `db push` by hand with no `db:rls`
 after it. Only production knows, so that job asks production — daily, and on
