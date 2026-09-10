@@ -24,7 +24,11 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
       <div className="mx-auto max-w-2xl">
         <Card>
           <p className="px-4 py-10 text-center text-sm text-slate-500">
-            No term is marked as current. Set one in Settings first.
+            No term is marked as current, and results are computed per term.{" "}
+            <Link href="/settings/terms" className="font-medium text-brand-600 hover:underline">
+              Set up the year and its terms
+            </Link>{" "}
+            first.
           </p>
         </Card>
       </div>

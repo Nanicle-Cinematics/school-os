@@ -20,7 +20,7 @@
  *   npm run verify:isolation
  */
 
-import { prisma } from "@/lib/prisma";
+import { prisma, TenantContextMissingError } from "@/lib/prisma";
 import { runWithTenantContext, withBypass } from "@/lib/tenant-context";
 
 let passed = 0;
@@ -136,8 +136,26 @@ async function main() {
   const invoices = await retry(() => tenant(foreign, () => prisma.invoice.count()));
   check("a foreign tenant sees no invoices", invoices === 0, `${invoices} rows`);
 
-  const unscoped = await retry(() => prisma.student.count({ where: { deletedAt: null } }));
-  check("a request with no tenant set sees nothing", unscoped === 0, `${unscoped} rows`);
+  /**
+   * ⚠️ This used to assert that a query with NO tenant set "sees nothing", and
+   * seeing nothing is exactly what kept the failure invisible: an empty context
+   * makes every policy fail to match, so the answer is an empty result that
+   * reads as "this school has none". src/lib/prisma.ts now refuses such a query
+   * outright, and the refusal is the stronger property — an unscoped read is
+   * never a legitimate thing to have asked for.
+   */
+  let unscopedRefused = false;
+  let unscopedRows = -1;
+  try {
+    unscopedRows = await prisma.student.count({ where: { deletedAt: null } });
+  } catch (error) {
+    unscopedRefused = error instanceof TenantContextMissingError;
+  }
+  check(
+    "a query with no tenant set is REFUSED, not answered with nothing",
+    unscopedRefused,
+    unscopedRefused ? "TenantContextMissingError" : `answered with ${unscopedRows} rows`,
+  );
 
   // WITH CHECK: writing a row into someone else's school must be refused, not
   // silently accepted and then invisible.
