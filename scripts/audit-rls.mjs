@@ -61,12 +61,44 @@ try {
     UNSCOPED,
   );
 
+  /**
+   * Who else can reach these tables at all.
+   *
+   * ⚠️ Found on 2026-09-10, by a Supabase dialog rather than by anything here:
+   * `anon` and `authenticated` — the roles PostgREST exposes to anyone holding
+   * the project's publishable anon key — held DELETE, INSERT, SELECT, TRUNCATE
+   * and UPDATE on every table in `public`, production included.
+   *
+   * RLS does not save you from that. Two reasons:
+   *   - `User` and `Session` carry no schoolId, so they were never in the set
+   *     this script checks — and INSERT on Session is account takeover, because
+   *     the app authenticates by looking up sha256(cookie) there;
+   *   - TRUNCATE is NOT subject to row security, so even a policy-protected
+   *     table like Student could have been emptied.
+   *
+   * So the grant is the thing to watch, and it is watched here rather than
+   * remembered: Supabase's default privileges re-grant on tables created later,
+   * which is exactly how this would come back.
+   */
+  const exposed = await prisma.$queryRawUnsafe(
+    `
+    select table_name, grantee,
+           string_agg(privilege_type, ',' order by privilege_type) as privileges
+      from information_schema.role_table_grants
+     where table_schema = 'public'
+       and grantee in ('anon', 'authenticated')
+     group by table_name, grantee
+     order by table_name, grantee
+    `,
+  );
+
   const gaps = rows.filter((r) => !r.rls || !r.forced || r.policies === 0);
 
   // Count the same way apply-rls.mjs reports it, so the two are comparable and
   // a mismatch means real drift rather than two different definitions.
   console.log(`tenant tables (incl. School): ${rows.length}`);
   console.log(`gaps: ${gaps.length}`);
+  console.log(`tables reachable by anon/authenticated: ${exposed.length}`);
 
   if (gaps.length > 0) {
     console.error("\nUNPROTECTED — a school can read another school's rows here:");
@@ -87,6 +119,33 @@ try {
     console.log(
       `every table with a schoolId is protected (deliberately excluded: ${UNSCOPED.join(", ")})`,
     );
+  }
+
+  if (exposed.length > 0) {
+    console.error(
+      "\nREACHABLE BY anon/authenticated — anyone with the project's anon key can do this:",
+    );
+    for (const row of exposed.slice(0, 20)) {
+      console.error(`  ${row.table_name} → ${row.grantee}: ${row.privileges}`);
+    }
+    if (exposed.length > 20) {
+      console.error(`  …and ${exposed.length - 20} more`);
+    }
+    console.error(
+      "\nFix, in the Supabase SQL editor:\n" +
+        "  revoke all on all tables in schema public from anon, authenticated;\n" +
+        "  revoke all on all sequences in schema public from anon, authenticated;\n" +
+        "  revoke all on all routines in schema public from anon, authenticated;\n" +
+        "  revoke usage on schema public from anon, authenticated;\n" +
+        "  alter default privileges in schema public revoke all on tables from anon, authenticated;\n" +
+        "  alter default privileges in schema public revoke all on sequences from anon, authenticated;\n" +
+        "  alter default privileges in schema public revoke all on routines from anon, authenticated;\n" +
+        "\nNothing in School OS authenticates as either role — it connects as the\n" +
+        "restricted app role over Postgres, and ships no Supabase client at all.",
+    );
+    process.exitCode = 1;
+  } else {
+    console.log("anon/authenticated hold nothing in public");
   }
 } finally {
   await prisma.$disconnect();
