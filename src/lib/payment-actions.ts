@@ -159,6 +159,7 @@ export async function recordPayment(
     await queueTransactionalSms({
       schoolId: auth.schoolId,
       templateName: TRANSACTIONAL.paymentReceived,
+      gate: "notifyOnPayment",
       toPhone: normalisePhone(receiptDetails.guardian.phone),
       studentId: receiptDetails.studentId,
       guardianId: receiptDetails.guardian.id,

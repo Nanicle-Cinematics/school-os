@@ -3,6 +3,7 @@ import "server-only";
 import type { AudienceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalisePhone, type MergeContext } from "@/lib/sms";
+import { termLabel } from "@/lib/academic-year";
 
 export type Recipient = {
   phone: string;
@@ -37,11 +38,12 @@ export async function resolveAudience(
     where: { isCurrent: true },
     include: { academicYear: true },
   });
-  const termLabel = term
-    ? `${term.name === "FIRST" ? "First" : term.name === "SECOND" ? "Second" : "Third"} Term`
-    : "";
+  // academic-year.ts holds this map precisely so it stops being written again;
+  // this was the ninth copy, and the one that would have said "THIRD Term" for
+  // any name the ternary did not anticipate.
+  const term_ = term ? `${termLabel(term.name)} Term` : "";
 
-  const base = { school_name: schoolName, term: termLabel } satisfies MergeContext;
+  const base = { school_name: schoolName, term: term_ } satisfies MergeContext;
 
   if (type === "ALL_STAFF") {
     const staff = await prisma.staff.findMany({
