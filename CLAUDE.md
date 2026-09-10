@@ -406,10 +406,44 @@ layouts: `getSessionUser` uses `include: { user: … }`, which already selects
 every user scalar, so reading it costs nothing. Querying it separately added a
 round trip to every page load, which on this link is seconds.
 
-**Not built yet:** forgot-password (a parent who loses theirs must ring the
-office for a reset), SMS delivery of the temporary password, and bulk creation
-of parent logins. A 400-pupil school is currently ~400 trips through the
-guardian form.
+**Bulk parent logins and SMS delivery of the temporary password shipped in PR #24**
+(`/guardians/invites`). **Not built yet:** forgot-password — a parent who loses
+theirs must ring the office for a reset.
+
+## The SMS gateway
+
+`sendSms` DRY-RUNS unless `SMS_PROVIDER` and `SMS_API_KEY` are both set where the
+app runs: the message is recorded, costed and shown in Messages, and nothing
+leaves the building. That is the deliberate default, and it means "we set the
+variable" is not evidence of anything.
+
+**Settings → SMS has "Send a test"**: one message, to a number the office types,
+using the school's own provider and sender ID, ungated by `smsEnabled` so the
+wiring can be checked BEFORE any parent hears from the school. It reports the
+gateway's own words, and records what it sent in the message log — a test costs
+the school a message like any other, and the Spend figure totals that log.
+
+⚠️ **These three integrations had never executed once** before 2026-09-10. When
+first run against the real gateways (with a deliberately invalid key, so nothing
+could be delivered), all three answered — Arkesel "Invalid key", mNotify "invalid
+api key…", Hubtel "Something terribly happened while processing your request".
+
+- **Arkesel is on v2**: `POST https://sms.arkesel.com/api/v2/sms/send`, key in an
+  `api-key` HEADER, body `{sender, message, recipients[]}`, success
+  `{"status":"success","data":{"id":…}}`. The v1 query-string form this shipped
+  with still answers (422 `{"code":"102"}` for a bad key), so it was not broken —
+  but it is undocumented in Arkesel's current guide and puts the API key in a URL,
+  where proxies and access logs keep it.
+- **Hubtel's credential is a PAIR.** `SMS_API_KEY` takes `clientid:clientsecret`
+  and is base64-encoded for you; passing it raw into `Basic …` (as this used to)
+  silently required a pre-encoded value and returned an unexplained 401.
+- Every call is bounded by a 15s timeout and reads the body as TEXT before
+  parsing: a gateway error page is HTML, so `res.json()` throws and the school
+  reads "Unexpected token <" where the reason should be.
+
+⚠️ **An unregistered sender ID is the usual reason a text is accepted and never
+arrives.** It is at most 11 characters and must be registered with the provider;
+that registration takes days in Ghana, so start it before you need it.
 
 ## The parent portal
 

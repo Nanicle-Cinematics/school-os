@@ -6,12 +6,14 @@ import {
   saveFeesPolicy,
   saveSchoolProfile,
   saveSmsSettings,
+  sendTestSms,
   type SettingsState,
+  type TestSmsState,
 } from "@/lib/settings-actions";
 import { SubmitButton } from "../submit-button";
-import { Alert, Field, inputClass } from "../ui";
+import { Alert, Field, filterClass, inputClass } from "../ui";
 
-function Feedback({ state }: { state: SettingsState }) {
+function Feedback({ state }: { state: SettingsState | TestSmsState }) {
   if (!state.error && !state.ok) {
     return null;
   }
@@ -438,6 +440,44 @@ export function SmsForm({
       <div className="mt-4">
         <SubmitButton pendingLabel="Saving…">Save SMS settings</SubmitButton>
       </div>
+
+      <TestSms />
     </form>
+  );
+}
+
+/**
+ * Prove the gateway with one number before a school's parents are the test.
+ *
+ * Sits inside the SMS card because that is where someone has just typed a
+ * provider and a sender ID and has no way to know whether either is right — a
+ * wrong key and an unregistered sender ID both look like silence from here.
+ */
+function TestSms() {
+  const [state, action] = useActionState<TestSmsState, FormData>(sendTestSms, {});
+
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-4">
+      <p className="text-sm font-semibold text-slate-900">Send a test</p>
+      <p className="mt-0.5 text-sm text-slate-500">
+        One message, to a number you can check, using the settings above. It sends whether or not
+        SMS is switched on, so you can test the wiring before any parent hears from the school.
+      </p>
+
+      <Feedback state={state} />
+
+      <div className="mt-3 flex flex-wrap items-start gap-2">
+        <input
+          type="tel"
+          name="testPhone"
+          placeholder="0244000000"
+          aria-label="Number to test with"
+          className={`${filterClass} w-44`}
+        />
+        <SubmitButton formAction={action} variant="secondary" pendingLabel="Sending…">
+          Send a test message
+        </SubmitButton>
+      </div>
+    </div>
   );
 }

@@ -7,6 +7,9 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
+import { Prisma } from "@prisma/client";
+import { sendSms, normalisePhone, countSegments, RATE_PER_SEGMENT } from "@/lib/sms";
+import { localPhone } from "@/lib/portal-invite-data";
 
 export type SettingsState = { error?: string; ok?: string };
 
@@ -246,4 +249,83 @@ export async function setCurrentTerm(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/", "layout");
+}
+
+export type TestSmsState = { error?: string; ok?: string };
+
+/**
+ * Send ONE text, to a number the office types, using the school's own settings.
+ *
+ * ⚠️ This exists because a gateway is either configured or it is a dry run, and
+ * until now the only way to learn which was to invite 43 parents and read the
+ * failures afterwards. The three provider integrations had never executed once
+ * against a real gateway — Arkesel's was still written against a v1 API that has
+ * since been replaced — so "we set the environment variable" was never evidence
+ * of anything.
+ *
+ * Deliberately NOT gated on `smsEnabled` or the notify switches: this is how you
+ * check the wiring BEFORE turning it on for a school's parents. It is gated on
+ * the same OFFICE role as the settings themselves, and it says plainly when the
+ * server has no credentials and nothing left the building.
+ */
+export async function sendTestSms(
+  _prev: TestSmsState,
+  formData: FormData,
+): Promise<TestSmsState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const phone = normalisePhone(String(formData.get("testPhone") ?? ""));
+  if (!phone) {
+    return { error: "Enter a Ghana mobile number, e.g. 0244000000." };
+  }
+
+  const settings = await prisma.schoolSettings.findUnique({ where: { schoolId: auth.schoolId } });
+  const body =
+    `${auth.schoolName}: this is a test message from School OS. ` +
+    `If you received it, texts to parents will work.`;
+
+  const result = await sendSms(phone, body, {
+    provider: settings?.smsProvider,
+    senderId: settings?.smsSenderId,
+  });
+
+  // A test costs the school a message like any other, so it belongs in the log
+  // the Messages screen totals its spend from. Recorded only when something
+  // actually left — a dry run spends nothing.
+  if (!result.dryRun) {
+    const { segments } = countSegments(body);
+    await prisma.message.create({
+      data: {
+        schoolId: auth.schoolId,
+        channel: "SMS",
+        toPhone: phone,
+        body,
+        provider: settings?.smsProvider ?? null,
+        status: result.ok ? "SENT" : "FAILED",
+        providerRef: result.providerRef ?? null,
+        error: result.error ?? null,
+        sentAt: result.ok ? new Date() : null,
+        segments,
+        cost: new Prisma.Decimal((segments * RATE_PER_SEGMENT).toFixed(4)),
+      },
+    });
+  }
+
+  if (result.dryRun) {
+    return {
+      error:
+        "No gateway is configured on the server, so nothing was sent. SMS_PROVIDER and SMS_API_KEY " +
+        "have to be set where the app runs — until then every text is a dry run.",
+    };
+  }
+  if (!result.ok) {
+    // The gateway's own words: a rejected sender ID and a wrong key look
+    // identical from the outside, and only the gateway knows which it was.
+    return { error: `The gateway refused it — ${result.error ?? "no reason given"}` };
+  }
+
+  return {
+    ok: `Sent to ${localPhone(phone)}. If it does not arrive within a minute, the sender ID is usually the reason — it must be registered with ${settings?.smsProvider ?? "the provider"}.`,
+  };
 }
