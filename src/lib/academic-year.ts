@@ -25,6 +25,27 @@ export function splitIntoTerms(start: Date, end: Date) {
 }
 
 /**
+ * The academic year a date falls in, and the shape a Ghanaian school writes it.
+ *
+ * September, not January, is the boundary: a school set up in March belongs to
+ * the year that opened the previous September, not the one about to start. From
+ * August a school is preparing for the year ahead, so that is where it flips.
+ *
+ * These dates are a DEFAULT, not a claim — GES sets real term dates and they
+ * move every year. The point is that a school opens with a calendar it can
+ * correct, rather than with three screens that refuse to render until someone
+ * builds one by hand.
+ */
+export function schoolYearFor(today: Date) {
+  const opening = today.getUTCMonth() >= 7 ? today.getUTCFullYear() : today.getUTCFullYear() - 1;
+  return {
+    name: `${opening}/${opening + 1}`,
+    startDate: new Date(Date.UTC(opening, 8, 1)),
+    endDate: new Date(Date.UTC(opening + 1, 6, 31)),
+  };
+}
+
+/**
  * "FIRST" → "First". A term's name is a Prisma enum, so it renders as a SHOUTED
  * word unless mapped — "FIRST Term · 2026/2027" reached the parent portal that
  * way, on a bill.

@@ -114,7 +114,7 @@ export async function getDashboard(schoolId: string) {
 
 export type AttentionItem = {
   /** Stable key, also used to pick the dot colour. */
-  kind: "marking" | "fees" | "results" | "staffing";
+  kind: "marking" | "fees" | "results" | "staffing" | "setup";
   tag: string;
   title: string;
   detail: string;
@@ -137,6 +137,56 @@ export async function getAttention(
   fees: { outstanding: number; debtorCount: number },
 ): Promise<AttentionItem[]> {
   const items: AttentionItem[] = [];
+
+  /**
+   * What a school that has just opened still has to do.
+   *
+   * ⚠️ Every rule below counts something a NEW school does not have yet — sheets,
+   * results, classes short of teachers, families owing money — so all four stayed
+   * silent and this card told a school with no calendar, no classes and no pupils
+   * that "nothing is waiting on you". The one card built to answer "what needs me
+   * today" was quiet exactly when everything did.
+   *
+   * These three disappear as each is done, so a running school never sees them.
+   * Ordered the way the work actually goes: a class needs a year to enrol into,
+   * and a pupil needs a class to sit in.
+   */
+  const [years, classCount, studentCount] = [
+    await prisma.academicYear.count({ where: { schoolId } }),
+    await prisma.classGroup.count({ where: { schoolId } }),
+    await prisma.student.count({ where: { schoolId, deletedAt: null } }),
+  ];
+
+  if (years === 0) {
+    items.push({
+      kind: "setup",
+      tag: "Setup",
+      title: "The school has no academic year yet",
+      detail: "Fees are billed per term and results are computed per term, so nothing can start without one",
+      href: "/settings/terms",
+      cta: "Set it up",
+    });
+  }
+  if (classCount === 0) {
+    items.push({
+      kind: "setup",
+      tag: "Setup",
+      title: "No classes have been created",
+      detail: "The GES levels are already here — each one needs at least a class for pupils to sit in",
+      href: "/settings/structure",
+      cta: "Add classes",
+    });
+  }
+  if (studentCount === 0) {
+    items.push({
+      kind: "setup",
+      tag: "Setup",
+      title: "No pupils are on roll",
+      detail: "Admit them one at a time, or paste the whole register in at once",
+      href: "/students/import",
+      cta: "Add pupils",
+    });
+  }
 
   if (term) {
     // 1. Marking. An assessment is unfinished when fewer pupils have a score

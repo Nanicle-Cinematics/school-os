@@ -35,7 +35,9 @@ export default async function TermsPage() {
         <h1 className="mt-1 text-xl font-semibold text-slate-900">Years and terms</h1>
         <p className="mt-0.5 text-sm text-slate-500">
           The calendar every other screen hangs off. Invoicing, score entry and the dashboard all
-          read the current term.
+          read the current term. A new school starts on the standard September–July year, split
+          into three even terms — GES sets the real dates and they move every year, so correct
+          them here.
         </p>
       </div>
 

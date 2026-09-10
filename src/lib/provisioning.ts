@@ -6,6 +6,7 @@ import { writeAudit } from "@/lib/audit";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
 import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
+import { schoolYearFor, splitIntoTerms } from "@/lib/academic-year";
 import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
 
 /**
@@ -134,6 +135,43 @@ export async function provisionSchool(tx: TenantTx, input: ProvisionInput) {
   // NAME, so a school with no templates does not send a broken receipt — it
   // sends nothing, and says nothing about it.
   await applyDefaultMessageTemplates(tx, school.id);
+
+  /**
+   * And on a CALENDAR, which everything else hangs off.
+   *
+   * Fees are priced per term, results are computed per term, the dashboard
+   * reports on one — so a school with no academic year met three screens that
+   * refused to render and told it, in prose, to go and build one. Every other
+   * day-one decision here is already made for the school and left editable; the
+   * year is the one that unlocks the rest, and it was the one omitted.
+   *
+   * The dates are the standard Ghanaian shape and are a starting point, exactly
+   * as the fee items and the GES ladder are: GES sets real term dates, they move
+   * every year, and /settings/terms is where a school corrects them. The term
+   * containing today is marked current so the school lands on a working
+   * dashboard rather than an accurate one about nothing.
+   */
+  const now = new Date();
+  const yearShape = schoolYearFor(now);
+  const year = await tx.academicYear.create({
+    data: { schoolId: school.id, ...yearShape, isCurrent: true },
+  });
+  const terms = splitIntoTerms(yearShape.startDate, yearShape.endDate);
+  // Before the year opens — a school set up in August — the first term is the
+  // one it is about to run.
+  const currentSequence =
+    terms.find((t) => now >= t.startDate && now <= t.endDate)?.sequence ?? 1;
+  await tx.term.createMany({
+    data: terms.map((term) => ({
+      schoolId: school.id,
+      academicYearId: year.id,
+      name: term.name,
+      sequence: term.sequence,
+      startDate: term.startDate,
+      endDate: term.endDate,
+      isCurrent: term.sequence === currentSequence,
+    })),
+  });
 
   await writeAudit(tx, {
     schoolId: school.id,

@@ -24,6 +24,9 @@ const DOT: Record<AttentionItem["kind"], string> = {
   fees: "bg-red-500",
   results: "bg-brand-500",
   staffing: "bg-slate-400",
+  // Setup items only exist before the school is running, and they are the whole
+  // job at that point — the brand dot, not a warning colour.
+  setup: "bg-brand-600",
 };
 
 /**

@@ -267,6 +267,25 @@ then run that SQL in the Supabase SQL editor and confirm with an
 `information_schema.columns` select BEFORE merging. `main` auto-deploys, so a
 column the code expects and the database lacks is an outage, not a degradation.
 
+**A school is provisioned with a CALENDAR** — the current academic year on the
+standard Ghanaian September–July shape, split into three terms by
+`splitIntoTerms`, with the term containing today marked current. Added
+2026-09-10, because its absence was the reason three screens were dead ends:
+fees are priced per term, results are computed per term and the dashboard reports
+on one, so `/fees`, `/results` and `/dashboard` all refused to render and told a
+new school, in prose with nothing to click, to go and build a year by hand. The
+dates are a starting point exactly as the fee items and the GES ladder are —
+`/settings/terms` says so and is where they are corrected.
+
+⚠️ **"Needs your attention" was silent on day one**, which is when it matters
+most. All four of its rules count things a new school does not have yet —
+unfinished sheets, unpublished results, classes short of teachers, families
+owing — so a school with no calendar, no classes and no pupils was told "nothing
+is waiting on you" on the first screen it ever sees. Three setup rules now run
+ahead of those and disappear as each is done. `verify:onboarding` asserts the
+day-one dashboard never claims nothing is waiting, because a card that reassures
+wrongly is worse than one that is empty.
+
 **A school is provisioned with its standard MESSAGES too**, from
 `src/lib/message-defaults.ts` (4 templates, idempotent on `name`) — added
 2026-09-10, after the invite screen's write-up pointed at the hole it fixes.
