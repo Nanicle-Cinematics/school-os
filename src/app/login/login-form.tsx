@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { login, type LoginState } from "@/lib/auth-actions";
 
@@ -72,6 +73,12 @@ export function LoginForm() {
       ) : null}
 
       <SubmitButton />
+
+      <p className="text-center text-sm">
+        <Link href="/forgot" className="text-slate-500 hover:text-slate-900">
+          Forgotten your password?
+        </Link>
+      </p>
     </form>
   );
 }

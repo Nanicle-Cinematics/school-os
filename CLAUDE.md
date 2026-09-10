@@ -407,8 +407,45 @@ every user scalar, so reading it costs nothing. Querying it separately added a
 round trip to every page load, which on this link is seconds.
 
 **Bulk parent logins and SMS delivery of the temporary password shipped in PR #24**
-(`/guardians/invites`). **Not built yet:** forgot-password — a parent who loses
-theirs must ring the office for a reset.
+(`/guardians/invites`).
+
+## A parent who has forgotten their password
+
+`/forgot` texts a 6-digit code to the number the school holds, and the parent
+chooses their own password. It exists because the office reading a new password
+down a phone line does not scale past the four hundred logins one afternoon on
+`/guardians/invites` can create.
+
+The rules, all of them refusals, all proved by `npm run verify:reset` (17 checks,
+no dev server needed, in CI):
+
+- **PARENT logins only.** Staff have the office, on `/users`, with an audit trail
+  — and a staff login sees the whole school, so a self-service route into one is
+  a far bigger door than this needs to open.
+- **"Sent" and "no such number" answer identically.** Anything else turns the box
+  into a way to ask whether a number belongs to a parent at the school.
+- A code lasts **15 minutes**, works **once**, and dies after **5 wrong guesses**;
+  asking for a new one kills the old. Three per number per hour.
+- Only the **sha256** is stored, like a session token — a code sitting in the
+  database, or in the message log, would be a reset anyone with read access could
+  complete. The log records that a code was sent, never the digits.
+- Success **ends every session** for that user: a reset asked for because
+  something went wrong has to end it.
+
+⚠️ **It refuses to start when no gateway is configured**, and says so, rather than
+telling a parent to wait for a text that cannot arrive. That check runs BEFORE
+the phone-number lookup, deliberately: whether a gateway exists is a fact about
+the deployment, but "we cannot deliver to *you*" would be a fact about the
+number, and that is the enumeration the rest of this is careful to avoid.
+
+`SMS_DRY_RUN=1` forces a dry run even with credentials, which is what lets the
+suite exercise the flow without texting anyone or calling Arkesel from CI.
+
+⚠️ **`PasswordReset` carries no `schoolId`.** The flow runs before anyone is
+signed in, so there is no tenant context to scope by — and since the guard in
+prisma.ts, a tenant-scoped query without one is refused outright. It sits outside
+RLS exactly as `Session` and `User` do, so the prod-rls tenant count stays 41.
+Every query in `password-reset.ts` goes through `withBypass` for the same reason.
 
 ## The SMS gateway
 
@@ -745,6 +782,8 @@ npm run verify:teacher   # a teacher reaches the two marking screens and nothing
 npm run verify:parent    # a parent sees their own children and NOT another family's,
                          # never an unpublished report card, and a temporary
                          # password diverts to /account/password
+npm run verify:reset     # forgotten-password: wrong, spent, expired and guessed
+                         # codes are all refused; staff and strangers get nothing
 ```
 
 `verify:actions` is the only one that goes over HTTP, because the guards it
