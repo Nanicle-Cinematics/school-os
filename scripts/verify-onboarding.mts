@@ -123,6 +123,13 @@ async function openSession(userId: string, activeSchoolId?: string) {
 }
 
 /** Every screen in the sidebar, plus the sub-screens each one leads to. */
+/**
+ * Routes that answer 404 ON PURPOSE for a school with no data: each needs query
+ * parameters (a term, a class, an invoice) that a day-one school cannot supply.
+ * Everything else must render.
+ */
+const DELIBERATE_404 = new Set(["/results/broadsheet", "/results/print", "/invoices/print"]);
+
 const ROUTES = [
   "/dashboard",
   "/students",
@@ -267,12 +274,41 @@ async function main() {
 
   const token = await openSession(owner.id, school.id);
 
+  /**
+   * ⚠️ This walk PRINTED for months and asserted nothing, so a human had to read
+   * 27 screens to notice a problem — and did not. When provisioning began issuing
+   * the first proprietor a temporary password, every route answered
+   * `307 -> /account/password` and the report went on looking healthy: a title,
+   * no forms, no buttons, screen after screen, which is indistinguishable from
+   * the onboarding dead ends this script exists to find.
+   *
+   * So it now fails. A redirect is the loudest of these: it means the walk never
+   * reached the screen it is reporting on.
+   */
+  const problems: string[] = [];
+
   for (const route of ROUTES) {
     const page = await get(route, token);
     const text = pageText(page.html);
     const a = affordances(page.html);
     const redirect = page.location ? ` -> ${page.location}` : "";
     console.log(`\n──── ${route}  [${page.status}${redirect}]${page.status !== 200 ? "  <<< NON-200" : ""}`);
+
+    if (page.location) {
+      problems.push(`${route} redirected to ${page.location} — the screen was never reached`);
+    } else if (DELIBERATE_404.has(route)) {
+      if (page.status !== 404) {
+        problems.push(`${route} answered ${page.status}; it needs query parameters and should 404`);
+      }
+    } else if (page.status !== 200) {
+      problems.push(`${route} answered ${page.status}`);
+    } else if (!text.trim()) {
+      problems.push(`${route} rendered no text at all`);
+    } else if (a.forms + a.buttons.length + a.links.length === 0) {
+      // A screen with nothing to press is either broken or a dead end, and this
+      // script cannot tell the difference — which is reason enough to look.
+      problems.push(`${route} offers nothing at all: no form, no button, no link`);
+    }
     console.log(`  text : ${text.slice(0, 460)}`);
     console.log(`  ctrl : forms=${a.forms} inputs=${a.inputs} selects=${a.selects}`);
     console.log(`  btns : ${a.buttons.slice(0, 8).join(" | ") || "—"}`);
@@ -281,6 +317,16 @@ async function main() {
 
   console.log(`\n\nLeft behind: school ${slug}, admin qa-admin-${stamp}@example.com`);
   console.log(`Remove with: npm run verify:onboarding -- --clean ${slug}`);
+
+  if (problems.length > 0) {
+    console.log(`\n${problems.length} PROBLEM${problems.length === 1 ? "" : "S"}:`);
+    for (const problem of problems) {
+      console.log(`  FAIL ${problem}`);
+    }
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`\nAll ${ROUTES.length} screens render for a day-one school.`);
 }
 
 main()

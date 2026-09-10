@@ -179,6 +179,19 @@ jobs:
           npm run verify:teacher
           npm run verify:parent
 
+      # A school provisioned minutes ago, walked screen by screen. This is the
+      # check for onboarding dead ends — a screen that maps over an empty
+      # collection and offers no way forward — which the demo seed hides, because
+      # it creates everything. It PRINTED and asserted nothing until 2026-09-10,
+      # and so reported 27 healthy-looking screens while every one of them was a
+      # redirect to /account/password.
+      - name: Onboarding — every screen a day-one school opens
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:onboarding
+
       - name: Server-action guards — refusals and previews
         env:
           DB_RLS: "on"

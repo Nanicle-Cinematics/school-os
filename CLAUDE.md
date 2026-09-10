@@ -136,6 +136,19 @@ Four things had to be true at once, and each was broken:
   after `requireRole`, and `tenantTransaction(schoolId, …)` takes the school as
   an argument rather than inferring it.
 
+✅ **A tenant query with no tenant context is now REFUSED** (`assertTenantContext`
+in prisma.ts). Without it the GUC was set to the empty string and the query ran:
+every policy failed to match, nothing came back, and the caller could not tell
+"this school has none" from "nobody said which school". The models it covers are
+read off the Prisma DMMF — anything with a `schoolId`, plus `School` by its own
+`id` — so the set cannot go stale. It throws in production too: a page that tells
+a school it has nothing is worse than one that says what went wrong. Both intents
+are already written everywhere they belong (actions call `setTenantContext`,
+session.ts uses `withBypass`), so it only fires where neither was said.
+
+`verify:isolation` asserts the refusal rather than the old "sees nothing", which
+was the weaker half of the same property.
+
 **Empty reads make guards pass, not fail.** Before that last fix, an action's
 pre-transaction reads returned nothing under RLS, so `assertEditable` concluded
 "nothing in the way" and a forged band write onto a frozen grading scale
@@ -148,6 +161,16 @@ explicitly and still saw nothing when the GUC was empty.
 
 **`connection_limit`**: with RLS on, every model op becomes a transaction, which
 `connection_limit=1` cannot serve (P2024). The app role's URL uses 10.
+
+**`verify:onboarding` ASSERTS, and CI runs it** against the built app, in the job
+that already boots one for the role and action guards. A redirect is a failure, a
+non-200 outside the three deliberate 404s is a failure, and so is a screen that
+renders no form, button or link at all. Until 2026-09-10 it only printed, so
+27 consecutive `307 -> /account/password` responses read as a healthy report —
+each screen still had a title and no affordances, which is exactly what an
+onboarding dead end looks like. Its first honest run found three real ones:
+`/dashboard`, `/results` and `/fees` all told a day-one school to "set a term in
+Settings" in plain prose, with nothing to click.
 
 ⚠️ **A long-lived `next dev` can lose the tenant context**, and the symptom is
 not an error. After ~8 hours and many Fast Refreshes, every tenant-scoped read

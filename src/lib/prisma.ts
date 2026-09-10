@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { getTenantContext, runWithTenantContext } from "@/lib/tenant-context";
 
 // Transient errors typical of pooled/serverless Postgres (Supabase's pgBouncer,
@@ -33,6 +33,61 @@ const SET_GUC_SQL =
 function gucArgs() {
   const ctx = getTenantContext();
   return [ctx?.schoolId ?? "", ctx?.bypass ? "on" : "off"] as const;
+}
+
+/**
+ * The models Postgres will filter to NOTHING without a tenant GUC.
+ *
+ * Read off the schema rather than listed by hand, for the reason apply-rls.mjs
+ * enumerates tables from the database: a list maintained by remembering is a
+ * list that is wrong the first time somebody forgets. `School` is scoped by its
+ * own `id` rather than a `schoolId` column — the same special case the RLS
+ * scripts carry.
+ */
+const TENANT_MODELS = new Set(
+  Prisma.dmmf.datamodel.models
+    .filter((m) => m.name === "School" || m.fields.some((f) => f.name === "schoolId"))
+    .map((m) => m.name),
+);
+
+export class TenantContextMissingError extends Error {
+  constructor(model: string) {
+    super(
+      `No tenant context for a query on ${model}. Under RLS this cannot match a single row, ` +
+        `so it would answer "nothing here" for a school with plenty. Call ` +
+        `setTenantContext({ schoolId }) in this frame — an action must do it itself, ` +
+        `enterWith does not reach a caller — or withBypass() if the query is deliberately ` +
+        `cross-tenant, as a login or the platform console is.`,
+    );
+    this.name = "TenantContextMissingError";
+  }
+}
+
+/**
+ * Refuse a tenant query that has no tenant.
+ *
+ * ⚠️ Without this the GUC is simply set to the empty string and the query RUNS:
+ * every policy fails to match, nothing comes back, and the caller cannot tell
+ * "this school has none" from "nobody said which school". That silence is this
+ * codebase's most expensive recurring bug — a forged write onto a frozen grading
+ * scale SUCCEEDED because the guard reading ahead of it saw zero rows, and a dev
+ * server that had quietly lost the context served "0 on roll" to a school of 44
+ * and a 404 from the one page that checks rather than renders empty.
+ *
+ * Both intents are already written down everywhere they are meant: actions call
+ * setTenantContext, session.ts wraps its pre-tenant reads in withBypass. This
+ * only fires where NEITHER was said, which is always a bug — so it throws in
+ * production too. A page that says a school has nothing is worse than one that
+ * says what went wrong.
+ */
+function assertTenantContext(model: string) {
+  const ctx = getTenantContext();
+  if (ctx?.bypass || ctx?.schoolId) {
+    return;
+  }
+  if (TENANT_MODELS.has(model)) {
+    throw new TenantContextMissingError(model);
+  }
 }
 
 function createPrismaClient() {
@@ -82,6 +137,7 @@ function createPrismaClient() {
           if (!RLS_ON || !model || getTenantContext()?.inTx) {
             return query(args);
           }
+          assertTenantContext(model);
           const [sid, bypass] = gucArgs();
           return extended
             .$transaction([extended.$executeRawUnsafe(SET_GUC_SQL, sid, bypass), query(args)])

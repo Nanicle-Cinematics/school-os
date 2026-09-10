@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
 import { getFeeSetup } from "@/lib/fee-data";
@@ -20,8 +21,11 @@ export default async function FeesPage() {
       <div className="mx-auto max-w-2xl">
         <Card>
           <p className="px-4 py-10 text-center text-sm text-slate-500">
-            No academic year is marked as current. Set one up in Settings before creating fee
-            structures.
+            No academic year is marked as current, and fees are priced per term.{" "}
+            <Link href="/settings/terms" className="font-medium text-brand-600 hover:underline">
+              Set up the year and its terms
+            </Link>{" "}
+            first.
           </p>
         </Card>
       </div>

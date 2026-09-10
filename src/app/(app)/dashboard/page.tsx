@@ -111,9 +111,17 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Good day, {firstName}</h1>
         <p className="mt-0.5 text-sm text-slate-500">
-          {data.term
-            ? `Here is where ${auth.schoolName} stands this term.`
-            : "No term is marked as current — set one in Settings to see termly figures."}
+          {data.term ? (
+            `Here is where ${auth.schoolName} stands this term.`
+          ) : (
+            <>
+              No term is marked as current, so there are no termly figures yet.{" "}
+              <Link href="/settings/terms" className="font-medium text-brand-600 hover:underline">
+                Set up the year and its terms
+              </Link>
+              .
+            </>
+          )}
         </p>
       </div>
 
