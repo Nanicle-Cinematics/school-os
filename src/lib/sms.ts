@@ -28,7 +28,16 @@ export async function sendSms(
   const apiKey = process.env.SMS_API_KEY;
   const provider = opts.provider ?? (process.env.SMS_PROVIDER as SmsProvider | undefined) ?? null;
 
-  if (!apiKey || !provider) {
+  /**
+   * `SMS_DRY_RUN=1` forces dry-run even WITH credentials.
+   *
+   * For verify scripts and staging: the password-reset flow refuses to start
+   * unless a gateway is configured (telling a parent to wait for a text that
+   * cannot arrive is worse than telling them to ring the office), so exercising
+   * it otherwise means either real texts or real requests to Arkesel from CI.
+   * Neither belongs in a test suite.
+   */
+  if (process.env.SMS_DRY_RUN === "1" || !apiKey || !provider) {
     return { ok: true, dryRun: true, providerRef: `dryrun-${Date.now()}` };
   }
 

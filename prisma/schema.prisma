@@ -267,6 +267,7 @@ model User {
 
   memberships Membership[]
   sessions    Session[]
+  passwordResets PasswordReset[]
   auditLogs   AuditLog[]
 
   recordedPayments  Payment[]         @relation("PaymentRecordedBy")
@@ -305,6 +306,34 @@ model Membership {
   @@unique([schoolId, userId, role])
   @@index([schoolId])
   @@index([userId])
+}
+
+/**
+ * A one-time code that lets a parent who has forgotten their password set a new
+ * one, without the office reading a password down a phone line.
+ *
+ * NO schoolId, deliberately — like Session and User. The whole flow happens
+ * BEFORE anyone is signed in, so there is no tenant context to scope it by, and
+ * a tenant table read without one is refused outright (see src/lib/prisma.ts).
+ *
+ * The code itself is never stored: `codeHash` is a SHA-256 of it, the same shape
+ * Session uses for its token, so a leaked database row cannot be replayed into
+ * an account.
+ */
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  expiresAt DateTime
+  /** Set the moment it is spent, so a code works exactly once. */
+  consumedAt DateTime?
+  /** Wrong guesses. Past the cap the code is dead, so a 6-digit code cannot be walked. */
+  attempts  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Session {

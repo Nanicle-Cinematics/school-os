@@ -98,6 +98,11 @@ jobs:
       - name: SMS — phone normalisation, GSM-7 segments, merge fields
         run: npm run verify:sms
 
+      # A security flow, so every assertion is a refusal: a wrong code, a spent
+      # one, an expired one, a sixth guess, a staff number, a stranger's number.
+      - name: Password reset — codes, expiry and guessing
+        run: npm run verify:reset
+
       - name: Audience — campaign reach, dedupe, debtor filtering
         run: npm run verify:audience
 
