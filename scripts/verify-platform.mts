@@ -61,16 +61,21 @@ const schoolId = school!.id;
 
 // A read, under read-only: must still work. This is the whole point of the
 // choice — a head teacher mid-term keeps their records.
-const readCount = await runWithTenantContext({ schoolId, readOnly: true }, () =>
+const readCount = await runWithTenantContext({ schoolId, readOnly: true }, async () =>
   prisma.student.count({ where: { deletedAt: null } }),
 );
 check("a school in arrears can still READ its pupils", readCount > 0, `${readCount} pupils`);
 
 let refused: unknown = null;
 try {
-  await runWithTenantContext({ schoolId, readOnly: true }, () =>
-    prisma.house.create({ data: { schoolId, name: `readonly probe ${Date.now()}` } }),
-  );
+  // ⚠️ `async` and awaited INSIDE the scope. A Prisma promise is lazy, so
+  // `run(ctx, () => prisma.x.create(...))` hands back an unexecuted promise and
+  // the storage scope exits before the query runs — the context is then empty
+  // and the write sails through. CI failed on exactly this, and it is the same
+  // trap CLAUDE.md records for withBypass.
+  await runWithTenantContext({ schoolId, readOnly: true }, async () => {
+    await prisma.house.create({ data: { schoolId, name: `readonly probe ${Date.now()}` } });
+  });
 } catch (error) {
   refused = error;
 }
@@ -142,8 +147,8 @@ check("and that transaction wrote nothing", txStray === 0, `${txStray} rows`);
 
 // The console has to be able to lift it — otherwise reactivating a suspended
 // school would be refused by the suspension, and the only way out is the database.
-const lifted = await runWithTenantContext({ schoolId, readOnly: true }, () =>
-  withBypass(() => prisma.school.findUnique({ where: { id: schoolId }, select: { id: true } })),
+const lifted = await runWithTenantContext({ schoolId, readOnly: true }, async () =>
+  withBypass(async () => prisma.school.findUnique({ where: { id: schoolId }, select: { id: true } })),
 );
 check("withBypass lifts it, so the console can reactivate a school", lifted !== null);
 
@@ -151,9 +156,9 @@ check("withBypass lifts it, so the console can reactivate a school", lifted !== 
 let wroteFine = false;
 const probeName = `subscription probe ${Date.now()}`;
 try {
-  await runWithTenantContext({ schoolId, readOnly: false }, () =>
-    prisma.house.create({ data: { schoolId, name: probeName } }),
-  );
+  await runWithTenantContext({ schoolId, readOnly: false }, async () => {
+    await prisma.house.create({ data: { schoolId, name: probeName } });
+  });
   wroteFine = true;
 } catch {
   wroteFine = false;
