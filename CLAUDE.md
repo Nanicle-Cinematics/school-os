@@ -162,25 +162,52 @@ explicitly and still saw nothing when the GUC was empty.
 **`connection_limit`**: with RLS on, every model op becomes a transaction, which
 `connection_limit=1` cannot serve (P2024). The app role's URL uses **4**.
 
-⚠️ **It used to be 10, and that number took the dev project down.** A free-tier
-`t4g.nano` has ~512 MB of RAM shared between Postgres and Supabase's own
-services, and a Postgres connection costs 5–10 MB of it. On 2026-09-11 the dev
-project reached **CPU 80%, RAM 85% on fourteen requests in an hour** and went
-Unhealthy — not paused, which is a different failure with a different message
-(see the pause signature below). What filled it was connections, not traffic: a
-dev server holding ten, a second dev server more than once, a dozen verify
-scripts each opening their own client, headless-Chrome screenshot runs, and
-scripts killed mid-run whose connections the pooler reaps slowly.
+⚠️ **It used to be 10, and the dev project went Unhealthy under it** on
+2026-09-11 — **CPU 80%, RAM 85%, on fourteen requests in an hour**, then hours
+unreachable. Not paused: that is a different failure with a different message
+(the pooler says `FATAL: (ENOTFOUND) tenant/user … not found`), and the project's
+API gateway answered 401 throughout.
 
-So: **one dev server at a time**, and prefer finishing a script to killing it. If
-it happens again, restart the project from Settings → Infrastructure and then ask
-where the connections went:
+**The limiter was DISK IO and COMPUTE at 100%, not memory.** A free-tier
+`t4g.nano` runs on burst credits for both; spend them and the instance crawls
+while every client above it times out — which is exactly the progression seen:
+pool checkout timeouts, then authentication timeouts, then "Can't reach database
+server". Connections were what spent them: a dev server holding ten, a second dev
+server more than once, a dozen verify scripts each opening their own client,
+headless-Chrome screenshot runs, and scripts killed mid-run whose connections the
+pooler reaps slowly.
+
+⚠️ **A restart does NOT refill burst credits** — they recover with idle time. It
+clears stuck connections and open transactions, and that is all. After the
+restart here, `select 1` still took **6.2 seconds**.
+
+Two things measured afterwards, both worth knowing before diagnosing this again:
+
+- **Supabase's own services hold ~6 connections before the app opens one** —
+  PostgREST ×2, Supavisor, postgres_exporter, Storage API, pg_cron. `max_connections`
+  is 60 and `shared_buffers` 224 MB. Ten for one dev server was not a rounding
+  error on that instance.
+- ⚠️ **80 MB of WAL is NOT a leak, and there was no replication slot.**
+  `min_wal_size` is **128 MB** here, so Postgres keeps at least that preallocated
+  for reuse and 80 MB sits below the floor. A WAL directory larger than the
+  database looks alarming on a 31 MB dev database and means nothing. Do not go
+  hunting `pg_replication_slots` for it, as this file's author did — the query
+  came back empty.
+
+So: **one dev server at a time**, prefer finishing a script to killing it, and if
+it happens again restart from **Settings → General → Project availability**
+(*not* Infrastructure, which only shows the readouts), then leave it alone for an
+hour. To tell a client problem from a platform one:
 
 ```sql
 select state, count(*) from pg_stat_activity group by state order by count desc;
+select coalesce(application_name, '(none)') as app, count(*)
+  from pg_stat_activity group by app order by count desc;
 ```
 
-A pile of `idle` rows means the client left them, not the platform.
+A pile of `idle` rows under your own application name means the client left them.
+Idle connections belonging to PostgREST, Supavisor or pg_cron are the platform's
+baseline and are not yours to fix.
 
 **`verify:onboarding` ASSERTS, and CI runs it** against the built app, in the job
 that already boots one for the role and action guards. A redirect is a failure, a
