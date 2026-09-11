@@ -1,7 +1,9 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import type { Plan } from "@prisma/client";
 import { createSchool, type PlatformState } from "@/lib/platform-actions";
+import { PLANS, TRIAL_DAYS } from "@/lib/subscription";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500";
@@ -65,11 +67,19 @@ export function NewSchoolForm() {
         </Field>
 
         <Field label="Plan">
+          {/* Priced from PLANS so the console and the price list cannot drift —
+              this select said "Trial (30 days)" while provisioning granted a
+              different number, which is the kind of thing a school reads as a
+              promise. */}
           <select name="plan" defaultValue="TRIAL" className={inputClass}>
-            <option value="TRIAL">Trial (30 days)</option>
-            <option value="STARTER">Starter</option>
-            <option value="GROWTH">Growth</option>
-            <option value="SCHOOL_PLUS">School Plus</option>
+            {(Object.keys(PLANS) as Plan[]).map((plan) => (
+              <option key={plan} value={plan}>
+                {PLANS[plan].label}
+                {plan === "TRIAL"
+                  ? ` (${TRIAL_DAYS} days, free)`
+                  : ` — GH₵${PLANS[plan].monthlyPrice} a month`}
+              </option>
+            ))}
           </select>
         </Field>
 

@@ -188,12 +188,29 @@ export function nextDueDate(paidUntil: Date | null, now = new Date()): Date {
   return next;
 }
 
-/** What each plan is called on screen, and what it allows. */
-export const PLANS: Record<Plan, { label: string; studentCap: number | null }> = {
-  TRIAL: { label: "Trial", studentCap: 60 },
-  STARTER: { label: "Starter", studentCap: 150 },
-  GROWTH: { label: "Growth", studentCap: 500 },
-  SCHOOL_PLUS: { label: "School Plus", studentCap: null },
+/** How long a new school has before it has to decide. */
+export const TRIAL_DAYS = 7;
+
+/**
+ * What each plan is called, what it costs a month, and what it allows.
+ *
+ * ⚠️ **No pupil caps.** The two paid plans are separated by price, not by roll
+ * size, so nothing here refuses an admission. A school that needs a limit gets
+ * one on its own record (`studentCap` on the console), which is a decision about
+ * that school rather than a rule invented for everybody.
+ *
+ * The trial is uncapped for the same reason and a sharper one: a school
+ * evaluating the software imports its real register, and meeting a limit in the
+ * middle of that is the worst possible moment to meet one. It is limited by TIME
+ * instead — seven days — which `trialEndsAt` already enforces.
+ */
+export const PLANS: Record<
+  Plan,
+  { label: string; studentCap: number | null; monthlyPrice: number | null }
+> = {
+  TRIAL: { label: "Trial", studentCap: null, monthlyPrice: 0 },
+  STANDARD: { label: "Standard", studentCap: null, monthlyPrice: 500 },
+  INSTITUTION_PLUS: { label: "Institution Plus", studentCap: null, monthlyPrice: 800 },
 };
 
 /**

@@ -7,7 +7,7 @@ import {
   recordSubscriptionPayment,
   type PlatformState,
 } from "@/lib/platform-actions";
-import { PLANS, STATUS_LABELS } from "@/lib/subscription";
+import { PLANS, STATUS_LABELS, TRIAL_DAYS } from "@/lib/subscription";
 
 const inputClass =
   "w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500";
@@ -48,7 +48,9 @@ export function SubscriptionForm({
             {(Object.keys(PLANS) as Plan[]).map((plan) => (
               <option key={plan} value={plan}>
                 {PLANS[plan].label}
-                {PLANS[plan].studentCap ? ` — up to ${PLANS[plan].studentCap} pupils` : " — no cap"}
+                {plan === "TRIAL"
+                  ? ` (${TRIAL_DAYS} days, free)`
+                  : ` — GH₵${PLANS[plan].monthlyPrice} a month`}
               </option>
             ))}
           </select>
@@ -91,7 +93,12 @@ export function SubscriptionForm({
             name="monthlyFee"
             min={0}
             step="0.01"
-            defaultValue={school.monthlyFee ?? ""}
+            /* Falls back to the plan's price rather than empty: a school with no
+               fee set is a loose end the revenue card already flags, and the
+               list price is the right answer far more often than blank. It stays
+               editable, because a negotiated rate is a decision about this
+               school and not a change to the price list. */
+            defaultValue={school.monthlyFee ?? PLANS[school.plan].monthlyPrice ?? ""}
             placeholder="Not set"
             className={inputClass}
           />
