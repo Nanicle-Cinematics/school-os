@@ -147,6 +147,39 @@ function createPrismaClient() {
   const client = base.$extends({
     query: {
       async $allOperations({ model, operation, args, query }) {
+        /**
+         * A school that has not paid can be READ but not written.
+         *
+         * ⚠️ ABOVE the early return below, and that placement is the whole
+         * correctness of it. Inside `exec` this check sat after
+         * `if (!RLS_ON || !model || inTx) return query(args)`, which skipped it
+         * in two situations that matter: any deployment with DB_RLS off, and —
+         * far worse — every operation inside `tenantTransaction`, which is how
+         * most multi-statement writes in this app are made. CI caught it by
+         * running with RLS off; the transaction hole would have reached
+         * production, where the guard looks perfect and lets invoicing,
+         * promotion and results through.
+         *
+         * This rule depends on no GUC and no connection state, so it belongs
+         * before anything that does.
+         *
+         * Reads are untouched on purpose — a head teacher mid-term can still
+         * look a pupil up, print a report card and see what is owed, and so can
+         * every parent: the portal only reads, so a school's unpaid invoice
+         * never reaches the families. `withBypass` lifts it, which is what the
+         * Nanicle console needs to change the subscription that caused it.
+         */
+        const subscription = getTenantContext();
+        if (
+          model &&
+          subscription?.readOnly &&
+          !subscription.bypass &&
+          WRITES.has(operation) &&
+          TENANT_MODELS.has(model)
+        ) {
+          throw new SchoolReadOnlyError(model, operation);
+        }
+
         const exec = () => {
           // Raw ops (no model) and interactive-tx ops (GUC already set) run
           // as-is. Everything else is wrapped so the tenant GUC and the query
@@ -155,27 +188,6 @@ function createPrismaClient() {
             return query(args);
           }
           assertTenantContext(model);
-
-          /**
-           * A school that has not paid can be READ but not written.
-           *
-           * Enforced here, and only here, for the same reason the tenant guard
-           * above is: there are sixty-odd server actions and a rule that lives
-           * in each of them is a rule that will be missing from the next one.
-           * Every tenant write in the app passes through this extension.
-           *
-           * Reads are untouched on purpose — a head teacher mid-term can still
-           * look a pupil up, print a report card and see what is owed. So can
-           * every parent: the portal only reads, so a school's unpaid invoice
-           * never reaches the families.
-           *
-           * `withBypass` lifts it, which is what the Nanicle console needs to
-           * change the subscription that caused it.
-           */
-          const ctx = getTenantContext();
-          if (ctx?.readOnly && !ctx.bypass && WRITES.has(operation) && TENANT_MODELS.has(model)) {
-            throw new SchoolReadOnlyError(model, operation);
-          }
 
           const [sid, bypass] = gucArgs();
           return extended
