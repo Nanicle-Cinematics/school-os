@@ -33,7 +33,7 @@ export default async function PortalHomePage() {
       {children.length === 0 ? (
         // A guardian record with no children linked. Says who to ask rather than
         // showing an empty page that reads as though the school lost them.
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+        <div className="rounded-2xl border border-slate-200 bg-surface p-6 text-center">
           <p className="text-sm font-semibold text-slate-900">No children linked yet</p>
           <p className="mt-1 text-sm text-slate-600">
             The school has not yet linked a pupil to your account. Please ask the
@@ -50,10 +50,10 @@ export default async function PortalHomePage() {
                    middle one until the class and admission number truncated —
                    "Kindergarten 1 A · S…" — and that line is the whole reason a
                    parent with two children can tell which row is which. */
-                className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm sm:flex-row sm:items-center sm:gap-4"
+                className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-surface p-4 transition hover:border-brand-300 hover:shadow-sm sm:flex-row sm:items-center sm:gap-4"
               >
                 <div className="flex min-w-0 items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-sm font-extrabold text-brand-700">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-sm font-extrabold text-brand-ink">
                   {initials(child)}
                 </div>
 
@@ -79,7 +79,7 @@ export default async function PortalHomePage() {
                       </p>
                     </>
                   ) : (
-                    <p className="text-sm font-semibold text-brand-700">Paid up</p>
+                    <p className="text-sm font-semibold text-brand-ink">Paid up</p>
                   )}
                   <p className="text-xs text-slate-400 sm:mt-0.5">
                     {child.reportCards === 0

@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "No access · School OS" };
 export default function NoAccessPage() {
   return (
     <main className="flex min-h-full items-center justify-center bg-slate-50 px-4 py-12">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 text-center">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-surface p-6 text-center">
         <h1 className="text-lg font-semibold text-slate-900">No school linked</h1>
         <p className="mt-1.5 text-sm text-slate-500">
           Your account is signed in but is not linked to any school yet. Ask your school

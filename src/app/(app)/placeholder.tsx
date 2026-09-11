@@ -14,7 +14,7 @@ export function Placeholder({
 }) {
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+      <div className="rounded-xl border border-dashed border-slate-300 bg-surface p-8 text-center">
         <span className="inline-block rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
           {phase}
         </span>

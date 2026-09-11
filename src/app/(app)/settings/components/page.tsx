@@ -44,7 +44,7 @@ export default async function ComponentsPage() {
         />
       </Card>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500">
+      <div className="rounded-xl border border-slate-200 bg-surface p-4 text-xs text-slate-500">
         <p className="mb-1 font-medium text-slate-700">How the marks reach the report card</p>
         <p>
           A student&rsquo;s class score is the marks they earned across the class components divided

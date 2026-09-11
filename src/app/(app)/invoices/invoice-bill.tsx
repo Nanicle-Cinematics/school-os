@@ -50,7 +50,7 @@ export function InvoiceBill({
 
   return (
     <article
-      className={`rounded-xl border border-slate-200 bg-white p-6 text-slate-900 print:rounded-none print:border-0 print:p-0 ${
+      className={`paper rounded-xl border border-slate-200 bg-white p-6 text-slate-900 print:rounded-none print:border-0 print:p-0 ${
         breakAfter ? "print:break-after-page" : ""
       }`}
     >

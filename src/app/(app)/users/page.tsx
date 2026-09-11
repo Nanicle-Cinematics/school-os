@@ -47,7 +47,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
 
       {error ? <Alert tone="error">{error}</Alert> : null}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className={tableHeadClass}>

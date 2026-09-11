@@ -27,7 +27,7 @@ export default async function AdminPage() {
 
   return (
     <main className="min-h-full bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
+      <header className="border-b border-slate-200 bg-surface">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">Nanicle console</p>
@@ -60,7 +60,7 @@ export default async function AdminPage() {
           <NewSchoolForm />
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-surface">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

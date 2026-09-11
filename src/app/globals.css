@@ -53,13 +53,166 @@
   --color-accent-500: #e0a32e;
   --color-accent-600: #b07d1d;
   --color-accent-700: #8a6116;
+
+  /* Brand as INK, not as a fill.
+     brand-600 and brand-700 are button backgrounds (41 fills, 28 of them hover
+     states) as well as text, and the two want opposite things when the lights go
+     out: a fill must stay dark enough for white text to sit on it, while text
+     must lift off a black page. Splitting them is what stops "make the green
+     lighter" from quietly ruining every primary button's hover. */
+  --color-brand-ink: #0e6a4c;
+
+  /* The one colour that is not part of a ramp: the paper a card is printed on.
+     `bg-white` cannot follow a theme — white is white — so every card, header
+     and table in the app wears `bg-surface` instead, and this is the value that
+     changes when the lights go out. */
+  --color-surface: #ffffff;
 }
 
-/* Light-only for now. The admin console is used in bright offices and on cheap
-   phone screens; a half-finished dark theme is worse than none. Revisit once the
-   product design settles. */
+/* Class-based, not `prefers-color-scheme` alone: a bursar working in a bright
+   office and a parent checking a balance at night are the same person's two
+   preferences, and only one of them is the system setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 html {
   color-scheme: light;
+}
+
+/**
+ * Dark mode: the SAME names, different values.
+ *
+ * Nothing in the app says `dark:` anywhere. The screens are written in
+ * `slate-*`, `brand-*` and `bg-surface`, and those names resolve to whatever
+ * this block says they are — so a theme is a palette swap rather than a second
+ * class attribute on nine hundred elements, which is the version that
+ * half-works and then rots.
+ *
+ * It is BLACK, not a dark green: the green is the brand's accent against it, and
+ * a dark-green ground would make the rail, the buttons and the paper all the
+ * same family with no figure left.
+ *
+ * The ramp INVERTS: slate-50 is the page a screen sits on and slate-900 is the
+ * text, in both themes. That is what carries ~990 utilities across without an
+ * edit — and it is why `text-slate-500` stays "the quieter text" rather than
+ * becoming an accident.
+ */
+html.dark {
+  color-scheme: dark;
+
+  --color-slate-50: #0c0e0d;
+  --color-slate-100: #151918;
+  --color-slate-200: #1f2523;
+  --color-slate-300: #2e3633;
+  /* 400 is the faintest text the app uses; kept above 4.5:1 on the surface
+     below rather than at the ramp's arithmetic midpoint. */
+  --color-slate-400: #7b8a84;
+  --color-slate-500: #93a29b;
+  --color-slate-600: #b3c0ba;
+  --color-slate-700: #cfd9d4;
+  --color-slate-800: #e6ede9;
+  --color-slate-900: #f2f7f4;
+
+  /* A card is lifted off the page rather than outlined — the borders are nearly
+     invisible at this end of the ramp, so the lift is what separates them. */
+  --color-surface: #151a18;
+
+  /* ⚠️ brand-600/700/800 are NOT touched. 600 and 700 carry white text as button
+     fills, and 800 is the navigation rail's own gradient — lightening it turned
+     the rail into a pale green panel. Only the ink lifts. */
+  --color-brand-ink: #45b189;
+
+  /* Status colours are Tailwind's own families, used as tinted pills — a 50
+     background with 700 text. Left alone they stay bright islands on a black
+     page, so each pair is re-cut for dark: the tint becomes a low-light wash and
+     the text becomes the readable end. */
+  --color-green-50: #0f2a1e;
+  --color-green-700: #5fd6a2;
+  --color-red-50: #2d1615;
+  --color-red-700: #ff9086;
+  --color-amber-50: #2a2109;
+  --color-amber-700: #eeb540;
+  --color-blue-50: #10202e;
+  --color-blue-700: #7fc5ff;
+
+  /* Gold on black wants the brighter end for the same reason. */
+  --color-accent-600: #e0a32e;
+  --color-accent-700: #e9b44c;
+
+  /* Tinted fills (the avatar squares, the icon chips) are ink on paper in light
+     mode and would glow at those values here. */
+  --color-brand-50: #10241c;
+  --color-accent-50: #241c09;
+}
+
+/**
+ * Paper is paper.
+ *
+ * A report card and a fee invoice are documents, not chrome: they are white
+ * because they are about to be printed, and a parent looking at one on a phone
+ * at night should see the sheet the school will hand them. Re-asserting the
+ * light values here beats `html.dark` for everything inside, because a custom
+ * property resolves from the nearest ancestor that sets it.
+ */
+.paper {
+  color-scheme: light;
+
+  --color-slate-50: #f4f7f4;
+  --color-slate-100: #eaefea;
+  --color-slate-200: #e4eae5;
+  --color-slate-300: #c8d2ca;
+  --color-slate-400: #8a9a92;
+  --color-slate-500: #586b61;
+  --color-slate-600: #48564e;
+  --color-slate-700: #37423b;
+  --color-slate-800: #232c27;
+  --color-slate-900: #0f1f19;
+  --color-surface: #ffffff;
+  --color-accent-600: #b07d1d;
+  --color-accent-700: #8a6116;
+  --color-brand-50: #edf7f2;
+  --color-accent-50: #fdf8ec;
+  --color-brand-ink: #0e6a4c;
+  --color-green-50: #f0fdf4;
+  --color-green-700: #15803d;
+  --color-red-50: #fef2f2;
+  --color-red-700: #b91c1c;
+  --color-amber-50: #fffbeb;
+  --color-amber-700: #b45309;
+  --color-blue-50: #eff6ff;
+  --color-blue-700: #1d4ed8;
+}
+
+/* And whatever is on screen, a printer gets the light palette: nobody wants a
+   class list printed as a black page, and the school pays for the toner. */
+@media print {
+  html.dark {
+    color-scheme: light;
+
+    --color-slate-50: #f4f7f4;
+    --color-slate-100: #eaefea;
+    --color-slate-200: #e4eae5;
+    --color-slate-300: #c8d2ca;
+    --color-slate-400: #8a9a92;
+    --color-slate-500: #586b61;
+    --color-slate-600: #48564e;
+    --color-slate-700: #37423b;
+    --color-slate-800: #232c27;
+    --color-slate-900: #0f1f19;
+    --color-surface: #ffffff;
+    --color-accent-600: #b07d1d;
+    --color-accent-700: #8a6116;
+    --color-brand-50: #edf7f2;
+    --color-accent-50: #fdf8ec;
+  --color-brand-ink: #0e6a4c;
+    --color-green-50: #f0fdf4;
+    --color-green-700: #15803d;
+    --color-red-50: #fef2f2;
+    --color-red-700: #b91c1c;
+    --color-amber-50: #fffbeb;
+    --color-amber-700: #b45309;
+    --color-blue-50: #eff6ff;
+    --color-blue-700: #1d4ed8;
+  }
 }
 
 body {

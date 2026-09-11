@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ThemeToggle } from "../theme-toggle";
 import { logout } from "@/lib/auth-actions";
 import { requireGuardian } from "@/lib/portal-auth";
 
@@ -27,7 +28,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="flex min-h-full flex-col bg-slate-50">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-surface">
         <div className="mx-auto flex h-16 max-w-3xl items-center gap-3 px-4">
           <Link href="/portal" className="min-w-0 flex-1">
             <p className="truncate text-sm font-extrabold tracking-tight text-slate-900">
@@ -40,6 +41,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
             <p className="truncate text-sm font-bold text-slate-900">{ctx.name}</p>
           </div>
 
+          <ThemeToggle />
           <form action={logout}>
             <button
               type="submit"

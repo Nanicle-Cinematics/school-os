@@ -20,7 +20,7 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-surface p-6 shadow-sm">
           <LoginForm />
         </div>
 

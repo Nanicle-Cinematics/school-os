@@ -30,8 +30,8 @@ export function SubmitButton({
     variant === "primary"
       ? "bg-brand-600 text-white hover:bg-brand-700"
       : variant === "danger"
-        ? "border border-red-200 bg-white text-red-700 hover:bg-red-50"
-        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
+        ? "border border-red-200 bg-surface text-red-700 hover:bg-red-50"
+        : "border border-slate-200 bg-surface text-slate-700 hover:bg-slate-50";
 
   return (
     <button

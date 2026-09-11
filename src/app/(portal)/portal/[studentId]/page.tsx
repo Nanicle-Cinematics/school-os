@@ -34,15 +34,15 @@ export default async function ChildOverviewPage({ params }: PageProps<"/portal/[
 
       <Link
         href={`/portal/${studentId}/fees`}
-        className="block rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-brand-300 hover:shadow-sm"
+        className="block rounded-2xl border border-slate-200 bg-surface p-5 transition hover:border-brand-300 hover:shadow-sm"
       >
         <div className="flex items-baseline justify-between gap-4">
           <p className="text-sm font-semibold text-slate-600">School fees</p>
-          <span className="text-xs font-semibold text-brand-700">View bills &amp; receipts →</span>
+          <span className="text-xs font-semibold text-brand-ink">View bills &amp; receipts →</span>
         </div>
         <p
           className={`mt-2 text-3xl font-extrabold tabular-nums ${
-            owing ? "text-accent-700" : "text-brand-700"
+            owing ? "text-accent-700" : "text-brand-ink"
           }`}
         >
           {owing ? formatCedis(finance.outstanding) : "Paid up"}
@@ -56,12 +56,12 @@ export default async function ChildOverviewPage({ params }: PageProps<"/portal/[
 
       <Link
         href={`/portal/${studentId}/results`}
-        className="block rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-brand-300 hover:shadow-sm"
+        className="block rounded-2xl border border-slate-200 bg-surface p-5 transition hover:border-brand-300 hover:shadow-sm"
       >
         <div className="flex items-baseline justify-between gap-4">
           <p className="text-sm font-semibold text-slate-600">Report cards</p>
           {terms.length > 0 ? (
-            <span className="text-xs font-semibold text-brand-700">See all →</span>
+            <span className="text-xs font-semibold text-brand-ink">See all →</span>
           ) : null}
         </div>
 

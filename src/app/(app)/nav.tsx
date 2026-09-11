@@ -98,8 +98,8 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
                     aria-current={active ? "page" : undefined}
                     className={`relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
                       active
-                        ? "bg-white/[0.13] font-bold text-white"
-                        : "font-medium text-white/70 hover:bg-white/[0.07] hover:text-white"
+                        ? "bg-surface/[0.13] font-bold text-white"
+                        : "font-medium text-white/70 hover:bg-surface/[0.07] hover:text-white"
                     }`}
                   >
                     {active ? (
@@ -130,7 +130,7 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
 function TermCard({ term }: { term: RailTerm | null }) {
   if (!term) {
     return (
-      <div className="rounded-2xl bg-white/[0.07] p-3.5">
+      <div className="rounded-2xl bg-surface/[0.07] p-3.5">
         <p className="text-[11px] font-bold text-accent-400">No current term</p>
         <p className="mt-0.5 text-[13px] font-bold text-white">Set one in Settings</p>
         <p className="mt-1 text-[11px] text-white/55">
@@ -140,7 +140,7 @@ function TermCard({ term }: { term: RailTerm | null }) {
     );
   }
   return (
-    <div className="rounded-2xl bg-white/[0.07] p-3.5">
+    <div className="rounded-2xl bg-surface/[0.07] p-3.5">
       <p className="text-[11px] font-bold text-accent-400">{term.label}</p>
       {term.closes ? (
         <p className="mt-0.5 text-[13px] font-bold text-white">
@@ -168,7 +168,7 @@ function RailBody({
   return (
     <>
       <div className="mb-4 flex items-center gap-2.5 px-1">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.14] text-[12px] font-extrabold text-white">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface/[0.14] text-[12px] font-extrabold text-white">
           {(school.shortName ?? school.name).slice(0, 2).toUpperCase()}
         </span>
         {/* Two lines rather than an ellipsis: a school's name is the one string

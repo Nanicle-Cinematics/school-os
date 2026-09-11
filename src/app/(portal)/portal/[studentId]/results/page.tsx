@@ -33,7 +33,7 @@ export default async function ChildResultsPage({
       </h2>
 
       {terms.length === 0 ? (
-        <p className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+        <p className="rounded-2xl border border-slate-200 bg-surface p-5 text-sm text-slate-600">
           No report card has been published yet. They appear here once the school
           releases the term&apos;s results.
         </p>
@@ -43,7 +43,7 @@ export default async function ChildResultsPage({
             <li key={t.termId}>
               <Link
                 href={`/portal/${studentId}/results/${t.termId}`}
-                className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm"
+                className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-surface p-4 transition hover:border-brand-300 hover:shadow-sm"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-bold text-slate-900">

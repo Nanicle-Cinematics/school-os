@@ -29,7 +29,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <form action={formAction} className="rounded-xl border border-slate-200 bg-white p-4 lg:p-5">
+    <form action={formAction} className="rounded-xl border border-slate-200 bg-surface p-4 lg:p-5">
       <h2 className="text-sm font-semibold text-slate-900">Record a payment</h2>
       <p className="mt-0.5 text-sm text-slate-500">
         The amount clears the oldest unpaid invoice first, so arrears settle before this term.

@@ -34,9 +34,32 @@ export const metadata: Metadata = {
   description: "School management for Ghanaian schools — by Nanicle Enterprise Solutions.",
 };
 
+/**
+ * Applied BEFORE first paint, which is the whole reason it is a raw script tag
+ * and not a `useEffect`.
+ *
+ * A theme decided after hydration means every dark-mode page opens with a white
+ * flash — worst at night, which is when the setting is for. It reads the saved
+ * choice, falls back to the system's, and touches nothing else; if it throws
+ * (Safari private mode denies localStorage), the app stays light rather than
+ * blank.
+ */
+const THEME_SCRIPT = `
+try {
+  var saved = localStorage.getItem("theme");
+  var system = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  if (saved === "dark" || (saved !== "light" && system)) {
+    document.documentElement.classList.add("dark");
+  }
+} catch (e) {}
+`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${sans.variable} ${display.variable} h-full antialiased`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

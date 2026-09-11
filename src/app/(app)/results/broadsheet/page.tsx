@@ -86,7 +86,7 @@ export default async function BroadsheetPage({ searchParams }: PageProps<"/resul
               ) : (
                 rows.map(({ termResult, scores }) => (
                   <tr key={termResult.id} className="hover:bg-slate-50">
-                    <td className="sticky left-0 whitespace-nowrap bg-white px-4 py-2 font-medium text-slate-900">
+                    <td className="sticky left-0 whitespace-nowrap bg-surface px-4 py-2 font-medium text-slate-900">
                       {termResult.student.lastName}, {termResult.student.firstName}
                       <span className="ml-2 font-mono text-xs text-slate-400">
                         {termResult.student.admissionNo}

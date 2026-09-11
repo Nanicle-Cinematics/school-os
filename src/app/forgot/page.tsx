@@ -29,12 +29,12 @@ export default async function ForgotPasswordPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-surface p-6 shadow-sm">
           <ForgotForm />
         </div>
 
         <p className="mt-6 text-center text-sm text-slate-500">
-          <Link href="/login" className="font-medium text-brand-600 hover:underline">
+          <Link href="/login" className="font-medium text-brand-ink hover:underline">
             Back to sign in
           </Link>
         </p>

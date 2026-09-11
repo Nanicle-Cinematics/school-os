@@ -32,7 +32,7 @@ function Preview({ slot }: { slot: AssetSlot }) {
     );
   }
   return (
-    <div className={`${box} flex items-center justify-center border border-slate-200 bg-white p-2`}>
+    <div className={`${box} flex items-center justify-center border border-slate-200 bg-surface p-2`}>
       {/* Not next/image: this is a private, session-scoped route serving bytes
           straight from the row, so there is nothing for the optimiser to fetch. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -74,7 +74,7 @@ export function AssetForm({ slot }: { slot: AssetSlot }) {
             accept="image/png,image/jpeg,image/webp"
             required
             onChange={(event) => setChosen(event.target.files?.[0]?.name ?? null)}
-            className="block w-full max-w-xs text-xs text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-50"
+            className="block w-full max-w-xs text-xs text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-surface file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-50"
           />
           <SubmitButton>{slot.url ? "Replace" : "Upload"}</SubmitButton>
         </form>
