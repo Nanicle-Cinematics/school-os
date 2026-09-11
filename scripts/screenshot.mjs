@@ -78,6 +78,19 @@ await send("Network.setCookie", {
   name: "school_os_session", value: token, domain: "localhost", path: "/",
 });
 
+// The theme is a class on <html> set from localStorage before paint, so seed
+// the storage the same way a person's first press would.
+//
+// ⚠️ ALWAYS set it, never just when dark. The profile directory is reused
+// between runs, so a dark capture left "theme=dark" behind and the next light
+// run silently shot dark screens — which is a very convincing way to verify the
+// wrong thing.
+await send("Page.addScriptToEvaluateOnNewDocument", {
+  source: `try { localStorage.setItem("theme", ${
+    process.env.SHOT_THEME === "dark" ? '"dark"' : '"light"'
+  }); } catch (e) {}`,
+});
+
 const shots = [
   ["dashboard", "/dashboard", 1440, 950],
   ["students", "/students", 1440, 950],

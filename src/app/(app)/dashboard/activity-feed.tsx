@@ -18,9 +18,9 @@ const PATHS: Record<ActivityItem["kind"], string> = {
 };
 
 const TINT: Record<ActivityItem["kind"], string> = {
-  money: "bg-brand-50 text-brand-600",
+  money: "bg-brand-50 text-brand-ink",
   message: "bg-accent-50 text-accent-600",
-  academic: "bg-brand-50 text-brand-600",
+  academic: "bg-brand-50 text-brand-ink",
   people: "bg-slate-100 text-slate-500",
   admin: "bg-slate-100 text-slate-500",
 };

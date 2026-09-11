@@ -11,7 +11,7 @@ export function GenerateForm({ terms, currentTermId }: { terms: Term[]; currentT
   const [state, formAction] = useActionState<GenerateState, FormData>(generateInvoices, {});
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-slate-200 bg-surface p-4">
       <h2 className="text-sm font-semibold text-slate-900">Generate term invoices</h2>
       <p className="mt-0.5 text-sm text-slate-500">
         Bills every active student from their level&rsquo;s fee structure, carrying last

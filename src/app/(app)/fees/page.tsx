@@ -22,7 +22,7 @@ export default async function FeesPage() {
         <Card>
           <p className="px-4 py-10 text-center text-sm text-slate-500">
             No academic year is marked as current, and fees are priced per term.{" "}
-            <Link href="/settings/terms" className="font-medium text-brand-600 hover:underline">
+            <Link href="/settings/terms" className="font-medium text-brand-ink hover:underline">
               Set up the year and its terms
             </Link>{" "}
             first.

@@ -66,7 +66,7 @@ export default async function BrandingPage() {
         </div>
       </Card>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500">
+      <div className="rounded-xl border border-slate-200 bg-surface p-4 text-xs text-slate-500">
         <p className="mb-1 font-medium text-slate-700">Before you upload</p>
         <p>
           PNG, JPEG or WebP, under 512 KB. A crest scanned at about 600 pixels square prints

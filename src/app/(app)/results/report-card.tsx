@@ -46,7 +46,7 @@ export function ReportCard({
 
   return (
     <div
-      className={`rounded-xl border border-slate-200 bg-white p-6 print:border-0 ${
+      className={`paper rounded-xl border border-slate-200 bg-white p-6 print:border-0 ${
         breakAfter ? "print:break-after-page" : ""
       }`}
     >

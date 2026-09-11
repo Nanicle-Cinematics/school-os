@@ -33,14 +33,14 @@ export default async function ChangePasswordPage() {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="rounded-2xl border border-slate-200 bg-surface p-5">
         <PasswordForm />
       </div>
 
       {/* No way out while it is forced — leaving would defeat the point. */}
       {forced ? null : (
         <p className="mt-4 text-center text-sm">
-          <Link href={landingFor(auth.roles)} className="font-semibold text-brand-700 hover:underline">
+          <Link href={landingFor(auth.roles)} className="font-semibold text-brand-ink hover:underline">
             Back
           </Link>
         </p>

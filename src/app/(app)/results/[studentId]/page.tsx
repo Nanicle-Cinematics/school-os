@@ -59,7 +59,7 @@ export default async function ReportCardPage({
       {/* Remarks editor — never printed. */}
       <form
         action={saveRemarks}
-        className="rounded-xl border border-slate-200 bg-white p-4 print:hidden"
+        className="rounded-xl border border-slate-200 bg-surface p-4 print:hidden"
       >
         <input type="hidden" name="termId" value={termId} />
         <input type="hidden" name="studentId" value={studentId} />

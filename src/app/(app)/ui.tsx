@@ -36,14 +36,14 @@ export function Stat({
 }) {
   const toneClass =
     tone === "positive"
-      ? "text-brand-600"
+      ? "text-brand-ink"
       : tone === "negative"
         ? "text-red-600"
         : tone === "attention"
           ? "text-accent-600"
           : "text-slate-900";
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(12,40,28,0.04),0_8px_24px_rgba(12,40,28,0.05)]">
+    <div className="rounded-2xl border border-slate-200 bg-surface p-4 shadow-[0_1px_2px_rgba(12,40,28,0.04),0_8px_24px_rgba(12,40,28,0.05)]">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
           {label}
@@ -51,7 +51,7 @@ export function Stat({
         {trend ? (
           <span
             className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
-              trend.up ? "bg-brand-50 text-brand-600" : "bg-red-50 text-red-600"
+              trend.up ? "bg-brand-50 text-brand-ink" : "bg-red-50 text-red-600"
             }`}
           >
             {trend.up ? "↑" : "↓"} {trend.value}
@@ -74,7 +74,7 @@ export function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(12,40,28,0.04),0_8px_24px_rgba(12,40,28,0.05)]">
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-surface shadow-[0_1px_2px_rgba(12,40,28,0.04),0_8px_24px_rgba(12,40,28,0.05)]">
       {title ? (
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
           <h2 className="text-[14.5px] font-extrabold tracking-tight text-slate-900">{title}</h2>
@@ -197,7 +197,7 @@ export function Avatar({
   return (
     <span
       aria-hidden="true"
-      className={`${box} flex shrink-0 items-center justify-center bg-brand-50 font-extrabold text-brand-700`}
+      className={`${box} flex shrink-0 items-center justify-center bg-brand-50 font-extrabold text-brand-ink`}
     >
       {initials}
     </span>
@@ -214,7 +214,7 @@ export function ScoreBadge({ value }: { value: number | null }) {
   }
   const tone =
     value >= 70
-      ? "bg-brand-50 text-brand-700"
+      ? "bg-brand-50 text-brand-ink"
       : value >= 50
         ? "bg-accent-50 text-accent-700"
         : "bg-red-50 text-red-600";

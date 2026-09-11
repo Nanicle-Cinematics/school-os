@@ -92,6 +92,14 @@ await send("Network.setCookie", {
   name: "school_os_session", value: token, domain: "localhost", path: "/",
 });
 
+// Always set it — see the note in screenshot.mjs: the profile is reused, so a
+// dark run leaves "theme=dark" behind and the next light run shoots dark.
+await send("Page.addScriptToEvaluateOnNewDocument", {
+  source: `try { localStorage.setItem("theme", ${
+    process.env.SHOT_THEME === "dark" ? '"dark"' : '"light"'
+  }); } catch (e) {}`,
+});
+
 const routes = [
   ["portal-home", "/portal"],
   ...(child ? [["portal-child", `/portal/${child.studentId}`]] : []),

@@ -60,7 +60,7 @@ function Attention({ items }: { items: AttentionItem[] }) {
                   </span>
                   <span className="block truncate text-xs text-slate-500">{item.detail}</span>
                 </span>
-                <span className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-[11.5px] font-bold text-brand-700 transition group-hover:border-brand-200 group-hover:bg-brand-50">
+                <span className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-[11.5px] font-bold text-brand-ink transition group-hover:border-brand-200 group-hover:bg-brand-50">
                   {item.cta}
                 </span>
               </Link>
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
           ) : (
             <>
               No term is marked as current, so there are no termly figures yet.{" "}
-              <Link href="/settings/terms" className="font-medium text-brand-600 hover:underline">
+              <Link href="/settings/terms" className="font-medium text-brand-ink hover:underline">
                 Set up the year and its terms
               </Link>
               .

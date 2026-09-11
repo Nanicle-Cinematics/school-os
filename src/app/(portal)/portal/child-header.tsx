@@ -20,7 +20,7 @@ export function ChildHeader({ child }: { child: Child }) {
 
   return (
     <div className="flex items-center gap-4">
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-sm font-extrabold text-brand-700">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-sm font-extrabold text-brand-ink">
         {badge}
       </div>
       <div className="min-w-0 flex-1">

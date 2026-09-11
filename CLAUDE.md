@@ -695,10 +695,44 @@ Mark sheet and Assessments at once. `NavLinks` picks the longest matching href
 across all sections. Note React emits `aria-current` BEFORE `href`, which will
 break a naive test regex.
 
-**Dark mode, when it is built, is BLACK** — not a dark green. The green stays as
-the brand accent against it. The blocker is not the palette: 69 hardcoded
-`bg-white` across 51 files (plus 86 `border-slate-200`, 68 `bg-slate-50`) have to
-route through a surface token first, or the theme will half-work.
+**Dark mode is BLACK**, not a dark green — the green is the brand's accent
+against it. Built 2026-09-11, and the shape of it is the part worth keeping:
+
+**Nothing in the app says `dark:` anywhere.** The screens are written in
+`slate-*`, `brand-*` and `bg-surface`, and `html.dark` in globals.css gives those
+same names different values. The slate ramp INVERTS — slate-50 is the page a
+screen sits on and slate-900 is the text, in both themes — which carried ~990
+utilities across untouched. Only `bg-white` needed replacing (84 of them, now
+`bg-surface`), because white cannot follow a theme.
+
+Three things that are easy to get wrong here:
+
+- ⚠️ **A token used as a FILL cannot be lightened for text.** `brand-700` is
+  13 text uses and 28 `hover:bg-brand-700` fills; lightening it for legibility
+  put white button labels on mint. `brand-600/700/800` are untouched and
+  `--color-brand-ink` carries brand-coloured TEXT instead. Lightening `brand-800`
+  also turned the navigation rail — `from-brand-800 to-brand-900` — into a pale
+  green panel.
+- ⚠️ **Paper is paper.** A report card and a fee invoice are documents about to
+  be printed, so they carry `.paper`, which re-asserts the light values for their
+  subtree; a custom property resolves from the nearest ancestor that sets it, so
+  it beats `html.dark`. `@media print` does the same for everything else, or a
+  class list prints as a black page and the school buys the toner.
+- ⚠️ **Status pills are Tailwind's own families** (`bg-green-50 text-green-700`
+  and friends, ~95 uses). Left alone they stay bright islands on a black page, so
+  each pair is re-cut in the dark block.
+
+The theme is a class on `<html>`, set from localStorage by a script in the root
+layout BEFORE first paint — a theme applied after hydration means every dark page
+opens with a white flash, worst at night, which is when the setting is for. The
+toggle reads that class with `useSyncExternalStore` rather than copying it into
+state.
+
+⚠️ **`npm run shots` and `shots:portal` reuse one Chrome profile**, so they now
+always write `theme` to localStorage rather than only when dark — a dark run
+otherwise leaves the setting behind and the next light run silently captures dark
+screens, which is a very convincing way to verify the wrong thing. `SHOT_THEME=dark`
+for the other palette.
 
 **The crest and the head's signature** are uploaded on `/settings/branding` and
 print at the head and foot of a report card, and at the head of a fee invoice.

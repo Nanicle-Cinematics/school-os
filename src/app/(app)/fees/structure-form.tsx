@@ -38,7 +38,7 @@ export function StructureForm({
   return (
     <form
       action={formAction}
-      className="w-full rounded-xl border border-slate-200 bg-white p-4 lg:p-5"
+      className="w-full rounded-xl border border-slate-200 bg-surface p-4 lg:p-5"
     >
       <input type="hidden" name="academicYearId" value={academicYearId} />
 

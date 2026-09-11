@@ -28,11 +28,11 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
     <div className="space-y-6">
       <ChildHeader child={child} />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="rounded-2xl border border-slate-200 bg-surface p-5">
         <p className="text-sm font-semibold text-slate-600">Outstanding</p>
         <p
           className={`mt-1 text-3xl font-extrabold tabular-nums ${
-            owing ? "text-accent-700" : "text-brand-700"
+            owing ? "text-accent-700" : "text-brand-ink"
           }`}
         >
           {owing ? formatCedis(outstanding) : "Paid up"}
@@ -49,20 +49,20 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
       <section>
         <h2 className="font-heading text-lg font-extrabold tracking-tight text-slate-900">Bills</h2>
         {invoices.length === 0 ? (
-          <p className="mt-2 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          <p className="mt-2 rounded-2xl border border-slate-200 bg-surface p-5 text-sm text-slate-600">
             No bills have been issued yet.
           </p>
         ) : (
           <ul className="mt-3 space-y-3">
             {invoices.map((inv) => (
-              <li key={inv.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <li key={inv.id} className="rounded-2xl border border-slate-200 bg-surface p-4">
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-bold text-slate-900">
                     {termLabel(inv.term.name)} Term · {inv.term.academicYear.name}
                   </p>
                   <p
                     className={`shrink-0 font-bold tabular-nums ${
-                      Number(inv.balance) > 0 ? "text-accent-700" : "text-brand-700"
+                      Number(inv.balance) > 0 ? "text-accent-700" : "text-brand-ink"
                     }`}
                   >
                     {Number(inv.balance) > 0 ? formatCedis(inv.balance) : "Settled"}
@@ -104,11 +104,11 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
           Receipts
         </h2>
         {payments.length === 0 ? (
-          <p className="mt-2 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          <p className="mt-2 rounded-2xl border border-slate-200 bg-surface p-5 text-sm text-slate-600">
             No payments recorded yet. Payments appear here once the school records them.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-surface">
             {payments.map((p) => (
               <li key={p.id} className="flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">

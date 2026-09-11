@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
 import { navFor, roleLabel } from "@/lib/permissions";
 import { canSearch } from "@/lib/search-data";
+import { ThemeToggle } from "../theme-toggle";
 import { logout } from "@/lib/auth-actions";
 import { prisma } from "@/lib/prisma";
 import { Sidebar, MobileNav, type RailTerm } from "./nav";
@@ -61,7 +62,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The app chrome is not part of anything a school hands out — it printed
             on report cards and fee invoices alike until this was added. */}
-        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:px-6 print:hidden">
+        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-surface px-4 lg:px-6 print:hidden">
           <MobileNav sections={sections} school={school} term={railTerm} />
 
           <div className="min-w-0 lg:hidden">
@@ -98,7 +99,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
                   type="search"
                   name="q"
                   placeholder="Search a pupil, receipt or invoice"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-brand-500 focus:bg-white focus:ring-2 focus:ring-brand-500/25"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-brand-500 focus:bg-surface focus:ring-2 focus:ring-brand-500/25"
                 />
               </label>
             </form>
@@ -109,9 +110,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
               <p className="text-sm font-bold text-slate-900">{auth.name}</p>
               <p className="text-xs text-slate-500">{auth.roles.map(roleLabel).join(" · ")}</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-xs font-extrabold text-brand-700">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-xs font-extrabold text-brand-ink">
               {initials}
             </div>
+            <ThemeToggle className="print:hidden" />
             <form action={logout}>
               <button
                 type="submit"

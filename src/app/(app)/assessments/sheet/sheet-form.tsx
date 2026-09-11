@@ -136,7 +136,7 @@ export function SheetForm({
       <input type="hidden" name="classGroupId" value={classGroupId} />
       <input type="hidden" name="subjectId" value={subjectId} />
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-surface">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60">
@@ -193,7 +193,7 @@ export function SheetForm({
               );
               return (
                 <tr key={student.id} className="hover:bg-slate-50/60">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2">
+                  <td className="sticky left-0 z-10 bg-surface px-3 py-2">
                     <div className="flex items-center gap-2.5">
                       <Avatar firstName={student.firstName} lastName={student.lastName} size="sm" />
                       <div className="min-w-0">

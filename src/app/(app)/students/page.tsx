@@ -69,7 +69,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
             <div className="flex items-center gap-2">
               <Link
                 href="/students/import"
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Import
               </Link>
@@ -109,7 +109,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
         </select>
         <button
           type="submit"
-          className="whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          className="whitespace-nowrap rounded-xl border border-slate-200 bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           Filter
         </button>
@@ -120,7 +120,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
         ) : null}
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className={tableHeadClass}>
@@ -201,7 +201,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
             {page > 1 ? (
               <Link
                 href={pageHref(page - 1)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 bg-surface px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
               >
                 Previous
               </Link>
@@ -209,7 +209,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
             {page < pageCount ? (
               <Link
                 href={pageHref(page + 1)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 bg-surface px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50"
               >
                 Next
               </Link>
