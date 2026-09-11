@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Gender, GuardianRelationship, Residency, StudentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { admissionBlocked } from "@/lib/capacity";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
@@ -140,6 +141,13 @@ export async function admitStudent(
     return {
       error: "No academic year is marked current, so nobody can be placed in a class yet.",
     };
+  }
+
+  // Checked before the transaction opens: a refusal should cost a count, not a
+  // rolled-back write and an admission number burnt out of the sequence.
+  const full = await admissionBlocked(auth.schoolId, 1);
+  if (full) {
+    return { error: full };
   }
 
   const admissionNo = await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {

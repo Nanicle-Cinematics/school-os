@@ -10,7 +10,14 @@
  */
 import { prisma, tenantTransaction, SchoolReadOnlyError } from "@/lib/prisma";
 import { runWithTenantContext, setTenantContext, withBypass } from "@/lib/tenant-context";
-import { subscriptionState } from "@/lib/subscription";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import {
+  subscriptionState,
+  capacity,
+  capacityMessage,
+  pupilCap,
+} from "@/lib/subscription";
 
 let passed = 0;
 let failed = 0;
@@ -165,6 +172,61 @@ try {
 }
 check("a paid-up school writes normally", wroteFine);
 await withBypass(() => prisma.house.deleteMany({ where: { schoolId, name: probeName } }));
+
+console.log("\nThe pupil cap");
+
+/**
+ * ⚠️ Every path that creates a pupil must ask first.
+ *
+ * Read off the source rather than trusted: a third admission path — a bulk
+ * transfer, an admissions portal — added without `admissionBlocked` would ignore
+ * the cap in silence, and a plan limit nobody enforces is a price list nobody
+ * pays. Same check verify:activity runs for audit phrases, same reason.
+ */
+function walk(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    return statSync(full).isDirectory() ? walk(full) : full.endsWith(".ts") ? [full] : [];
+  });
+}
+
+const creators = walk("src/lib").filter((file) => {
+  const body = readFileSync(file, "utf8");
+  return /\b(?:tx|prisma)\.student\.create(?:Many)?\b/.test(body);
+});
+const unguarded = creators.filter((file) => !readFileSync(file, "utf8").includes("admissionBlocked"));
+
+check(
+  "every file that creates a pupil asks the cap first",
+  creators.length > 0 && unguarded.length === 0,
+  unguarded.length ? `missing in: ${unguarded.join(", ")}` : `${creators.length} file(s), all guarded`,
+);
+
+const capped = { plan: "STARTER" as const, studentCap: 150 };
+check("a school under its cap may admit", capacityMessage(capacity(capped, 149), 1, "Starter") === null);
+check(
+  "a school AT its cap may not",
+  (capacityMessage(capacity(capped, 150), 1, "Starter") ?? "").includes("at its limit"),
+);
+check(
+  "an import that would cross the cap is refused whole, with the arithmetic",
+  (capacityMessage(capacity(capped, 100), 80, "Starter") ?? "").includes("180"),
+  capacityMessage(capacity(capped, 100), 80, "Starter") ?? "",
+);
+check(
+  "and says nothing was written",
+  (capacityMessage(capacity(capped, 100), 80, "Starter") ?? "").includes("Nothing has been imported"),
+);
+check(
+  "a school ALREADY over its cap keeps its pupils — only new admissions refuse",
+  capacity(capped, 200).full === true && capacity(capped, 200).onRoll === 200,
+  "no pupil is withdrawn to satisfy a billing question",
+);
+check(
+  "an explicit cap beats the plan default",
+  pupilCap({ plan: "STARTER", studentCap: 400 }) === 400,
+);
+check("School Plus is uncapped", pupilCap({ plan: "SCHOOL_PLUS", studentCap: null }) === null);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 await prisma.$disconnect();

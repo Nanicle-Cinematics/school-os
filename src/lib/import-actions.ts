@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { GuardianRelationship } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { admissionBlocked } from "@/lib/capacity";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
@@ -117,6 +118,18 @@ export async function commitImport(
 
   let created = 0;
   let guardiansCreated = 0;
+  /**
+   * The whole file, or none of it.
+   *
+   * Checked before the first chunk: an import that wrote 140 of 200 children and
+   * then stopped at the cap would leave the office guessing which sixty are
+   * missing, and the file is the only record of what was meant.
+   */
+  const full = await admissionBlocked(auth.schoolId, usable.length);
+  if (full) {
+    return { error: full };
+  }
+
   let guardiansReused = 0;
 
   // Every guardian's phone, read once. Doing this per row would be a query per
