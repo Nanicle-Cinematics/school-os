@@ -54,8 +54,18 @@ export function ActivityFeed({ items }: { items: ActivityItem[] }) {
                 />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-slate-900">
-                  {item.title}
+                <span className="flex items-center gap-1.5">
+                  <span className="min-w-0 truncate text-sm font-bold text-slate-900">
+                    {item.title}
+                  </span>
+                  {/* One action across eleven classes is eleven audit rows and one
+                      thing that happened. The count says so without spending
+                      eleven lines saying it. */}
+                  {item.count > 1 ? (
+                    <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-extrabold text-slate-500">
+                      ×{item.count}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="block truncate text-xs text-slate-500">{item.detail}</span>
               </span>

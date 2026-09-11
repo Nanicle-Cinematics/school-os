@@ -163,11 +163,19 @@ export default async function DashboardPage() {
 
       <Attention items={attention} />
 
+      {/* Side by side: neither the chart nor the feed needs the full width, and
+          stacking them pushed the payments, the debtors and the term's finances
+          a screen and a half down a page a head teacher opens every morning. */}
       {showMoney && collections ? (
-        <CollectionsChart collections={collections} billed={data.billed} />
-      ) : null}
-
-      <ActivityFeed items={activity} />
+        // items-start: without it the grid stretches both cards to the taller
+        // one, and the chart grew a hand's width of nothing under its axis.
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <CollectionsChart collections={collections} billed={data.billed} />
+          <ActivityFeed items={activity} />
+        </div>
+      ) : (
+        <ActivityFeed items={activity} />
+      )}
 
       {showMoney ? (
         <div className="grid gap-4 lg:grid-cols-2">
