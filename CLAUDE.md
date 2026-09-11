@@ -160,7 +160,27 @@ the policy filters first: `updateUserRoles` already filtered by `schoolId`
 explicitly and still saw nothing when the GUC was empty.
 
 **`connection_limit`**: with RLS on, every model op becomes a transaction, which
-`connection_limit=1` cannot serve (P2024). The app role's URL uses 10.
+`connection_limit=1` cannot serve (P2024). The app role's URL uses **4**.
+
+⚠️ **It used to be 10, and that number took the dev project down.** A free-tier
+`t4g.nano` has ~512 MB of RAM shared between Postgres and Supabase's own
+services, and a Postgres connection costs 5–10 MB of it. On 2026-09-11 the dev
+project reached **CPU 80%, RAM 85% on fourteen requests in an hour** and went
+Unhealthy — not paused, which is a different failure with a different message
+(see the pause signature below). What filled it was connections, not traffic: a
+dev server holding ten, a second dev server more than once, a dozen verify
+scripts each opening their own client, headless-Chrome screenshot runs, and
+scripts killed mid-run whose connections the pooler reaps slowly.
+
+So: **one dev server at a time**, and prefer finishing a script to killing it. If
+it happens again, restart the project from Settings → Infrastructure and then ask
+where the connections went:
+
+```sql
+select state, count(*) from pg_stat_activity group by state order by count desc;
+```
+
+A pile of `idle` rows means the client left them, not the platform.
 
 **`verify:onboarding` ASSERTS, and CI runs it** against the built app, in the job
 that already boots one for the role and action guards. A redirect is a failure, a
