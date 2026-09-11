@@ -298,6 +298,10 @@ export type CollectionWeek = {
 
 export type Collections = {
   weeks: CollectionWeek[];
+  /** How many weeks the whole term runs to, so an early chart can read as early. */
+  termWeeks: number;
+  /** 1-based week the school is in now; 0 when the term is not under way. */
+  currentWeek: number;
   total: number;
   best: number;
 };
@@ -323,7 +327,7 @@ export async function getCollections(
   now = new Date(),
 ): Promise<Collections> {
   if (!term) {
-    return { weeks: [], total: 0, best: 0 };
+    return { weeks: [], total: 0, best: 0, termWeeks: 0, currentWeek: 0 };
   }
 
   const allocations = await prisma.paymentAllocation.findMany({
@@ -375,7 +379,19 @@ export async function getCollections(
   });
 
   // Long terms: the last dozen weeks are the ones anyone is looking at.
-  return { weeks: weeks.slice(-12), total, best };
+  //
+  // `termWeeks` and `currentWeek` ride along so the CARD can say "week 2 of 15"
+  // and draw the rest of the term as still to come. The weeks array itself stays
+  // exactly what it was — the elapsed window, plus any week holding money —
+  // because inventing future rows here is what makes a running term look like a
+  // collapse in collections, and `verify:collections` pins that shape.
+  return {
+    weeks: weeks.slice(-12),
+    total,
+    best,
+    termWeeks,
+    currentWeek: currentIndex >= 0 ? currentIndex + 1 : 0,
+  };
 }
 
 export type ActivityItem = {
@@ -386,6 +402,8 @@ export type ActivityItem = {
   detail: string;
   /** "just now", "12 min", "3 hr", "Tue" — resolved server-side. */
   when: string;
+  /** How many identical entries this row stands for. 1 unless folded. */
+  count: number;
 };
 
 /**
@@ -427,7 +445,31 @@ const ACTIVITY: Record<
     detail: "Messages",
   },
   "results.compute": { kind: "academic", title: () => "Results computed for a class", detail: "Academics" },
-  "results.status": { kind: "academic", title: () => "Results status changed", detail: "Academics" },
+  /**
+   * The payload carries the status and how many pupils it touched, and this
+   * ignored both — so publishing a term's results printed "Results status
+   * changed" five times over, once per class, with nothing to tell them apart.
+   */
+  "results.status": {
+    kind: "academic",
+    title: (a) => {
+      const n = count(a.affected);
+      const who = n ? ` for ${n} ${plural(n, "pupil")}` : "";
+      switch (String(a.status ?? "")) {
+        case "PUBLISHED":
+          return `Report cards published${who}`;
+        case "APPROVED":
+          return `Results approved${who}`;
+        case "SUBMITTED":
+          return `Results submitted for approval${who}`;
+        case "DRAFT":
+          return `Results were unpublished${who}`;
+        default:
+          return "Results status changed";
+      }
+    },
+    detail: "Academics",
+  },
   "results.remarks": { kind: "academic", title: () => "Conduct and remarks saved", detail: "Academics" },
   "assessment.create": { kind: "academic", title: () => "An assessment was created", detail: "Academics" },
   "assessment.status": { kind: "academic", title: () => "An assessment was locked or reopened", detail: "Academics" },
@@ -497,10 +539,13 @@ function ago(then: Date, now: Date) {
 export const ACTIVITY_ACTIONS = Object.keys(ACTIVITY);
 
 export async function getActivity(schoolId: string, take = 6, now = new Date()) {
+  // Read deeper than we display, because identical entries are folded below and
+  // a term's results being published across eleven classes would otherwise fill
+  // the whole feed with one event.
   const rows = await prisma.auditLog.findMany({
     where: { schoolId },
     orderBy: { createdAt: "desc" },
-    take,
+    take: take * 5,
     select: {
       id: true,
       action: true,
@@ -510,7 +555,7 @@ export async function getActivity(schoolId: string, take = 6, now = new Date()) 
     },
   });
 
-  return rows.map((row): ActivityItem => {
+  const items = rows.map((row): ActivityItem => {
     const spec = ACTIVITY[row.action];
     const payload = (row.after ?? {}) as Record<string, unknown>;
     const who = row.actor?.name;
@@ -522,6 +567,30 @@ export async function getActivity(schoolId: string, take = 6, now = new Date()) 
       title: spec ? spec.title(payload) : row.action.replace(/[._]/g, " "),
       detail: who ? `${spec?.detail ?? "Activity"} · ${who}` : (spec?.detail ?? "Activity"),
       when: ago(row.createdAt, now),
+      count: 1,
     };
   });
+
+  /**
+   * Fold runs of the identical line into one, counted.
+   *
+   * One action across eleven classes is eleven audit rows and one thing that
+   * happened. Printed as eleven lines it pushed everything else off the card and
+   * told a head teacher nothing they could not have read once — the feed said
+   * "Results status changed" five times in the same second.
+   *
+   * Only CONSECUTIVE runs fold, so the order of events is never rearranged: this
+   * shortens the feed, it does not reorder or summarise across time.
+   */
+  const folded: ActivityItem[] = [];
+  for (const item of items) {
+    const last = folded[folded.length - 1];
+    if (last && last.title === item.title && last.detail === item.detail) {
+      last.count += 1;
+      continue;
+    }
+    folded.push(item);
+  }
+
+  return folded.slice(0, take);
 }

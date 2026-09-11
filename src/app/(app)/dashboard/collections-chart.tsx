@@ -26,7 +26,21 @@ export function CollectionsChart({
   collections: Collections;
   billed: number;
 }) {
-  const { weeks, total, best } = collections;
+  const { weeks, total, best, termWeeks, currentWeek } = collections;
+
+  /**
+   * The rest of the term, drawn as empty slots rather than left as white space.
+   *
+   * ⚠️ These are NOT weeks in the data — `getCollections` deliberately returns
+   * only the window that has happened, because a tail of zero-height bars reads
+   * as collections collapsing rather than as a term still running. But the
+   * opposite failure is just as bad: two weeks of a fifteen-week term stretched
+   * across a full-width card looked like a broken chart. So the slots are drawn
+   * as absence — no bar, a faint baseline, a muted number — and the subtitle
+   * says which week of how many, which is the fact that makes an early chart
+   * read as early.
+   */
+  const ahead = Math.max(0, Math.min(termWeeks - weeks.length, 12 - weeks.length));
 
   if (weeks.length === 0) {
     return (
@@ -42,6 +56,14 @@ export function CollectionsChart({
     <Card title="Fees collected by week">
       <div className="px-4 pb-4 pt-3">
         <p className="mb-4 text-xs text-slate-500">
+          {currentWeek > 0 && termWeeks > 0 ? (
+            <>
+              <span className="font-semibold text-slate-600">
+                Week {currentWeek} of {termWeeks}
+              </span>
+              {" · "}
+            </>
+          ) : null}
           {formatCedis(total)} of {formatCedis(billed)} billed
         </p>
 
@@ -49,29 +71,35 @@ export function CollectionsChart({
             parent with a definite height, and inside a flex row with `items-end`
             the columns size to their content — so the first version of this chart
             rendered labels with no bars at all. */}
-        <div className="flex items-end gap-2" style={{ height: `${PLOT + 16}px` }}>
+        <div className="flex items-end gap-1.5" style={{ height: `${PLOT + 16}px` }}>
           {weeks.map((week) => {
             const label = week.isCurrent || (week.amount === best && best > 0);
             const height = week.amount > 0 ? Math.max(4, Math.round(week.share * PLOT)) : 2;
             return (
-              // A term two weeks in should not paint two slabs; the bar is capped
-              // and centred so an early chart reads as early, not as a block.
-              <div key={week.index} className="flex min-w-0 flex-1 flex-col items-center">
-                {label && week.amount > 0 ? (
-                  <span
-                    className={`mb-1 w-full truncate text-center text-[10px] font-extrabold ${
-                      week.isCurrent ? "text-accent-600" : "text-slate-400"
-                    }`}
-                  >
-                    {formatCedis(week.amount)}
-                  </span>
-                ) : (
-                  <span className="mb-1 h-[14px]" />
-                )}
+              // Fixed-width columns, not `flex-1`. Stretching two weeks across a
+              // full-width card left a bar stranded in 500px of nothing; a week
+              // is a fixed thing, so it gets a fixed slot and the row fills as
+              // the term goes on.
+              <div key={week.index} className="flex w-11 shrink-0 flex-col items-center">
+                {/* A column is 44px and "GH₵26,542" is not — printed inside the
+                    column it truncated to "GH₵26…", which is worse than no label
+                    at all. It is centred over the column and allowed to overhang
+                    the gaps beside it; at most two are ever shown. */}
+                <span className="relative mb-1 block h-[14px] w-full">
+                  {label && week.amount > 0 ? (
+                    <span
+                      className={`absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-extrabold ${
+                        week.isCurrent ? "text-accent-600" : "text-slate-400"
+                      }`}
+                    >
+                      {formatCedis(week.amount)}
+                    </span>
+                  ) : null}
+                </span>
                 <div
                   title={`${week.label} · ${week.range} · ${formatCedis(week.amount)}`}
                   style={{ height: `${height}px` }}
-                  className={`w-full max-w-16 rounded-t-[4px] ${
+                  className={`w-full rounded-t-[4px] ${
                     week.amount === 0
                       ? "bg-slate-200"
                       : week.isCurrent
@@ -82,17 +110,37 @@ export function CollectionsChart({
               </div>
             );
           })}
+
+          {Array.from({ length: ahead }, (_, i) => (
+            <div
+              key={`ahead-${i}`}
+              className="flex w-11 shrink-0 flex-col items-center"
+              aria-hidden="true"
+            >
+              <span className="mb-1 h-[14px]" />
+              <div className="h-[2px] w-full rounded-full bg-slate-100" />
+            </div>
+          ))}
         </div>
 
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 flex gap-1.5">
           {weeks.map((week) => (
             <span
               key={week.index}
-              className={`min-w-0 flex-1 truncate text-center text-[10.5px] ${
+              className={`w-11 shrink-0 truncate text-center text-[10.5px] ${
                 week.isCurrent ? "font-extrabold text-slate-700" : "text-slate-400"
               }`}
             >
               {week.label}
+            </span>
+          ))}
+          {Array.from({ length: ahead }, (_, i) => (
+            <span
+              key={`ahead-label-${i}`}
+              className="w-11 shrink-0 truncate text-center text-[10.5px] text-slate-300"
+              aria-hidden="true"
+            >
+              {`Wk ${weeks.length + i + 1}`}
             </span>
           ))}
         </div>
