@@ -74,6 +74,17 @@ model School {
   trialEndsAt        DateTime?
   studentCap         Int? // plan-based seat limit; null = unmetered
 
+  /**
+   * Paid up to this date. The subscription is monthly, so recording a payment
+   * moves it a month on — from the date it already held, not from today, so a
+   * school that pays four days late does not quietly lose four days.
+   */
+  paidUntil  DateTime?
+  /**
+   * What this school pays a month, in cedis. Null until agreed.
+   */
+  monthlyFee Decimal?  @db.Decimal(10, 2)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -257,18 +268,18 @@ model User {
   // and nothing else, so a password the office read aloud cannot stay in use.
   mustChangePassword Boolean   @default(false)
   passwordChangedAt  DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
 
   // Home school (nullable: platform admins belong to none)
   schoolId String?
   school   School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
 
-  memberships Membership[]
-  sessions    Session[]
+  memberships    Membership[]
+  sessions       Session[]
   passwordResets PasswordReset[]
-  auditLogs   AuditLog[]
+  auditLogs      AuditLog[]
 
   recordedPayments  Payment[]         @relation("PaymentRecordedBy")
   approvedDiscounts StudentDiscount[] @relation("DiscountApprovedBy")
@@ -311,26 +322,28 @@ model Membership {
 /**
  * A one-time code that lets a parent who has forgotten their password set a new
  * one, without the office reading a password down a phone line.
- *
  * NO schoolId, deliberately — like Session and User. The whole flow happens
  * BEFORE anyone is signed in, so there is no tenant context to scope it by, and
  * a tenant table read without one is refused outright (see src/lib/prisma.ts).
- *
  * The code itself is never stored: `codeHash` is a SHA-256 of it, the same shape
  * Session uses for its token, so a leaked database row cannot be replayed into
  * an account.
  */
 model PasswordReset {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  codeHash  String
-  expiresAt DateTime
-  /** Set the moment it is spent, so a code works exactly once. */
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  /**
+   * Set the moment it is spent, so a code works exactly once.
+   */
   consumedAt DateTime?
-  /** Wrong guesses. Past the cap the code is dead, so a 6-digit code cannot be walked. */
-  attempts  Int       @default(0)
-  createdAt DateTime  @default(now())
+  /**
+   * Wrong guesses. Past the cap the code is dead, so a 6-digit code cannot be walked.
+   */
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])

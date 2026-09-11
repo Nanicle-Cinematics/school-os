@@ -2,7 +2,11 @@
 
 import { useActionState } from "react";
 import type { Plan, SubscriptionStatus } from "@prisma/client";
-import { updateSubscription, type PlatformState } from "@/lib/platform-actions";
+import {
+  updateSubscription,
+  recordSubscriptionPayment,
+  type PlatformState,
+} from "@/lib/platform-actions";
 import { PLANS, STATUS_LABELS } from "@/lib/subscription";
 
 const inputClass =
@@ -25,9 +29,13 @@ export function SubscriptionForm({
     subscriptionStatus: SubscriptionStatus;
     studentCap: number | null;
     trialEndsAt: Date | null;
+    paidUntil: Date | null;
+    monthlyFee: number | null;
   };
 }) {
   const [state, action] = useActionState<PlatformState, FormData>(updateSubscription, {});
+  const [paid, payAction] = useActionState<PlatformState, FormData>(recordSubscriptionPayment, {});
+
 
   return (
     <form action={action} className="space-y-4 p-4">
@@ -77,6 +85,36 @@ export function SubscriptionForm({
         </label>
 
         <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-slate-700">Monthly fee (GH₵)</span>
+          <input
+            type="number"
+            name="monthlyFee"
+            min={0}
+            step="0.01"
+            defaultValue={school.monthlyFee ?? ""}
+            placeholder="Not set"
+            className={inputClass}
+          />
+          <span className="mt-1 block text-xs text-slate-500">
+            Counts towards monthly revenue only while the subscription is Active.
+          </span>
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-slate-700">Paid until</span>
+          <input
+            type="date"
+            name="paidUntil"
+            defaultValue={school.paidUntil ? school.paidUntil.toISOString().slice(0, 10) : ""}
+            className={inputClass}
+          />
+          <span className="mt-1 block text-xs text-slate-500">
+            An Active school goes read-only a week after this date. Use the button below for an
+            ordinary month rather than editing it by hand.
+          </span>
+        </label>
+
+        <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-slate-700">Trial ends</span>
           <input
             type="date"
@@ -120,6 +158,49 @@ export function SubscriptionForm({
       >
         Save subscription
       </button>
+
+      {/* The ordinary monthly action, one press, so the common case is not
+          somebody typing a date into the field above and getting it wrong. It
+          advances from the date already held rather than from today, so paying
+          late does not shorten the month bought. */}
+      <div className="mt-4 border-t border-slate-100 pt-4">
+        {paid.ok ? (
+          <p role="alert" className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+            {paid.ok}
+          </p>
+        ) : null}
+        {paid.error ? (
+          <p role="alert" className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {paid.error}
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          formAction={payAction}
+          className="rounded-lg border border-slate-200 bg-surface px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          Record a month&apos;s payment
+        </button>
+        <span className="ml-3 text-xs text-slate-500">
+          Moves the due date on a month and marks the school Active.
+        </span>
+        <p className="mt-2 text-sm text-slate-600">
+          {school.paidUntil ? (
+            <>
+              Paid to{" "}
+              <span className="font-semibold text-slate-900">
+                {school.paidUntil.toLocaleDateString("en-GB", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+            </>
+          ) : (
+            "No payment recorded yet."
+          )}
+        </p>
+      </div>
     </form>
   );
 }
