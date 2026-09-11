@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { paymentSource } from "@/lib/payment-labels";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
@@ -148,7 +149,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                      {payment.method.replace(/_/g, " ").toLowerCase()}
+                      {paymentSource(payment.method, payment.momoNetwork)}
                       {payment.momoNetwork ? ` (${payment.momoNetwork})` : ""}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-500">

@@ -46,24 +46,31 @@ export default async function PortalHomePage() {
             <li key={child.id}>
               <Link
                 href={`/portal/${child.id}`}
-                className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm"
+                /* Stacks on a handset. Three columns across 390px squeezed the
+                   middle one until the class and admission number truncated —
+                   "Kindergarten 1 A · S…" — and that line is the whole reason a
+                   parent with two children can tell which row is which. */
+                className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm sm:flex-row sm:items-center sm:gap-4"
               >
+                <div className="flex min-w-0 items-center gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-sm font-extrabold text-brand-700">
                   {initials(child)}
                 </div>
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold text-slate-900">{fullName(child)}</p>
-                  <p className="truncate text-sm text-slate-500">
-                    {child.currentClassGroup
-                      ? `${child.currentClassGroup.level.name} ${child.currentClassGroup.name}`
-                      : "No class assigned"}
-                    {" · "}
-                    {child.admissionNo}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold text-slate-900">{fullName(child)}</p>
+                    <p className="truncate text-sm text-slate-500">
+                      {child.currentClassGroup
+                        ? `${child.currentClassGroup.level.name} ${child.currentClassGroup.name}`
+                        : "No class assigned"}
+                      {" · "}
+                      {child.admissionNo}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="shrink-0 text-right">
+                {/* Under the name on a phone, beside it from sm up. */}
+                <div className="flex shrink-0 items-baseline gap-2 border-t border-slate-100 pt-3 sm:block sm:border-0 sm:pt-0 sm:text-right">
                   {child.balance && Number(child.balance) > 0 ? (
                     <>
                       <p className="text-xs text-slate-500">Owing</p>
@@ -74,7 +81,7 @@ export default async function PortalHomePage() {
                   ) : (
                     <p className="text-sm font-semibold text-brand-700">Paid up</p>
                   )}
-                  <p className="mt-0.5 text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 sm:mt-0.5">
                     {child.reportCards === 0
                       ? "No report cards yet"
                       : `${child.reportCards} report card${child.reportCards === 1 ? "" : "s"}`}

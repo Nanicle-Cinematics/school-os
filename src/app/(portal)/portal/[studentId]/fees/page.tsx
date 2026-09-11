@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireMyChild } from "@/lib/portal-auth";
+import { paymentSource } from "@/lib/payment-labels";
 import { getChildHeader, getChildFinance } from "@/lib/portal-data";
 import { formatCedis } from "@/lib/money";
 import { termLabel } from "@/lib/academic-year";
@@ -12,14 +13,6 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   month: "short",
   year: "numeric",
 });
-
-const METHOD_LABELS: Record<string, string> = {
-  CASH: "Cash",
-  MOMO: "Mobile money",
-  BANK: "Bank",
-  CHEQUE: "Cheque",
-  CARD: "Card",
-};
 
 export default async function ChildFeesPage({ params }: PageProps<"/portal/[studentId]/fees">) {
   const { studentId } = await params;
@@ -120,8 +113,7 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
               <li key={p.id} className="flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-slate-900">
-                    {METHOD_LABELS[p.method] ?? p.method}
-                    {p.momoNetwork ? ` · ${p.momoNetwork}` : ""}
+                    {paymentSource(p.method, p.momoNetwork)}
                   </p>
                   <p className="truncate text-xs text-slate-500">
                     {dateFmt.format(p.paidAt)} · Receipt {p.receiptNo}

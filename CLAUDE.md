@@ -527,6 +527,23 @@ navigation rail, no search, no term countdown. Those are tools for running a
 school, and a parent checking a balance on a phone should not be handed chrome
 that implies they can act on the school's behalf.
 
+⚠️ **Look at the portal on a PHONE.** `npm run shots:portal` mints a session for
+a real parent login and walks it at 390px. Both faults found the first time
+anyone did (2026-09-11) were invisible on a laptop: the child row's class and
+admission number truncated to "Kindergarten 1 A · S…" — the line a parent with
+two children uses to tell the rows apart — and a receipt read **MOBILE_MONEY ·
+TELECEL**.
+
+That second one is worth remembering as a shape. The portal kept its own
+`Record<string, string>` of method labels, keyed `MOMO` and `BANK`, values that
+do not exist — the enum is MOBILE_MONEY, BANK_TRANSFER, BANK_DEPOSIT — and the
+`?? method` fallback made every miss invisible. Three of six methods printed raw
+to parents. `src/lib/payment-labels.ts` now holds the only copy, typed
+`Record<PaymentMethod, string>`, so a value added to the enum without a label is
+a BUILD failure. Prefer it to `.replace(/_/g, " ").toLowerCase()`, which each
+staff screen was doing separately — that drift is why nobody noticed the portal
+disagreeing.
+
 ⚠️ **RLS does NOT isolate one family from another.** Postgres scopes every query
 to the school, and two parents at the same school are the same tenant — so the
 `tenant_isolation` policy is satisfied by another family's child exactly as

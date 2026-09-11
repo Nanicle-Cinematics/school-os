@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { paymentSource } from "@/lib/payment-labels";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
 import { getBillSchool, getInvoice } from "@/lib/invoice-data";
@@ -72,7 +73,7 @@ export default async function InvoiceDetailPage({ params }: PageProps<"/invoices
                   <p className="font-mono text-xs text-slate-900">{allocation.payment.receiptNo}</p>
                   <p className="text-xs text-slate-500">
                     {dateFmt.format(allocation.payment.paidAt)} ·{" "}
-                    {allocation.payment.method.replace(/_/g, " ").toLowerCase()}
+                    {paymentSource(allocation.payment.method, allocation.payment.momoNetwork)}
                     {allocation.payment.reference ? ` · ${allocation.payment.reference}` : ""}
                   </p>
                 </div>
