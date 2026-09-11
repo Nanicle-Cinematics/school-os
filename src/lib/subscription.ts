@@ -19,6 +19,21 @@ import type { Plan, SubscriptionStatus } from "@prisma/client";
  * invoice is not a family's fault.
  */
 
+/**
+ * Days a school keeps working after its month runs out.
+ *
+ * Not generosity — arithmetic. School money arrives in the first weeks of term
+ * and thins out by the end of it, so a monthly bill will routinely be paid
+ * late in the months when the office has nothing in hand. Cutting a school off
+ * the morning after the date passes turns a cashflow gap into an argument, and
+ * the head teacher who cannot print a report card that week remembers it longer
+ * than the invoice.
+ *
+ * A week is enough to cover "we will pay on Friday" without becoming a second
+ * free month.
+ */
+const GRACE_DAYS = 7;
+
 export type SubscriptionState = {
   /** Staff may read but not write. */
   readOnly: boolean;
@@ -26,6 +41,10 @@ export type SubscriptionState = {
   notice: string | null;
   /** Days until the trial ends; negative once it has. Null when not trialing. */
   trialDaysLeft: number | null;
+  /** Days until the paid month runs out; negative once it has. Null if never paid. */
+  daysPaidAhead: number | null;
+  /** Inside the week after the due date: still writing, but told. */
+  inGrace: boolean;
 };
 
 const DAY = 86_400_000;
@@ -35,33 +54,82 @@ export function subscriptionState(
     plan: Plan;
     subscriptionStatus: SubscriptionStatus;
     trialEndsAt: Date | null;
+    paidUntil?: Date | null;
   },
   now = new Date(),
 ): SubscriptionState {
   const trialDaysLeft = school.trialEndsAt
     ? Math.ceil((school.trialEndsAt.getTime() - now.getTime()) / DAY)
     : null;
+  const daysPaidAhead = school.paidUntil
+    ? Math.ceil((school.paidUntil.getTime() - now.getTime()) / DAY)
+    : null;
+  const base = { trialDaysLeft, daysPaidAhead, inGrace: false };
 
   switch (school.subscriptionStatus) {
-    case "ACTIVE":
-      return { readOnly: false, notice: null, trialDaysLeft };
+    case "ACTIVE": {
+      /**
+       * ⚠️ ACTIVE is not a permanent state under monthly billing — it means
+       * "paid up to `paidUntil`". Reading the status alone is how a school that
+       * stopped paying in March is still marked Active in September, which is
+       * the same class of dead field this whole file exists to end.
+       */
+      if (daysPaidAhead === null) {
+        // Marked active but never dated: a school being set up by hand, not a
+        // school in arrears. Do not punish a missing field.
+        return { ...base, readOnly: false, notice: null };
+      }
+      if (daysPaidAhead > 7) {
+        return { ...base, readOnly: false, notice: null };
+      }
+      if (daysPaidAhead >= 0) {
+        return {
+          ...base,
+          readOnly: false,
+          notice: `This school's subscription is due in ${daysPaidAhead} ${
+            daysPaidAhead === 1 ? "day" : "days"
+          }.`,
+        };
+      }
+      const overdue = Math.abs(daysPaidAhead);
+      if (overdue <= GRACE_DAYS) {
+        return {
+          ...base,
+          readOnly: false,
+          inGrace: true,
+          notice:
+            `This school's subscription was due ${overdue} ${overdue === 1 ? "day" : "days"} ago. ` +
+            `It keeps working for ${GRACE_DAYS - overdue} more ${
+              GRACE_DAYS - overdue === 1 ? "day" : "days"
+            }, then becomes read-only until it is settled.`,
+        };
+      }
+      return {
+        ...base,
+        readOnly: true,
+        notice:
+          `This school's subscription was due ${overdue} days ago, so it is read-only: records and ` +
+          `report cards can still be read and printed, but nothing new can be entered. Settle it to continue.`,
+      };
+    }
 
     case "TRIALING": {
       // A trial with no end date is an open trial, not an expired one — the
       // absence of a date must never be read as "ran out".
       if (trialDaysLeft === null) {
-        return { readOnly: false, notice: null, trialDaysLeft };
+        return { ...base, readOnly: false, notice: null };
       }
       if (trialDaysLeft <= 0) {
         return {
+          ...base,
           readOnly: true,
           notice:
             "Your trial has ended, so the school is read-only: records and report cards can still be " +
             "read and printed, but nothing new can be entered. Contact Nanicle to continue.",
-          trialDaysLeft,
         };
       }
       return {
+        ...base,
         readOnly: false,
         // Quiet until the last week: a countdown on every screen for a month is
         // furniture, and furniture is not read.
@@ -69,37 +137,55 @@ export function subscriptionState(
           trialDaysLeft <= 7
             ? `Your trial ends in ${trialDaysLeft} ${trialDaysLeft === 1 ? "day" : "days"}. Contact Nanicle to continue without interruption.`
             : null,
-        trialDaysLeft,
       };
     }
 
     case "PAST_DUE":
       return {
+        ...base,
         readOnly: true,
         notice:
           "This school's subscription is past due, so it is read-only: records and report cards can " +
           "still be read and printed, but nothing new can be entered. Settle it to continue.",
-        trialDaysLeft,
       };
 
     case "SUSPENDED":
       return {
+        ...base,
         readOnly: true,
         notice:
           "This school's subscription is suspended, so it is read-only. Records and report cards can " +
           "still be read and printed. Contact Nanicle.",
-        trialDaysLeft,
       };
 
     case "CANCELLED":
       return {
+        ...base,
         readOnly: true,
         notice:
           "This school's subscription has been cancelled. Records remain readable and printable so " +
           "nothing is lost; nothing new can be entered.",
-        trialDaysLeft,
       };
   }
+}
+
+/**
+ * The next month's due date, given the one it already holds.
+ *
+ * ⚠️ Advances from `paidUntil`, NOT from today. A school that pays four days
+ * late has bought a month, not a month minus four days — billing from the
+ * payment date quietly shortens every late month and the school ends up paying
+ * thirteen times a year without anyone deciding to charge them that.
+ *
+ * From today only when there is nothing to advance from, or when the last
+ * payment lapsed so long ago that advancing would still leave them overdue —
+ * which would mean taking money and handing back a read-only system.
+ */
+export function nextDueDate(paidUntil: Date | null, now = new Date()): Date {
+  const from = paidUntil && paidUntil.getTime() > now.getTime() - 31 * DAY ? paidUntil : now;
+  const next = new Date(from);
+  next.setMonth(next.getMonth() + 1);
+  return next;
 }
 
 /** What each plan is called on screen, and what it allows. */

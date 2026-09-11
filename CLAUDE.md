@@ -488,6 +488,36 @@ layouts: `getSessionUser` uses `include: { user: … }`, which already selects
 every user scalar, so reading it costs nothing. Querying it separately added a
 round trip to every page load, which on this link is seconds.
 
+## The subscription is MONTHLY
+
+`paidUntil` is the date a school is paid to, and **ACTIVE means "paid up to that
+date"** — not a permanent state. Reading the status alone is how a school that
+stopped paying in March is still marked Active in September, which is the dead
+field this whole area exists to end.
+
+- past the date, a school keeps working for **7 grace days** and is told how many
+  are left. School money arrives in the first weeks of term and thins out after,
+  so a monthly bill will routinely be paid late in the months when the office has
+  nothing in hand; cutting them off the morning after turns a cashflow gap into
+  an argument.
+- past grace it is read-only, the same as PAST_DUE or SUSPENDED.
+- ⚠️ **ACTIVE with no `paidUntil` is NOT arrears** — that is a school being set
+  up by hand, and punishing a missing field would be wrong.
+
+⚠️ **`nextDueDate` advances from the date HELD, not from today.** Billing from the
+payment date shortens every late month — pay four days late, get twenty-six days
+— and across a year the school pays thirteen times without anyone deciding to
+charge them that. It falls back to today only when the lapse is so old that
+advancing would still leave them overdue, because taking money and handing back a
+read-only system is indefensible.
+
+⚠️ **Console routes are fully dynamic, and were slow to trust.** While the dev
+database was recovering, a server action took **15 seconds** to return — long
+enough that a headless test polling for 24s concluded `revalidatePath` had failed
+and a `router.refresh()` was needed. It was not: with a realistic wait, the
+confirmation and the re-rendered date both arrive on their own. Before adding a
+refresh to any console screen, check what the database is doing.
+
 **Bulk parent logins and SMS delivery of the temporary password shipped in PR #24**
 (`/guardians/invites`).
 

@@ -14,6 +14,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   subscriptionState,
+  nextDueDate,
   capacity,
   capacityMessage,
   pupilCap,
@@ -59,6 +60,58 @@ check(
 check("PAST_DUE is read-only", t("PAST_DUE", null).readOnly === true);
 check("SUSPENDED is read-only", t("SUSPENDED", null).readOnly === true);
 check("CANCELLED is read-only", t("CANCELLED", null).readOnly === true);
+
+console.log("\nMonthly billing");
+const day = (n: number) => new Date(Date.now() + n * DAY);
+const monthly = (paidUntil: Date | null) =>
+  subscriptionState({
+    plan: "STARTER",
+    subscriptionStatus: "ACTIVE",
+    trialEndsAt: null,
+    paidUntil,
+  });
+
+check("paid a fortnight ahead says nothing", monthly(day(14)).notice === null);
+check(
+  "three days out, it says so and still writes",
+  monthly(day(3)).readOnly === false && (monthly(day(3)).notice ?? "").includes("3 days"),
+);
+check(
+  "two days overdue is GRACE — still writing",
+  monthly(day(-2)).readOnly === false && monthly(day(-2)).inGrace === true,
+  monthly(day(-2)).notice ?? "",
+);
+check("and it says how long is left", (monthly(day(-2)).notice ?? "").includes("5 more days"));
+check("eight days overdue is read-only", monthly(day(-8)).readOnly === true);
+check(
+  "⚠️ ACTIVE with no date is NOT treated as arrears",
+  monthly(null).readOnly === false,
+  "a school being set up by hand must not be punished for a missing field",
+);
+
+/**
+ * ⚠️ The arithmetic that quietly steals a month.
+ *
+ * Advancing from TODAY instead of from the date already held shortens every late
+ * month — pay four days late, get twenty-six days — and across a year a school
+ * pays thirteen times without anyone deciding to charge them that.
+ */
+const paidTo = new Date("2026-03-10T00:00:00Z");
+const payingLate = new Date("2026-03-14T00:00:00Z");
+const advanced = nextDueDate(paidTo, payingLate);
+check(
+  "paying 4 days late still buys a whole month from the date held",
+  advanced.toISOString().slice(0, 10) === "2026-04-10",
+  advanced.toISOString().slice(0, 10),
+);
+
+// But a lapse so old that advancing would still leave them overdue starts today:
+// taking money and handing back a read-only system is indefensible.
+const longLapsed = new Date(Date.now() - 90 * DAY);
+check(
+  "a long-lapsed school is paid a month from TODAY, not from its old date",
+  nextDueDate(longLapsed).getTime() > Date.now() + 27 * DAY,
+);
 
 console.log("\nWhat read-only actually stops");
 const school = await withBypass(() =>

@@ -98,11 +98,54 @@ export default async function AdminPage() {
             tone={needsAttention > 0 ? "warn" : undefined}
           />
           <Stat
-            label="SMS spend"
-            value={formatCedis(totals.smsCost)}
-            sub={`${totals.smsSent} sent, all schools`}
+            label="Monthly revenue"
+            value={formatCedis(totals.mrr)}
+            sub={
+              totals.unpriced > 0
+                ? `${totals.unpriced} paying school${totals.unpriced === 1 ? "" : "s"} with no fee set`
+                : `${totals.byStatus.ACTIVE ?? 0} paying · SMS costs ${formatCedis(totals.smsCost)}`
+            }
+            tone={totals.unpriced > 0 ? "warn" : undefined}
           />
         </div>
+
+        {/* The morning's work: who owes now, and who owes this week. Overdue
+            first, because a school past its date is losing access on a clock. */}
+        {totals.dueSoon.length > 0 ? (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+            <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+              Due this week
+            </p>
+            <ul className="divide-y divide-slate-100">
+              {totals.dueSoon.map((school) => (
+                <li key={school.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/admin/${school.id}`}
+                      className="text-sm font-medium text-slate-900 hover:underline"
+                    >
+                      {school.name}
+                    </Link>
+                    <p className="text-xs text-slate-500">
+                      {school.overdueDays > 0
+                        ? `${school.overdueDays} day${school.overdueDays === 1 ? "" : "s"} overdue`
+                        : school.paidUntil
+                          ? `due ${dateFmt.format(school.paidUntil)}`
+                          : "no date set"}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-sm font-semibold tabular-nums ${
+                      school.overdueDays > 0 ? "text-accent-600" : "text-slate-900"
+                    }`}
+                  >
+                    {school.monthlyFee > 0 ? formatCedis(school.monthlyFee) : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {totals.trialsEndingSoon.length > 0 ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">

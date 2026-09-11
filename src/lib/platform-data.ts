@@ -27,6 +27,9 @@ export async function getPlatformOverview() {
         plan: true,
         subscriptionStatus: true,
         studentCap: true,
+        paidUntil: true,
+        monthlyFee: true,
+        trialEndsAt: true,
         createdAt: true,
         _count: { select: { students: true, staff: true, memberships: true } },
       },
@@ -84,6 +87,33 @@ export async function getPlatformTotals() {
       _count: { _all: true },
     });
 
+    /**
+     * The money, monthly.
+     *
+     * MRR counts only schools that are actually paying — a suspended school's
+     * fee is not revenue, and counting it would make the one number an owner
+     * checks the most flattering and the least true.
+     */
+    const paying = await prisma.school.findMany({
+      where: { deletedAt: null, subscriptionStatus: "ACTIVE" },
+      select: { monthlyFee: true, paidUntil: true },
+    });
+    const mrr = paying.reduce((sum, s) => sum + Number(s.monthlyFee ?? 0), 0);
+    const unpriced = paying.filter((s) => s.monthlyFee === null).length;
+
+    // Due inside the week, and already overdue — the two lists that turn this
+    // screen into a morning's work rather than a dashboard.
+    const weekOut = new Date(Date.now() + 7 * 86_400_000);
+    const dueSoon = await prisma.school.findMany({
+      where: {
+        deletedAt: null,
+        subscriptionStatus: "ACTIVE",
+        paidUntil: { not: null, lte: weekOut },
+      },
+      select: { id: true, name: true, paidUntil: true, monthlyFee: true },
+      orderBy: { paidUntil: "asc" },
+    });
+
     // Trials ending within the week — the only thing on this screen that is
     // time-sensitive, and the reason to open it on a Monday.
     const soon = await prisma.school.findMany({
@@ -103,6 +133,15 @@ export async function getPlatformTotals() {
       smsSent: sms._count._all,
       smsCost: Number(sms._sum.cost ?? 0),
       trialsEndingSoon: soon,
+      mrr,
+      unpriced,
+      dueSoon: dueSoon.map((s) => ({
+        ...s,
+        monthlyFee: Number(s.monthlyFee ?? 0),
+        overdueDays: s.paidUntil
+          ? Math.max(0, Math.ceil((Date.now() - s.paidUntil.getTime()) / 86_400_000))
+          : 0,
+      })),
     };
   });
 }
@@ -115,6 +154,7 @@ export async function getSchoolForPlatform(schoolId: string) {
       select: {
         id: true, name: true, slug: true, shortName: true, plan: true,
         subscriptionStatus: true, studentCap: true, trialEndsAt: true, createdAt: true,
+        paidUntil: true, monthlyFee: true,
         email: true, phone: true, town: true, region: true,
       },
     });
@@ -148,6 +188,9 @@ export async function getSchoolForPlatform(schoolId: string) {
 
     return {
       ...school,
+      // Decimal is a Prisma object and does not cross into a client component;
+      // the money leaves this layer as a number, like every other figure here.
+      monthlyFee: school.monthlyFee === null ? null : Number(school.monthlyFee),
       pupils,
       staff,
       parents,

@@ -9,7 +9,12 @@ import { hashPassword, temporaryPassword } from "@/lib/password";
 import { slugify } from "@/lib/platform-data";
 import { provisionSchool, PROVISION_TX_OPTS } from "@/lib/provisioning";
 import { writeAudit } from "@/lib/audit";
-import { subscriptionState, STATUS_LABELS, PLANS as PLANS_LABELS } from "@/lib/subscription";
+import {
+  subscriptionState,
+  nextDueDate,
+  STATUS_LABELS,
+  PLANS as PLANS_LABELS,
+} from "@/lib/subscription";
 
 export type PlatformState = { error?: string; ok?: string };
 
@@ -118,6 +123,8 @@ export async function updateSubscription(
   const status = String(formData.get("subscriptionStatus") ?? "") as SubscriptionStatus;
   const capRaw = String(formData.get("studentCap") ?? "").trim();
   const trialRaw = String(formData.get("trialEndsAt") ?? "").trim();
+  const paidRaw = String(formData.get("paidUntil") ?? "").trim();
+  const feeRaw = String(formData.get("monthlyFee") ?? "").trim();
 
   if (!schoolId) {
     return { error: "Which school?" };
@@ -141,10 +148,25 @@ export async function updateSubscription(
     return { error: "That trial end date could not be read." };
   }
 
+  const paidUntil = paidRaw === "" ? null : new Date(paidRaw);
+  if (paidUntil && Number.isNaN(paidUntil.getTime())) {
+    return { error: "That paid-until date could not be read." };
+  }
+
+  // Blank means "not agreed yet", which the console counts separately from zero
+  // — a school on GH₵0 is a decision, a school with no fee set is a loose end.
+  const monthlyFee = feeRaw === "" ? null : Number(feeRaw);
+  if (monthlyFee !== null && (!Number.isFinite(monthlyFee) || monthlyFee < 0)) {
+    return { error: "A monthly fee is a number, or blank if it is not agreed yet." };
+  }
+
   const before = await withBypass(() =>
     prisma.school.findUnique({
       where: { id: schoolId },
-      select: { name: true, plan: true, subscriptionStatus: true, studentCap: true, trialEndsAt: true },
+      select: {
+        name: true, plan: true, subscriptionStatus: true, studentCap: true,
+        trialEndsAt: true, paidUntil: true, monthlyFee: true,
+      },
     }),
   );
   if (!before) {
@@ -154,7 +176,14 @@ export async function updateSubscription(
   await withBypass(async () => {
     await prisma.school.update({
       where: { id: schoolId },
-      data: { plan, subscriptionStatus: status, studentCap, trialEndsAt },
+      data: {
+        plan,
+        subscriptionStatus: status,
+        studentCap,
+        trialEndsAt,
+        paidUntil,
+        monthlyFee: monthlyFee === null ? null : new Prisma.Decimal(monthlyFee.toFixed(2)),
+      },
     });
     await writeAudit(prisma, {
       schoolId,
@@ -162,21 +191,89 @@ export async function updateSubscription(
       action: "school.subscription",
       entity: "School",
       entityId: schoolId,
-      before,
-      after: { plan, subscriptionStatus: status, studentCap, trialEndsAt },
+      before: { ...before, monthlyFee: before.monthlyFee?.toString() ?? null },
+      after: { plan, subscriptionStatus: status, studentCap, trialEndsAt, paidUntil, monthlyFee },
     });
   });
 
   revalidatePath("/admin");
   revalidatePath(`/admin/${schoolId}`);
-  // The banner and the read-only rule are resolved per request from this row, so
-  // every signed-in session at that school picks the change up on its next page.
-  revalidatePath("/", "layout");
+  /**
+   * ⚠️ Deliberately NOT `revalidatePath("/", "layout")`.
+   *
+   * It is unnecessary — `getSessionUser` reads the school row on every request,
+   * so a signed-in school sees the new state on its next page either way — and
+   * it is harmful here: revalidating the layout remounts this form, which resets
+   * `useActionState` and throws away the confirmation before anyone reads it.
+   * The operator presses the button and is told nothing.
+   */
 
-  const state = subscriptionState({ plan, subscriptionStatus: status, trialEndsAt });
+  const state = subscriptionState({ plan, subscriptionStatus: status, trialEndsAt, paidUntil });
   return {
     ok: `${before.name} is now ${STATUS_LABELS[status]} on ${PLANS_LABELS[plan].label}${
       state.readOnly ? " — staff can read and print, but not enter anything new." : "."
     }`,
+  };
+}
+
+/**
+ * Record a month's payment.
+ *
+ * Manual, because there is no gateway taking the school's money yet: the
+ * subscription is collected by momo or transfer and marked here. When Paystack
+ * ships, this is the function it calls.
+ *
+ * Audited to the school's own trail — "when did we last pay" is a question a
+ * head teacher asks, and the answer should not be the vendor's memory.
+ */
+export async function recordSubscriptionPayment(
+  _prev: PlatformState,
+  formData: FormData,
+): Promise<PlatformState> {
+  const admin = await requirePlatformAdmin();
+  const schoolId = String(formData.get("schoolId") ?? "");
+  if (!schoolId) {
+    return { error: "Which school?" };
+  }
+
+  const school = await withBypass(() =>
+    prisma.school.findUnique({
+      where: { id: schoolId },
+      select: { name: true, paidUntil: true, monthlyFee: true, subscriptionStatus: true },
+    }),
+  );
+  if (!school) {
+    return { error: "That school no longer exists." };
+  }
+
+  const paidUntil = nextDueDate(school.paidUntil);
+
+  await withBypass(async () => {
+    await prisma.school.update({
+      where: { id: schoolId },
+      // A payment is also the answer to a suspension: taking the money and
+      // leaving the school read-only would be indefensible.
+      data: { paidUntil, subscriptionStatus: "ACTIVE" },
+    });
+    await writeAudit(prisma, {
+      schoolId,
+      actorUserId: admin.userId,
+      action: "school.subscription.paid",
+      entity: "School",
+      entityId: schoolId,
+      before: { paidUntil: school.paidUntil, subscriptionStatus: school.subscriptionStatus },
+      after: { paidUntil, amount: school.monthlyFee?.toString() ?? null },
+    });
+  });
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/${schoolId}`);
+
+  return {
+    ok: `${school.name} is paid to ${paidUntil.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })}.`,
   };
 }
