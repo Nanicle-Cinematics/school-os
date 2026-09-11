@@ -327,6 +327,64 @@ async function main() {
     console.log(`  links: ${a.links.slice(0, 10).map((l) => `${l.label}→${l.href}`).join(" | ") || "—"}`);
   }
 
+  /**
+   * The Nanicle console, as its owner sees it.
+   *
+   * Walked here because this script already has the two things it needs — a
+   * platform admin and a school provisioned sixty seconds ago — and because the
+   * alternative was "I clicked through it once on my machine", which is not a
+   * thing that runs on anybody's next pull request. It is also the only
+   * verification available when the dev database is down, which it was for the
+   * hours this console was built in.
+   */
+  console.log("\n\n──── the Nanicle console ────");
+  const adminToken = await openSession(admin.id);
+
+  const consoleRoutes: { path: string; mustContain: string[] }[] = [
+    {
+      path: "/admin",
+      // The numbers an owner opens this for, and the school just provisioned.
+      mustContain: ["Schools", "SMS spend", "Needs chasing", school.name],
+    },
+    {
+      path: `/admin/${school.id}`,
+      // The state, the use, and the controls that change it.
+      mustContain: ["Subscription", "Children on roll", "Who to call", 'name="subscriptionStatus"'],
+    },
+  ];
+
+  for (const route of consoleRoutes) {
+    const page = await get(route.path, adminToken);
+    const text = pageText(page.html);
+    const redirect = page.location ? ` -> ${page.location}` : "";
+    console.log(`  ${route.path}  [${page.status}${redirect}]`);
+
+    if (page.location) {
+      problems.push(`${route.path} redirected to ${page.location} — the console was never reached`);
+      continue;
+    }
+    if (page.status !== 200) {
+      problems.push(`${route.path} answered ${page.status}`);
+      continue;
+    }
+    // Checked against the RAW html for the form controls, and the text for the
+    // rest: a page that renders its shell and loses its table is still broken.
+    const missing = route.mustContain.filter(
+      (needle) => !text.includes(needle) && !page.html.includes(needle),
+    );
+    if (missing.length > 0) {
+      problems.push(`${route.path} is missing: ${missing.join(", ")}`);
+    }
+  }
+
+  // A school's own staff must never reach it, whatever they type.
+  const trespass = await get("/admin", token);
+  if (trespass.status === 200 && !trespass.location) {
+    problems.push("/admin rendered for a school's proprietor — the console is Nanicle's alone");
+  } else {
+    console.log(`  /admin as a school proprietor  [${trespass.status}${trespass.location ? ` -> ${trespass.location}` : ""}]  refused`);
+  }
+
   console.log(`\n\nLeft behind: school ${slug}, admin qa-admin-${stamp}@example.com`);
   console.log(`Remove with: npm run verify:onboarding -- --clean ${slug}`);
 

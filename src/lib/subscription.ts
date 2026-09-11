@@ -110,6 +110,58 @@ export const PLANS: Record<Plan, { label: string; studentCap: number | null }> =
   SCHOOL_PLUS: { label: "School Plus", studentCap: null },
 };
 
+/**
+ * How many pupils this school may have on roll.
+ *
+ * The explicit `studentCap` wins where it is set — a school that negotiated 200
+ * on Starter keeps 200 — and the plan's own number is the default. Null is no
+ * cap at all.
+ *
+ * ⚠️ A cap is a limit on ADMITTING, never on having. A school that is over — the
+ * plan changed, or pupils were imported before the cap was set — keeps every
+ * child it has: withdrawing them to satisfy a billing question would hide
+ * children from their own school, and the school would still be teaching them on
+ * Monday. Only the next admission is refused.
+ */
+export function pupilCap(school: { plan: Plan; studentCap: number | null }): number | null {
+  return school.studentCap ?? PLANS[school.plan].studentCap;
+}
+
+export type Capacity = {
+  cap: number | null;
+  onRoll: number;
+  /** Room for this many more. Null when uncapped. */
+  remaining: number | null;
+  full: boolean;
+};
+
+export function capacity(
+  school: { plan: Plan; studentCap: number | null },
+  onRoll: number,
+): Capacity {
+  const cap = pupilCap(school);
+  if (cap === null) {
+    return { cap: null, onRoll, remaining: null, full: false };
+  }
+  return { cap, onRoll, remaining: Math.max(0, cap - onRoll), full: onRoll >= cap };
+}
+
+/** What to tell the office, in numbers they can act on. */
+export function capacityMessage(c: Capacity, adding: number, planLabel: string) {
+  if (c.cap === null) {
+    return null;
+  }
+  const after = c.onRoll + adding;
+  if (after <= c.cap) {
+    return null;
+  }
+  return adding === 1
+    ? `This school is at its limit of ${c.cap} pupils on the ${planLabel} plan — ${c.onRoll} are on roll. ` +
+        `Contact Nanicle to raise it. No existing pupil is affected.`
+    : `That would take the school to ${after} pupils, past its limit of ${c.cap} on the ${planLabel} plan ` +
+        `(${c.onRoll} on roll). Nothing has been imported. Contact Nanicle to raise the limit, or import fewer rows.`;
+}
+
 export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   TRIALING: "Trialing",
   ACTIVE: "Active",
