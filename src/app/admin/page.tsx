@@ -16,9 +16,8 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 
 const PLAN_TONE: Record<string, string> = {
   TRIAL: "bg-amber-50 text-amber-700",
-  STARTER: "bg-blue-50 text-blue-700",
-  GROWTH: "bg-green-50 text-green-700",
-  SCHOOL_PLUS: "bg-brand-600 text-white",
+  STANDARD: "bg-green-50 text-green-700",
+  INSTITUTION_PLUS: "bg-brand-600 text-white",
 };
 
 function Stat({

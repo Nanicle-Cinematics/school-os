@@ -25,11 +25,13 @@ datasource db {
 // PLATFORM & TENANCY
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Two paid plans, separated by price rather than by roll size — see PLANS in
+// src/lib/subscription.ts. The four-tier ladder that was here (STARTER, GROWTH,
+// SCHOOL_PLUS) was a placeholder nobody had priced.
 enum Plan {
   TRIAL
-  STARTER
-  GROWTH
-  SCHOOL_PLUS
+  STANDARD
+  INSTITUTION_PLUS
 }
 
 enum SubscriptionStatus {

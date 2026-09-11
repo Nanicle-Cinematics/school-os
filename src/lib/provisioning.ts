@@ -7,6 +7,7 @@ import { applyGesCurriculum } from "@/lib/ges-curriculum";
 import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 import { schoolYearFor, splitIntoTerms } from "@/lib/academic-year";
+import { PLANS, TRIAL_DAYS, nextDueDate } from "@/lib/subscription";
 import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
 
 /**
@@ -65,8 +66,16 @@ export async function provisionSchool(tx: TenantTx, input: ProvisionInput) {
       shortName: input.shortName,
       plan: input.plan,
       subscriptionStatus: input.plan === "TRIAL" ? "TRIALING" : "ACTIVE",
+      // TRIAL_DAYS, not a number written here: this said 30 while the console's
+      // plan picker said 30 and the price list says 7, and the school is the one
+      // who finds out which was true.
       trialEndsAt:
-        input.plan === "TRIAL" ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null,
+        input.plan === "TRIAL" ? new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000) : null,
+      // A paid school starts on its plan's price and its first month runs from
+      // today. Both are editable per school — a negotiated rate is a decision
+      // about that school, not a change to the price list.
+      monthlyFee: PLANS[input.plan].monthlyPrice,
+      paidUntil: input.plan === "TRIAL" ? null : nextDueDate(null),
     },
   });
 

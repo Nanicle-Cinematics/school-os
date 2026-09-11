@@ -15,6 +15,8 @@ import { join } from "node:path";
 import {
   subscriptionState,
   nextDueDate,
+  PLANS,
+  TRIAL_DAYS,
   capacity,
   capacityMessage,
   pupilCap,
@@ -65,7 +67,7 @@ console.log("\nMonthly billing");
 const day = (n: number) => new Date(Date.now() + n * DAY);
 const monthly = (paidUntil: Date | null) =>
   subscriptionState({
-    plan: "STARTER",
+    plan: "STANDARD",
     subscriptionStatus: "ACTIVE",
     trialEndsAt: null,
     paidUntil,
@@ -255,20 +257,20 @@ check(
   unguarded.length ? `missing in: ${unguarded.join(", ")}` : `${creators.length} file(s), all guarded`,
 );
 
-const capped = { plan: "STARTER" as const, studentCap: 150 };
-check("a school under its cap may admit", capacityMessage(capacity(capped, 149), 1, "Starter") === null);
+const capped = { plan: "STANDARD" as const, studentCap: 150 };
+check("a school under its cap may admit", capacityMessage(capacity(capped, 149), 1, "Standard") === null);
 check(
   "a school AT its cap may not",
-  (capacityMessage(capacity(capped, 150), 1, "Starter") ?? "").includes("at its limit"),
+  (capacityMessage(capacity(capped, 150), 1, "Standard") ?? "").includes("at its limit"),
 );
 check(
   "an import that would cross the cap is refused whole, with the arithmetic",
-  (capacityMessage(capacity(capped, 100), 80, "Starter") ?? "").includes("180"),
-  capacityMessage(capacity(capped, 100), 80, "Starter") ?? "",
+  (capacityMessage(capacity(capped, 100), 80, "Standard") ?? "").includes("180"),
+  capacityMessage(capacity(capped, 100), 80, "Standard") ?? "",
 );
 check(
   "and says nothing was written",
-  (capacityMessage(capacity(capped, 100), 80, "Starter") ?? "").includes("Nothing has been imported"),
+  (capacityMessage(capacity(capped, 100), 80, "Standard") ?? "").includes("Nothing has been imported"),
 );
 check(
   "a school ALREADY over its cap keeps its pupils — only new admissions refuse",
@@ -277,9 +279,22 @@ check(
 );
 check(
   "an explicit cap beats the plan default",
-  pupilCap({ plan: "STARTER", studentCap: 400 }) === 400,
+  pupilCap({ plan: "STANDARD", studentCap: 400 }) === 400,
 );
-check("School Plus is uncapped", pupilCap({ plan: "SCHOOL_PLUS", studentCap: null }) === null);
+check(
+  "no plan carries a cap of its own — a limit is a decision about one school",
+  (Object.keys(PLANS) as (keyof typeof PLANS)[]).every((p) => PLANS[p].studentCap === null),
+);
+check(
+  "the trial is limited by TIME, not by roll size",
+  TRIAL_DAYS === 7 && PLANS.TRIAL.studentCap === null,
+  `${TRIAL_DAYS} days, uncapped`,
+);
+check(
+  "the two paid plans are priced",
+  PLANS.STANDARD.monthlyPrice === 500 && PLANS.INSTITUTION_PLUS.monthlyPrice === 800,
+  `Standard GH₵${PLANS.STANDARD.monthlyPrice}, Institution Plus GH₵${PLANS.INSTITUTION_PLUS.monthlyPrice}`,
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 await prisma.$disconnect();
