@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { paymentSource } from "@/lib/payment-labels";
 import { requireAuth } from "@/lib/auth";
 import { canAccess, isTeacherOnly, isParentOnly, landingFor, FINANCE } from "@/lib/permissions";
 import {
@@ -192,7 +193,7 @@ export default async function DashboardPage() {
                       </p>
                       <p className="text-xs text-slate-500">
                         {payment.student.admissionNo} · {payment.receiptNo} ·{" "}
-                        {payment.method.replace(/_/g, " ").toLowerCase()}
+                        {paymentSource(payment.method, payment.momoNetwork)}
                       </p>
                     </div>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
