@@ -344,7 +344,10 @@ async function main() {
     {
       path: "/admin",
       // The numbers an owner opens this for, and the school just provisioned.
-      mustContain: ["Schools", "SMS spend", "Needs chasing", school.name],
+      // The numbers an owner opens this for. "SMS spend" is here because it is
+      // the cost that scales with use and has already been lost once, into the
+      // unlit branch of a conditional.
+      mustContain: ["Schools", "Monthly revenue", "SMS spend", "Needs chasing", school.name],
     },
     {
       path: `/admin/${school.id}`,

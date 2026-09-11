@@ -100,10 +100,17 @@ export default async function AdminPage() {
           <Stat
             label="Monthly revenue"
             value={formatCedis(totals.mrr)}
+            /* SMS spend rides along here rather than in its own card, but it
+               ALWAYS rides: it is the cost that scales with use, and hiding it
+               in one branch of a conditional meant a platform with no priced
+               schools could not see what it was spending. The onboarding walk
+               asserts the phrase for exactly that reason. */
             sub={
               totals.unpriced > 0
-                ? `${totals.unpriced} paying school${totals.unpriced === 1 ? "" : "s"} with no fee set`
-                : `${totals.byStatus.ACTIVE ?? 0} paying · SMS costs ${formatCedis(totals.smsCost)}`
+                ? `${totals.unpriced} paying school${
+                    totals.unpriced === 1 ? "" : "s"
+                  } with no fee set · SMS spend ${formatCedis(totals.smsCost)}`
+                : `${totals.byStatus.ACTIVE ?? 0} paying · SMS spend ${formatCedis(totals.smsCost)}`
             }
             tone={totals.unpriced > 0 ? "warn" : undefined}
           />
