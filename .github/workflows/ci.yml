@@ -103,6 +103,13 @@ jobs:
       - name: Password reset — codes, expiry and guessing
         run: npm run verify:reset
 
+      # The subscription is a switch that does something: an unpaid school reads
+      # and prints but cannot write. Includes the re-scoping check — every action
+      # re-sets the tenant context, and losing readOnly there would leave the
+      # guard perfect and unreachable.
+      - name: Subscriptions — read-only enforcement
+        run: npm run verify:platform
+
       - name: Audience — campaign reach, dedupe, debtor filtering
         run: npm run verify:audience
 

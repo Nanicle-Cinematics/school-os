@@ -27,6 +27,7 @@
     "verify:teacher": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-teacher.mts",
     "verify:parent": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-parent.mts",
     "verify:reset": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-reset.mts",
+    "verify:platform": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-platform.mts",
     "verify:attention": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-attention.mts",
     "verify:collections": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-collections.mts",
     "verify:activity": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-activity.mts",

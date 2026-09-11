@@ -125,6 +125,21 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
 
+        {auth.subscription.notice ? (
+          /* Above the page rather than in a corner: a refused save is a confusing
+             thing to meet with no explanation, so the explanation arrives first. */
+          <div
+            role="status"
+            className={`border-b px-4 py-2.5 text-sm lg:px-6 print:hidden ${
+              auth.subscription.readOnly
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-amber-200 bg-amber-50 text-amber-700"
+            }`}
+          >
+            {auth.subscription.notice}
+          </div>
+        ) : null}
+
         <main className="min-w-0 flex-1 p-4 lg:p-7 print:p-0">{children}</main>
       </div>
     </div>

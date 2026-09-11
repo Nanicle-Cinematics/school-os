@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { getSessionUser } from "@/lib/session";
 import { setTenantContext } from "@/lib/tenant-context";
+import { subscriptionState, type SubscriptionState } from "@/lib/subscription";
 import { canAccess, landingFor } from "@/lib/permissions";
 
 export type AuthContext = {
@@ -23,6 +24,8 @@ export type AuthContext = {
   guardianId: string | null;
   /** Still holding the temporary password the office issued. */
   mustChangePassword: boolean;
+  /** What this school's subscription allows, and what to say about it. */
+  subscription: SubscriptionState;
   isPlatformAdmin: boolean;
 };
 
@@ -54,7 +57,18 @@ export async function requireAuth(): Promise<AuthContext> {
   const active =
     memberships.find((m) => m.schoolId === session.activeSchoolId) ?? memberships[0];
 
-  setTenantContext({ schoolId: active.schoolId });
+  /**
+   * The subscription decides whether this session may WRITE.
+   *
+   * Carried on the tenant context so src/lib/prisma.ts can refuse a tenant write
+   * in one place — the alternative is a check in each of sixty-odd actions, and
+   * the one that gets forgotten is the one that matters.
+   *
+   * `active.school` is already loaded by getSessionUser (`include: { school: true }`),
+   * so this costs no extra query on a path that runs for every request.
+   */
+  const subscription = subscriptionState(active.school);
+  setTenantContext({ schoolId: active.schoolId, readOnly: subscription.readOnly });
 
   // One user can hold SEVERAL memberships in the same school — the unique key is
   // (school, user, role) — and `active` is only the first of them. The person
@@ -73,6 +87,7 @@ export async function requireAuth(): Promise<AuthContext> {
     schoolId: active.schoolId,
     schoolName: active.school.name,
     schoolShortName: active.school.shortName,
+    subscription,
     schoolMotto: active.school.motto,
     schoolCrestUrl: active.school.crestUrl,
     headSignatureUrl: active.school.headSignatureUrl,

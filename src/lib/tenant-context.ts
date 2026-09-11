@@ -7,7 +7,18 @@ import { cache } from "react";
 // DB access to one tenant; `bypass` lifts RLS for auth / school resolution /
 // platform-admin / system paths; `inTx` marks that the GUC is already set on the
 // current interactive transaction (so ops don't re-wrap).
-export type TenantContext = { schoolId?: string; bypass?: boolean; inTx?: boolean };
+export type TenantContext = {
+  schoolId?: string;
+  bypass?: boolean;
+  inTx?: boolean;
+  /**
+   * The school may be read but not written — an expired trial, or a subscription
+   * the platform has suspended. Carried here rather than checked in each action
+   * because there are sixty-odd of them and "remember to add the check" is how
+   * this codebase has shipped every silent hole it has had.
+   */
+  readOnly?: boolean;
+};
 
 // Keep a single AsyncLocalStorage instance across dev HMR reloads, otherwise the
 // Prisma extension and setTenantContext can end up reading/writing different
@@ -42,14 +53,33 @@ export function getTenantContext(): TenantContext | undefined {
   return storage.getStore() ?? holder()?.ctx;
 }
 
-// Set/replace the context for the remainder of the current request. Used by the
-// auth guards, which run before any tenant data access.
+/**
+ * Set the context for the remainder of the current request.
+ *
+ * ⚠️ `readOnly` is CARRIED FORWARD unless the caller says otherwise, and that is
+ * load-bearing. Every one of the sixty-odd server actions calls
+ * `setTenantContext({ schoolId: auth.schoolId })` immediately after requireRole
+ * — which is correct, and which, with replace semantics, threw away the
+ * `readOnly` requireAuth had just resolved from the subscription. The guard in
+ * prisma.ts would then have been perfect and reached by nothing: an unpaid
+ * school would write exactly as before, and every check would have passed.
+ *
+ * The same school, re-scoped, keeps what was decided about it. Naming a
+ * DIFFERENT school, or passing readOnly explicitly, replaces it as before.
+ */
 export function setTenantContext(ctx: TenantContext): void {
+  const previous = getTenantContext();
+  const sameSchool = previous?.schoolId && previous.schoolId === ctx.schoolId;
+  const next: TenantContext =
+    sameSchool && ctx.readOnly === undefined && previous?.readOnly !== undefined
+      ? { ...ctx, readOnly: previous.readOnly }
+      : ctx;
+
   const store = holder();
   if (store) {
-    store.ctx = ctx;
+    store.ctx = next;
   }
-  storage.enterWith(ctx);
+  storage.enterWith(next);
 }
 
 export function runWithTenantContext<T>(ctx: TenantContext, fn: () => T): T {

@@ -495,6 +495,16 @@ const ACTIVITY: Record<
   "school.asset.upload": { kind: "admin", title: () => "The crest or signature was updated", detail: "Settings" },
   "school.asset.remove": { kind: "admin", title: () => "The crest or signature was removed", detail: "Settings" },
   "school.provision": { kind: "admin", title: () => "The school was set up", detail: "Nanicle" },
+  /* A head teacher asking "why did this go read-only in March" gets an answer
+     from the trail rather than from somebody's memory. */
+  "school.subscription": {
+    kind: "admin",
+    title: (a) => {
+      const status = String(a.subscriptionStatus ?? "");
+      return status ? `The subscription was set to ${status.replace(/_/g, " ").toLowerCase()}` : "The subscription changed";
+    },
+    detail: "Nanicle",
+  },
   "user.password.change": {
     kind: "admin",
     title: () => "A password was changed",
