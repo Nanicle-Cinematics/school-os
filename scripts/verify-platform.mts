@@ -8,7 +8,7 @@
  *
  *   npm run verify:platform   (no dev server needed)
  */
-import { prisma, SchoolReadOnlyError } from "@/lib/prisma";
+import { prisma, tenantTransaction, SchoolReadOnlyError } from "@/lib/prisma";
 import { runWithTenantContext, setTenantContext, withBypass } from "@/lib/tenant-context";
 import { subscriptionState } from "@/lib/subscription";
 
@@ -108,6 +108,37 @@ check(
   survived instanceof SchoolReadOnlyError,
   survived instanceof Error ? survived.name : "the write went through",
 );
+
+/**
+ * ⚠️ And inside a transaction, which is where most writes in this app happen.
+ *
+ * The first version of this guard sat after `if (!RLS_ON || !model || inTx)
+ * return query(args)`, so every operation inside `tenantTransaction` skipped it:
+ * invoicing, promotion and results computation all write that way. CI caught the
+ * RLS-off half; this is the half that would otherwise have reached production
+ * with the guard looking perfect.
+ */
+let inTransaction: unknown = null;
+try {
+  await runWithTenantContext({ schoolId, readOnly: true }, () =>
+    tenantTransaction(schoolId, (tx) =>
+      tx.house.create({ data: { schoolId, name: `tx probe ${Date.now()}` } }),
+    ),
+  );
+} catch (error) {
+  inTransaction = error;
+}
+check(
+  "a write inside tenantTransaction is refused too",
+  inTransaction instanceof SchoolReadOnlyError ||
+    (inTransaction instanceof Error && inTransaction.message.includes("read-only")),
+  inTransaction instanceof Error ? inTransaction.name : "the transaction went through",
+);
+
+const txStray = await withBypass(() =>
+  prisma.house.count({ where: { schoolId, name: { startsWith: "tx probe" } } }),
+);
+check("and that transaction wrote nothing", txStray === 0, `${txStray} rows`);
 
 // The console has to be able to lift it — otherwise reactivating a suspended
 // school would be refused by the suspension, and the only way out is the database.
