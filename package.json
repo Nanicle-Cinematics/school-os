@@ -32,6 +32,7 @@
     "verify:activity": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-activity.mts",
     "verify:search": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-search.mts",
     "shots": "node --env-file=.env scripts/screenshot.mjs",
+    "shots:portal": "node --env-file=.env scripts/portal-shots.mjs",
     "verify:actions": "node --env-file=.env scripts/verify-actions.mjs",
     "verify:invoicing": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-invoicing.mts"
   },
