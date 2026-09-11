@@ -50,6 +50,23 @@ const TENANT_MODELS = new Set(
     .map((m) => m.name),
 );
 
+/** Operations that change data. Everything else is a read and stays allowed. */
+const WRITES = new Set([
+  "create", "createMany", "createManyAndReturn",
+  "update", "updateMany", "updateManyAndReturn",
+  "upsert", "delete", "deleteMany",
+]);
+
+export class SchoolReadOnlyError extends Error {
+  constructor(model: string, operation: string) {
+    super(
+      `This school is read-only — its subscription is not active, so ${operation} on ${model} is refused. ` +
+        `Records can still be read and printed. Settle the subscription, or change it in the Nanicle console.`,
+    );
+    this.name = "SchoolReadOnlyError";
+  }
+}
+
 export class TenantContextMissingError extends Error {
   constructor(model: string) {
     super(
@@ -129,7 +146,7 @@ function createPrismaClient() {
 
   const client = base.$extends({
     query: {
-      async $allOperations({ model, args, query }) {
+      async $allOperations({ model, operation, args, query }) {
         const exec = () => {
           // Raw ops (no model) and interactive-tx ops (GUC already set) run
           // as-is. Everything else is wrapped so the tenant GUC and the query
@@ -138,6 +155,28 @@ function createPrismaClient() {
             return query(args);
           }
           assertTenantContext(model);
+
+          /**
+           * A school that has not paid can be READ but not written.
+           *
+           * Enforced here, and only here, for the same reason the tenant guard
+           * above is: there are sixty-odd server actions and a rule that lives
+           * in each of them is a rule that will be missing from the next one.
+           * Every tenant write in the app passes through this extension.
+           *
+           * Reads are untouched on purpose — a head teacher mid-term can still
+           * look a pupil up, print a report card and see what is owed. So can
+           * every parent: the portal only reads, so a school's unpaid invoice
+           * never reaches the families.
+           *
+           * `withBypass` lifts it, which is what the Nanicle console needs to
+           * change the subscription that caused it.
+           */
+          const ctx = getTenantContext();
+          if (ctx?.readOnly && !ctx.bypass && WRITES.has(operation) && TENANT_MODELS.has(model)) {
+            throw new SchoolReadOnlyError(model, operation);
+          }
+
           const [sid, bypass] = gucArgs();
           return extended
             .$transaction([extended.$executeRawUnsafe(SET_GUC_SQL, sid, bypass), query(args)])

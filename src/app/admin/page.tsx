@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { requirePlatformAdmin } from "@/lib/platform-auth";
-import { getPlatformOverview } from "@/lib/platform-data";
+import Link from "next/link";
+import { getPlatformOverview, getPlatformTotals } from "@/lib/platform-data";
+import { formatCedis } from "@/lib/money";
 import { logout } from "@/lib/auth-actions";
 import { NewSchoolForm } from "./school-form";
 
@@ -19,11 +21,40 @@ const PLAN_TONE: Record<string, string> = {
   SCHOOL_PLUS: "bg-brand-600 text-white",
 };
 
+function Stat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone?: "warn";
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p
+        className={`mt-1 text-2xl font-extrabold tabular-nums ${
+          tone === "warn" ? "text-accent-600" : "text-slate-900"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-0.5 text-xs text-slate-500">{sub}</p>
+    </div>
+  );
+}
+
 export default async function AdminPage() {
   const admin = await requirePlatformAdmin();
   const schools = await getPlatformOverview();
+  const totals = await getPlatformTotals();
 
   const onRoll = schools.reduce((total, school) => total + school.onRoll, 0);
+  const needsAttention =
+    (totals.byStatus.PAST_DUE ?? 0) + (totals.byStatus.SUSPENDED ?? 0);
 
   return (
     <main className="min-h-full bg-slate-50">
@@ -50,6 +81,49 @@ export default async function AdminPage() {
       </header>
 
       <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
+        {/* The business in four numbers. Ordered by what a Monday morning asks:
+            how many schools, how many children behind them, who has stopped
+            paying, and what the texts are costing. */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Schools" value={String(totals.schools)} sub={`${totals.pupils} children on roll`} />
+          <Stat
+            label="Paying"
+            value={String(totals.byStatus.ACTIVE ?? 0)}
+            sub={`${totals.byStatus.TRIALING ?? 0} on trial`}
+          />
+          <Stat
+            label="Needs chasing"
+            value={String(needsAttention)}
+            sub="Past due or suspended"
+            tone={needsAttention > 0 ? "warn" : undefined}
+          />
+          <Stat
+            label="SMS spend"
+            value={formatCedis(totals.smsCost)}
+            sub={`${totals.smsSent} sent, all schools`}
+          />
+        </div>
+
+        {totals.trialsEndingSoon.length > 0 ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-700">
+              {totals.trialsEndingSoon.length} trial
+              {totals.trialsEndingSoon.length === 1 ? "" : "s"} ending within the week
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {totals.trialsEndingSoon.map((school) => (
+                <li key={school.id} className="text-sm text-amber-700">
+                  <Link href={`/admin/${school.id}`} className="font-medium underline">
+                    {school.name}
+                  </Link>
+                  {" — "}
+                  {school.trialEndsAt ? dateFmt.format(school.trialEndsAt) : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Schools</h1>
@@ -85,7 +159,12 @@ export default async function AdminPage() {
                   schools.map((school) => (
                     <tr key={school.id} className="hover:bg-slate-50">
                       <td className="whitespace-nowrap px-4 py-2.5">
-                        <span className="font-medium text-slate-900">{school.name}</span>
+                        <Link
+                          href={`/admin/${school.id}`}
+                          className="font-medium text-slate-900 hover:text-brand-ink hover:underline"
+                        >
+                          {school.name}
+                        </Link>
                         <span className="ml-2 font-mono text-xs text-slate-400">{school.slug}</span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
