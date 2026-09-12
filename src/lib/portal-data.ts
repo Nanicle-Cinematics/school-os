@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { sum } from "@/lib/money";
+import { reportHold, reportHoldsForTerms } from "@/lib/report-access";
 
 /**
  * Reads for the parent portal.
@@ -81,7 +82,34 @@ export async function getPublishedTerms(studentId: string) {
     },
     orderBy: { term: { startDate: "desc" } },
   });
-  return rows;
+
+  /**
+   * ⚠️ The list carries the average and the position, so a hold that only
+   * covered the card itself would withhold nothing that matters — the headline
+   * numbers would still be sitting on the page one level up. Held terms are
+   * marked here and the summary is dropped with them.
+   */
+  const settings = await prisma.schoolSettings.findFirst({
+    select: { blockReportOnArrears: true, showClassPosition: true },
+  });
+  const holds = await reportHoldsForTerms(
+    studentId,
+    rows.map((row) => row.termId),
+    settings,
+  );
+  const showPosition = settings?.showClassPosition ?? true;
+
+  return rows.map((row) => {
+    const hold = holds.get(row.termId) ?? null;
+    return {
+      ...row,
+      hold,
+      // Nothing about the result travels while it is held.
+      average: hold ? null : row.average,
+      classPosition: hold || !showPosition ? null : row.classPosition,
+      classSize: hold || !showPosition ? null : row.classSize,
+    };
+  });
 }
 
 /** Invoices and receipts for one child, newest term first. */
@@ -144,7 +172,29 @@ export async function getPublishedReportCard(studentId: string, termId: string) 
   if (!published) return null;
 
   const { getReportCard } = await import("@/lib/results-data");
-  return getReportCard(termId, studentId);
+  const data = await getReportCard(termId, studentId);
+  if (!data) return null;
+
+  /**
+   * The one place a withheld card is actually withheld from a family.
+   *
+   * Returned as a HOLD rather than a 404: a parent who is told the page does
+   * not exist rings the school, and the office then explains what the software
+   * should have. The amount and the school's own payment instructions are
+   * handed back instead, so the message is "settle this and collect it" rather
+   * than "something is broken".
+   */
+  const hold = await reportHold(studentId, termId, data.settings);
+  if (hold) {
+    return {
+      held: true as const,
+      hold,
+      // Already loaded with the card — no second read for the same row.
+      paymentInstructions: data.settings?.paymentInstructions ?? null,
+    };
+  }
+
+  return { held: false as const, ...data };
 }
 
 /** Name, class and admission number — the header every portal page carries. */

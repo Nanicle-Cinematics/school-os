@@ -5,6 +5,8 @@ import { requireRole, requireAuth } from "@/lib/auth";
 import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getReportCard } from "@/lib/results-data";
 import { saveRemarks } from "@/lib/results-actions";
+import { reportHold } from "@/lib/report-access";
+import { formatCedis } from "@/lib/money";
 import { StatusBadge, inputClass } from "../../ui";
 import { ReportCard } from "../report-card";
 import { SubmitButton } from "../../submit-button";
@@ -32,6 +34,9 @@ export default async function ReportCardPage({
 
   const { termResult, subjectResults, settings } = data;
   const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  // Staff are shown the card whatever the family owes — the office needs it to
+  // have the conversation — but they are told what the parent is seeing.
+  const hold = await reportHold(studentId, termId, settings);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -44,6 +49,15 @@ export default async function ReportCardPage({
         </Link>
         <StatusBadge status={termResult.status} />
       </div>
+
+      {hold ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 print:hidden">
+          <strong className="font-semibold">Held from the parent.</strong>{" "}
+          {formatCedis(hold.balance)} outstanding on invoice {hold.invoiceNo}, and the
+          school withholds cards in arrears. It is left out of the class print run and
+          the portal until the payment is recorded. You can still read it here.
+        </div>
+      ) : null}
 
       <ReportCard
         schoolName={auth.schoolName}

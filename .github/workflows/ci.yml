@@ -141,6 +141,14 @@ jobs:
       - name: Subscriptions — read-only enforcement
         run: npm run verify:platform
 
+      # Every switch in /settings does something. Four of them did not:
+      # blockReportOnArrears promised to withhold report cards and withheld
+      # nothing, and the two position toggles printed regardless. The field list
+      # comes from the Prisma DMMF, so a setting added tomorrow is covered the
+      # day it is added rather than the day somebody remembers to add it here.
+      - name: Settings — no dead switches, and the arrears hold actually holds
+        run: npm run verify:settings
+
       - name: Audience — campaign reach, dedupe, debtor filtering
         run: npm run verify:audience
 

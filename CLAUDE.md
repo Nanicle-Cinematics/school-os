@@ -366,11 +366,26 @@ branch, so a dispatch is a 404 until the workflow file is on main — which is w
 this one PR had to merge before it could be baselined, and why a later PR does
 not.
 
-⚠️ **Run `deploy` BEFORE merging, not after.** Vercel deploys main the instant it
-is pushed, so a migration in that same pipeline would race the deployment and
-sometimes land after the code that needs it. Order: deploy the migration, watch
-it succeed, then merge. The drift job is the backstop, and it has already stopped
-two merges that would have been outages.
+⚠️ **Which side of the merge the migration goes on depends on the change.** The
+running code and the live schema have to be compatible at every instant, and
+Vercel deploys main the moment it is pushed — so there is always a window where
+one of the two is ahead of the other, and the only question is which one it is
+safe for.
+
+- **ADDING** — a new column, table, or nullable field — migrates **BEFORE the
+  merge** (`--ref <branch>`). Old code ignores a column it has never heard of;
+  new code cannot run without it. Migrating after would leave the deployment
+  racing the schema, which is an outage on every page that touches the new field.
+- **REMOVING** — dropping a column or table, tightening a constraint — merges
+  **FIRST, and migrates after the deploy has landed.** Backwards: the live code
+  is still SELECTing that column, and Prisma names columns explicitly, so
+  dropping it first breaks every read of the table until the deploy catches up.
+
+This rule was written the wrong way round — "deploy BEFORE merging" with no
+exception — and the very first schema change after it was a DROP, which would
+have taken `/settings`, the report cards and the bills down together. The drift
+job is the backstop either way, and it has already stopped two merges that would
+have been outages.
 
 **CI builds its database from the migrations** (`db:deploy`, not `db push`) and
 then asserts the result matches `prisma/schema.prisma`. Applying cleanly is not
@@ -440,6 +455,40 @@ settings form wrote them and showed them back, and nothing read either — so a
 school that unticked "text a receipt when a payment is recorded" went on texting
 receipts. `queueTransactionalSms` now takes the `gate` it obeys, as a required
 argument, so a new automatic text cannot forget to have one.
+
+⚠️ **And four more were dead, found 2026-09-12 by auditing the whole model.**
+`blockReportOnArrears` promised "Withhold report cards from students in arrears"
+and withheld nothing — a head who ticked it would have learnt at vacation, with
+the term's fees already gone. `showClassPosition` and `showSubjectPosition`
+printed regardless. `reportCardTemplate` offered a "Compact" layout that was
+never built; the picker and the column are both gone.
+
+**`npm run verify:settings` is what stops the fifth.** It takes the field list
+from the Prisma DMMF — never a list kept by hand, which would go stale exactly
+when it mattered — and fails on any `SchoolSettings` field that `/settings`
+writes and no other file reads. Two things it learnt the hard way, both found by
+forcing it red rather than by reasoning:
+
+- **Comments are stripped before scanning.** The first forced-red run passed with
+  the field unwired, because the comment explaining the bug named the field. This
+  codebase comments heavily enough that nearly every dead field would be "read"
+  by the paragraph describing how dead it is.
+- **A read must LOOK like a read** — `.field`, a `field:` key, or a `"field"`
+  literal (the SMS gates are reached as `settings[gate]`, never `.notifyOn…`).
+  The second forced-red run passed on a leftover `const showClassPosition = true`.
+
+It also runs the hold against real invoices, because source-reading proves a word
+is present, not that a card is withheld.
+
+**The arrears hold itself lives in `src/lib/report-access.ts`**, one rule for
+four call sites. A card is held only when the school has actually ASKED — no
+invoice, a DRAFT one or a CANCELLED one is never arrears, or the software would
+punish a family for the office's backlog. Parents are held, the class print run
+is held and NAMES who was left out on the sheet, and staff are not: the office
+must be able to open the card to have the conversation. There is deliberately no
+"print them anyway" button on the batch — a head who must release one card prints
+that child's page, which is a decision rather than a click that quietly undoes
+the policy for forty children.
 
 ⚠️ **Send in bulk or don't send.** The obvious per-parent loop took **27 seconds
 for two parents** on this link — no gateway configured, all of it round trips —

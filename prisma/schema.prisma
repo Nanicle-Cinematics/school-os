@@ -190,7 +190,8 @@ model SchoolSettings {
   showSubjectPosition Boolean @default(true)
   showAggregate       Boolean @default(true) // BECE-style best-6 aggregate
   aggregateSubjects   Int     @default(6)
-  reportCardTemplate  String  @default("ges_standard")
+  // No reportCardTemplate. It offered a second layout that was never built, so
+  // the column stored an answer nothing asked for. Removed 2026-09-12.
 
   // Fees policy
   blockReportOnArrears Boolean @default(false)
