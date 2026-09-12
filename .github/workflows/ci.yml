@@ -93,12 +93,22 @@ jobs:
       # edited by hand can succeed and still leave a column behind.
       - name: Do the migrations produce the schema they claim?
         run: |
-          npx prisma migrate diff \
-            --from-url "$DATABASE_URL" \
+          # --from-schema-datasource, not --from-url: shell steps here have no
+          # DATABASE_URL exported — the job writes a .env that the Prisma CLI
+          # loads itself, which is also how db:deploy above finds the database.
+          set +e
+          node_modules/.bin/prisma migrate diff \
+            --from-schema-datasource prisma/schema.prisma \
             --to-schema-datamodel prisma/schema.prisma \
-            --exit-code > /tmp/after.sql 2>/tmp/after.err && exit 0
-          if [ "$?" = "2" ]; then
-            echo "The migrated database does not match prisma/schema.prisma:"
+            --script --exit-code > /tmp/after.sql 2>/tmp/after.err
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "the migrated database matches prisma/schema.prisma"
+            exit 0
+          fi
+          if [ "$code" = "2" ]; then
+            echo "The migrations do not produce prisma/schema.prisma. Missing:"
             cat /tmp/after.sql
             exit 1
           fi
