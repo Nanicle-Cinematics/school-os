@@ -496,6 +496,27 @@ must be able to open the card to have the conversation. There is deliberately no
 that child's page, which is a decision rather than a click that quietly undoes
 the policy for forty children.
 
+⚠️ **An invoice's stored status records an EVENT; lateness is DERIVED.**
+`invoiceStatusFor` used to return OVERDUE once the due date had passed, and its
+only caller is `recalcInvoice` — a payment, a reversal, an edited line. Nothing
+runs when a date passes, so an invoice that simply sat there unpaid stayed
+ISSUED for ever: dev held **zero** OVERDUE rows and 26 unpaid invoices all due
+on one day, while `/invoices` offered an OVERDUE filter that returned nothing —
+which an office reads as "nobody is late". The printed bill had been deriving it
+correctly at read time all along, two inches from the column that was wrong.
+
+Now: the stored status is ISSUED / PARTIALLY_PAID / PAID / CANCELLED, all
+event-driven, and `isOverdue`, `displayStatus`, `daysOverdue` and
+`statusFilterWhere` (all in `invoice-engine.ts`) answer lateness on every read.
+`statusFilterWhere` is pure so `verify:invoicing` can prove the filter never
+looks up `status: "OVERDUE"` again without needing a database. The money paths
+were never wrong — the dashboard's debtor count and the SMS debtor audience both
+select on `balance > 0` — it was the reporting that lied.
+
+**The general rule: never persist a value that changes by itself.** A stored
+field that rots with the calendar is the same animal as a switch nothing reads,
+and it fails the same way — silently, and in the direction that reassures.
+
 ⚠️ **Send in bulk or don't send.** The obvious per-parent loop took **27 seconds
 for two parents** on this link — no gateway configured, all of it round trips —
 because each recipient re-read the template and wrote its row alone. Read the

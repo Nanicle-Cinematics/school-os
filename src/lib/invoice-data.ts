@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import type { InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { statusFilterWhere } from "@/lib/invoice-engine";
 
 export type InvoiceFilters = {
   termId?: string;
@@ -14,11 +15,10 @@ export type InvoiceFilters = {
 export async function getInvoiceList(filters: InvoiceFilters) {
   const where: Prisma.InvoiceWhereInput = {
     ...(filters.termId ? { termId: filters.termId } : {}),
-    ...(filters.status === "DEBTORS"
-      ? { balance: { gt: 0 }, status: { not: "CANCELLED" } }
-      : filters.status
-        ? { status: filters.status }
-        : {}),
+    // Built by statusFilterWhere, which lives in invoice-engine so it can be
+    // tested without a database. OVERDUE is a QUESTION about dates and balance,
+    // never a stored value to look up — see isOverdue().
+    ...statusFilterWhere(filters.status),
     ...(filters.classGroupId ? { student: { currentClassGroupId: filters.classGroupId } } : {}),
     ...(filters.q
       ? {

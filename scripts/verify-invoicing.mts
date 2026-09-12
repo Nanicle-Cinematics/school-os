@@ -4,10 +4,16 @@
  *
  * Pure functions, no database. Run: npm run verify:invoicing
  */
+import { Prisma } from "@prisma/client";
 import {
   chooseFeeStructure,
+  daysOverdue,
+  displayStatus,
   explainNoStructure,
   groupSkipped,
+  invoiceStatusFor,
+  isOverdue,
+  statusFilterWhere,
   type SkippedStudent,
 } from "@/lib/invoice-engine";
 
@@ -184,6 +190,116 @@ check(
   groupSkipped([skipped[2]])[0].problem,
 );
 check("nothing skipped means nothing to report", groupSkipped([]).length === 0);
+
+/**
+ * Lateness, which nothing used to notice.
+ *
+ * ⚠️ `invoiceStatusFor` returned OVERDUE when the due date had passed, and its
+ * only caller is `recalcInvoice` — a payment, a reversal, an edited line. An
+ * invoice that simply sat there unpaid was never looked at again, so it stayed
+ * ISSUED for ever and the OVERDUE filter on /invoices returned nothing, which
+ * the office reads as "nobody is late". Dev held zero OVERDUE rows and 26
+ * unpaid invoices all due on one day.
+ *
+ * The point of every check below is that NOTHING RUNS. The clock moves and the
+ * answer changes, with no job, no cron and no touch of the row.
+ */
+console.log("\nLateness is derived, not stored");
+
+const d = (n: number) => new Prisma.Decimal(n);
+const DAY = 86_400_000;
+const unpaid = { status: "ISSUED" as const, balance: d(500) };
+const yesterday = new Date(Date.now() - DAY);
+const tomorrow = new Date(Date.now() + DAY);
+
+check("an unpaid invoice past its due date is late", isOverdue({ ...unpaid, dueDate: yesterday }));
+check("one still in date is not", !isOverdue({ ...unpaid, dueDate: tomorrow }));
+
+check(
+  "and it goes late on its own, with nothing touching the row",
+  !isOverdue({ ...unpaid, dueDate: tomorrow }, new Date(Date.now())) &&
+    isOverdue({ ...unpaid, dueDate: tomorrow }, new Date(Date.now() + 2 * DAY)),
+  "the same row, read two days apart",
+);
+
+check(
+  "the status the office SEES changes with it",
+  displayStatus({ ...unpaid, dueDate: tomorrow }) === "ISSUED" &&
+    displayStatus({ ...unpaid, dueDate: tomorrow }, new Date(Date.now() + 2 * DAY)) === "OVERDUE",
+);
+
+check(
+  "a settled invoice is never late, however old",
+  !isOverdue({ status: "PAID", balance: d(0), dueDate: new Date(0) }),
+);
+check(
+  "a CANCELLED one is never late — the school withdrew the demand",
+  !isOverdue({ status: "CANCELLED", balance: d(500), dueDate: new Date(0) }),
+);
+check(
+  "an invoice with no due date is never late",
+  !isOverdue({ ...unpaid, dueDate: null }),
+  "the school never named a date to miss",
+);
+check(
+  "a part-paid invoice past its date is still late",
+  isOverdue({ status: "PARTIALLY_PAID", balance: d(100), dueDate: yesterday }),
+);
+
+check(
+  "how late, in whole days",
+  daysOverdue({ ...unpaid, dueDate: new Date(Date.now() - 3 * DAY) }) === 3,
+  String(daysOverdue({ ...unpaid, dueDate: new Date(Date.now() - 3 * DAY) })),
+);
+check("and null when it is not late", daysOverdue({ ...unpaid, dueDate: tomorrow }) === null);
+
+/**
+ * The stored status must record only what an EVENT decided. If this ever
+ * returns OVERDUE again, rows start rotting the moment they are written.
+ */
+check(
+  "the STORED status is never OVERDUE",
+  (["PAID", "PARTIALLY_PAID", "ISSUED"] as const).includes(
+    invoiceStatusFor(d(500), d(0)) as never,
+  ) && invoiceStatusFor(d(500), d(0)) === "ISSUED",
+  `unpaid writes ${invoiceStatusFor(d(500), d(0))}`,
+);
+check("paid in full writes PAID", invoiceStatusFor(d(500), d(500)) === "PAID");
+check("part paid writes PARTIALLY_PAID", invoiceStatusFor(d(500), d(200)) === "PARTIALLY_PAID");
+
+/**
+ * And the FILTER, which is the half a reader actually meets. Deriving lateness
+ * correctly is no use if /invoices still looks it up as a stored value: the list
+ * would come back empty and say, in effect, that nobody in the school is late.
+ */
+console.log("\nThe OVERDUE filter asks a question rather than looking one up");
+
+const overdueWhere = statusFilterWhere("OVERDUE") as Record<string, unknown>;
+check(
+  "it never filters on status = OVERDUE",
+  JSON.stringify(overdueWhere).includes('"OVERDUE"') === false,
+  JSON.stringify(overdueWhere.status),
+);
+check("it wants a balance still owing", JSON.stringify(overdueWhere.balance) === '{"gt":0}');
+check(
+  "and a due date already past",
+  overdueWhere.dueDate !== undefined &&
+    (overdueWhere.dueDate as { lt?: Date }).lt instanceof Date,
+);
+check(
+  "a cancelled invoice is excluded",
+  JSON.stringify(overdueWhere.status) === '{"not":"CANCELLED"}',
+);
+check(
+  "an ordinary status is still a plain lookup",
+  JSON.stringify(statusFilterWhere("PAID")) === '{"status":"PAID"}',
+);
+check(
+  "DEBTORS stays balance-based",
+  JSON.stringify(statusFilterWhere("DEBTORS")) ===
+    '{"balance":{"gt":0},"status":{"not":"CANCELLED"}}',
+);
+check("no filter means no constraint", JSON.stringify(statusFilterWhere(undefined)) === "{}");
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} checks FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

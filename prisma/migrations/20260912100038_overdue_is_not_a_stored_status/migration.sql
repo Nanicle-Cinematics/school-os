@@ -1,0 +1,17 @@
+-- OVERDUE stops being a value any row holds.
+--
+-- An invoice goes late because a date passes, and nothing in this system runs
+-- when a date passes: `invoiceStatusFor` was only ever called by
+-- `recalcInvoice`, which fires on a payment, a reversal or an edited line. So
+-- the status was right only by accident — set on whichever rows happened to be
+-- touched after their due date, and stale on every other one.
+--
+-- Lateness is now derived on read (`isOverdue`), so these rows are put back to
+-- the status the EVENT left them in. The old rule only returned OVERDUE when
+-- nothing had been paid — PAID and PARTIALLY_PAID were both tested first — so
+-- ISSUED is exactly where they came from, and no payment information is lost.
+--
+-- The WHERE clause makes it a no-op on a database that has none, which is what
+-- dev had: zero OVERDUE rows, and 26 unpaid invoices all due on one day that
+-- would have slid past it unnoticed.
+UPDATE "Invoice" SET "status" = 'ISSUED' WHERE "status" = 'OVERDUE';

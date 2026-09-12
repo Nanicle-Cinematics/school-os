@@ -51,6 +51,10 @@ type HoldSettings = { blockReportOnArrears: boolean } | null | undefined;
  * Exported so `verify:settings` can assert what is NOT in it: a DRAFT or
  * CANCELLED invoice must never hold a card, and the seed happens to contain
  * neither, so a check that waited for one to turn up would never run.
+ *
+ * OVERDUE is kept for safety and no longer expected: lateness is derived at read
+ * time now (`isOverdue`), so no row is written with that status. Listing it
+ * costs nothing and means a legacy row could not slip a held card through.
  */
 export const BILLED = ["ISSUED", "PARTIALLY_PAID", "OVERDUE"] as const;
 
