@@ -496,6 +496,33 @@ must be able to open the card to have the conversation. There is deliberately no
 that child's page, which is a decision rather than a click that quietly undoes
 the policy for forty children.
 
+⚠️ **A verify script must never pick its school with a bare `findFirst()`.**
+Use `demoSchool()` from `scripts/fixture.mts`. A development database collects
+schools — the onboarding walk provisions a `qa-<stamp>` one on every run and
+deliberately leaves it behind (`verify:onboarding --clean <slug>` removes it) —
+and Postgres returns rows in no particular order, so an unscoped pick is a coin
+flip between the seeded school and an empty shell.
+
+`verify:teacher` built its fixture from FOUR separate unscoped `findFirst`
+calls: a school, a current year, a current term and a class, each found
+independently. On a machine with two schools it paired a teacher in one school
+with another school's term and class. The mark sheet then correctly had nothing
+to show, and the failure read **"0 score inputs"** — which names neither the
+cause nor the school. CI never saw it, because CI seeds exactly one school and
+every coin lands the same way. Four other scripts had the same bare call.
+
+⚠️ **A guard that is not in CI is not a guard.** `verify:attention`,
+`verify:collections`, `verify:activity` and `verify:search` existed, passed, and
+ran nowhere — so `school.subscription.paid` and `data.export` both reached the
+dashboard's activity feed as raw strings ("data export · Activity · Grace
+Amoah") while `verify:activity` sat in package.json with the answer in it. All
+four are in CI now. The same lesson as forcing a guard red before trusting it:
+a check nobody observes is a check that does not exist.
+
+`verify:activity` also only walked `src/lib`, so an audit written from a ROUTE
+was invisible to it — which is exactly how `data.export` slipped past. It walks
+`src/app` too now.
+
 **A school can get its own data back out** — `/export`, added 2026-09-12. Until
 then data only ever went IN: `/students/import` took a CSV and nothing anywhere
 produced one, so a school could hand over its whole register, its fees and three

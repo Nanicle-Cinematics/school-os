@@ -13,7 +13,8 @@
 
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { withBypass, setTenantContext } from "@/lib/tenant-context";
+import { setTenantContext } from "@/lib/tenant-context";
+import { demoSchool } from "./fixture.mjs";
 import { canSearch, search } from "@/lib/search-data";
 
 let passed = 0;
@@ -28,7 +29,7 @@ function check(label: string, ok: boolean, detail = "") {
   }
 }
 
-const school = await withBypass(() => prisma.school.findFirst());
+const school = await demoSchool();
 setTenantContext({ schoolId: school!.id });
 const id = school!.id;
 

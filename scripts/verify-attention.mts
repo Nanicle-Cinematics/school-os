@@ -16,7 +16,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { withBypass, setTenantContext } from "@/lib/tenant-context";
+import { setTenantContext } from "@/lib/tenant-context";
+import { demoSchool } from "./fixture.mjs";
 import { getAttention, getDashboard } from "@/lib/dashboard-data";
 
 let passed = 0;
@@ -32,8 +33,7 @@ function check(label: string, ok: boolean, detail = "") {
   }
 }
 
-const school = await withBypass(() => prisma.school.findFirst());
-if (!school) throw new Error("no school in this database");
+const school = await demoSchool();
 setTenantContext({ schoolId: school.id });
 
 const data = await getDashboard(school.id);
