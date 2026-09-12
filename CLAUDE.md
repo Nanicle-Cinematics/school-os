@@ -366,11 +366,26 @@ branch, so a dispatch is a 404 until the workflow file is on main — which is w
 this one PR had to merge before it could be baselined, and why a later PR does
 not.
 
-⚠️ **Run `deploy` BEFORE merging, not after.** Vercel deploys main the instant it
-is pushed, so a migration in that same pipeline would race the deployment and
-sometimes land after the code that needs it. Order: deploy the migration, watch
-it succeed, then merge. The drift job is the backstop, and it has already stopped
-two merges that would have been outages.
+⚠️ **Which side of the merge the migration goes on depends on the change.** The
+running code and the live schema have to be compatible at every instant, and
+Vercel deploys main the moment it is pushed — so there is always a window where
+one of the two is ahead of the other, and the only question is which one it is
+safe for.
+
+- **ADDING** — a new column, table, or nullable field — migrates **BEFORE the
+  merge** (`--ref <branch>`). Old code ignores a column it has never heard of;
+  new code cannot run without it. Migrating after would leave the deployment
+  racing the schema, which is an outage on every page that touches the new field.
+- **REMOVING** — dropping a column or table, tightening a constraint — merges
+  **FIRST, and migrates after the deploy has landed.** Backwards: the live code
+  is still SELECTing that column, and Prisma names columns explicitly, so
+  dropping it first breaks every read of the table until the deploy catches up.
+
+This rule was written the wrong way round — "deploy BEFORE merging" with no
+exception — and the very first schema change after it was a DROP, which would
+have taken `/settings`, the report cards and the bills down together. The drift
+job is the backstop either way, and it has already stopped two merges that would
+have been outages.
 
 **CI builds its database from the migrations** (`db:deploy`, not `db push`) and
 then asserts the result matches `prisma/schema.prisma`. Applying cleanly is not
