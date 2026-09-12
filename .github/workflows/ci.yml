@@ -149,6 +149,14 @@ jobs:
       - name: Settings — no dead switches, and the arrears hold actually holds
         run: npm run verify:settings
 
+      # Data goes out as well as in. Every way of getting a CSV wrong is quiet —
+      # a comma in an address shifts every column after it, Excel eats the
+      # leading zero off a phone number, and an empty file is what a forgotten
+      # tenant context looks like under RLS. So each of those is a check, and the
+      # register is fed back through the real importer to prove it round-trips.
+      - name: Export — the file is not a trap, and the role is checked
+        run: npm run verify:export
+
       - name: Audience — campaign reach, dedupe, debtor filtering
         run: npm run verify:audience
 
