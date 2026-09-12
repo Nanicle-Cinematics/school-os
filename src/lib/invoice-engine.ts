@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
-import type { Invoice, Student } from "@prisma/client";
+import type { Invoice, InvoiceStatus, Student } from "@prisma/client";
 import { money } from "@/lib/money";
 import type { TenantTx } from "@/lib/prisma";
 import { nextNumber, takenProbes } from "@/lib/sequences";
@@ -70,17 +70,100 @@ export function discountForLine(
   return total.greaterThan(amount) ? amount : total;
 }
 
-export function invoiceStatusFor(total: Prisma.Decimal, paid: Prisma.Decimal, dueDate: Date | null) {
+/**
+ * The stored status: what has HAPPENED to this invoice.
+ *
+ * ⚠️ This used to return OVERDUE when the due date had passed, and that was a
+ * lie waiting to happen — an invoice does not go late because somebody touched
+ * it, it goes late because a Tuesday arrives. The only caller is
+ * `recalcInvoice`, which runs on a payment, a reversal or an edited line, so an
+ * unpaid invoice whose date quietly passed stayed ISSUED for ever. Dev held
+ * **zero** OVERDUE rows and 26 unpaid invoices all due on the same day, every
+ * one of which would have slid past it; meanwhile `/invoices` offered an
+ * OVERDUE filter that returned nothing, which the office reads as "nobody is
+ * late".
+ *
+ * So the stored status now records only what an EVENT decided — issued,
+ * part-paid, paid, cancelled — and lateness is derived at read time by
+ * `isOverdue` below. A stored field that rots on its own is the same animal as a
+ * switch nothing reads.
+ */
+export function invoiceStatusFor(total: Prisma.Decimal, paid: Prisma.Decimal) {
   if (paid.greaterThanOrEqualTo(total) && total.greaterThan(0)) {
     return "PAID" as const;
   }
   if (paid.greaterThan(0)) {
     return "PARTIALLY_PAID" as const;
   }
-  if (dueDate && dueDate < new Date()) {
-    return "OVERDUE" as const;
-  }
   return "ISSUED" as const;
+}
+
+/** The shape every lateness question needs, and nothing more. */
+export type Dateable = {
+  status: InvoiceStatus;
+  balance: Prisma.Decimal | number | string;
+  dueDate: Date | null;
+};
+
+/**
+ * Is this invoice late, right now?
+ *
+ * One rule, derived on every read, so it cannot go stale between a due date and
+ * whatever next happens to touch the row. Lifted verbatim from the printed bill,
+ * which had been getting this right at read time all along while the status
+ * column next to it was wrong.
+ *
+ * A CANCELLED invoice is never late — the school withdrew the demand. Neither is
+ * one with nothing left to pay, whatever its status says.
+ */
+export function isOverdue(invoice: Dateable, now = new Date()): boolean {
+  if (invoice.status === "CANCELLED" || !invoice.dueDate) {
+    return false;
+  }
+  return Number(invoice.balance) > 0 && invoice.dueDate < now;
+}
+
+/**
+ * What to SHOW, which is the stored status unless it is late.
+ *
+ * OVERDUE stays in the enum because it is still real vocabulary for a reader —
+ * it is simply never written to a row any more.
+ */
+export function displayStatus(invoice: Dateable, now = new Date()): InvoiceStatus {
+  return isOverdue(invoice, now) ? "OVERDUE" : invoice.status;
+}
+
+/** How late, in whole days. Null when it is not. */
+export function daysOverdue(invoice: Dateable, now = new Date()): number | null {
+  if (!isOverdue(invoice, now) || !invoice.dueDate) {
+    return null;
+  }
+  return Math.floor((now.getTime() - invoice.dueDate.getTime()) / 86_400_000);
+}
+
+/**
+ * The `where` that answers a status filter on /invoices.
+ *
+ * ⚠️ Lives here, as a pure function, so it can be tested without a database —
+ * and so the OVERDUE case cannot quietly drift back to `status: "OVERDUE"`,
+ * which is a lookup that matches nothing and reads on screen as "nobody is
+ * late". Same rule as `isOverdue`, expressed for Postgres.
+ */
+export function statusFilterWhere(
+  status: InvoiceStatus | "DEBTORS" | undefined,
+  now = new Date(),
+) {
+  if (status === "DEBTORS") {
+    return { balance: { gt: 0 }, status: { not: "CANCELLED" as const } };
+  }
+  if (status === "OVERDUE") {
+    return {
+      balance: { gt: 0 },
+      dueDate: { not: null, lt: now },
+      status: { not: "CANCELLED" as const },
+    };
+  }
+  return status ? { status } : {};
 }
 
 /**
@@ -120,7 +203,7 @@ export async function recalcInvoice(tx: Tx, invoiceId: string) {
       status:
         invoice.status === "CANCELLED"
           ? "CANCELLED"
-          : invoiceStatusFor(total, amountPaid, invoice.dueDate),
+          : invoiceStatusFor(total, amountPaid),
     },
   });
 }

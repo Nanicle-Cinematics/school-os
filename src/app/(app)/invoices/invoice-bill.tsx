@@ -1,4 +1,5 @@
 import { formatCedis } from "@/lib/money";
+import { isOverdue } from "@/lib/invoice-engine";
 import type { BillInvoice, BillSchool } from "@/lib/invoice-data";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
@@ -45,8 +46,9 @@ export function InvoiceBill({
   const address = addressLine(school);
   const contact = contactLine(school);
   const balance = Number(invoice.balance);
-  const overdue =
-    invoice.dueDate && balance > 0 && invoice.dueDate < new Date() && invoice.status !== "CANCELLED";
+  // The bill was already deriving this correctly at read time while the status
+  // column beside it went stale. Same expression, now the one shared rule.
+  const overdue = isOverdue(invoice);
 
   return (
     <article

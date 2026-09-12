@@ -6,6 +6,7 @@ import { FINANCE } from "@/lib/permissions";
 import { getInvoiceList, getInvoiceFilterOptions } from "@/lib/invoice-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { formatCedis } from "@/lib/money";
+import { displayStatus, daysOverdue } from "@/lib/invoice-engine";
 import { PageHeader, Stat, Card, StatusBadge, EmptyRow, filterClass, thClass, tableHeadClass } from "../ui";
 import { GenerateForm } from "./generate-form";
 
@@ -178,7 +179,14 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
                       {Number(invoice.balance) > 0 ? formatCedis(invoice.balance) : "—"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5">
-                      <StatusBadge status={invoice.status} />
+                      {/* displayStatus, not invoice.status: lateness is derived
+                          on every read, because no row is ever written OVERDUE. */}
+                      <StatusBadge status={displayStatus(invoice)} />
+                      {daysOverdue(invoice) !== null ? (
+                        <span className="ml-2 text-xs text-red-600">
+                          {daysOverdue(invoice)}d
+                        </span>
+                      ) : null}
                     </td>
                   </tr>
                 ))
