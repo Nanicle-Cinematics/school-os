@@ -382,7 +382,12 @@ and still leave a column behind.
 with no record of how they got them. `0_init` is the whole schema as it stood on
 2026-09-12, marked applied rather than run (`action=baseline`, once per database).
 Running `deploy` against such a database without baselining it first would try to
-CREATE TABLE over live data and fail.
+CREATE TABLE over live data and fail. **Both databases are baselined** — dev and
+production, 2026-09-12; `action=baseline` is done and should never be run again.
+
+A red `status` run is an ANSWER, not a breakage: `migrate status` exits 1 when
+production has something pending, and that exit code is deliberately not
+swallowed. "Database schema is up to date!" in the log is the all-clear.
 
 **A school is provisioned with a CALENDAR** — the current academic year on the
 standard Ghanaian September–July shape, split into three terms by
