@@ -68,6 +68,12 @@ jobs:
 
           case "${{ inputs.action }}" in
             status)
+              # ⚠️ A RED RUN HERE IS AN ANSWER, NOT A BREAKAGE. `migrate status`
+              # exits 1 when production has migrations pending, which is the
+              # thing worth being loud about — so the exit code is left alone
+              # rather than swallowed into a green tick nobody reads. Read the
+              # log: "Database schema is up to date!" is the all-clear, and a
+              # list under "have not yet been applied" is the work to do.
               npx prisma migrate status
               ;;
             deploy)
