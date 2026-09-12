@@ -163,6 +163,23 @@ jobs:
       - name: Export — the file is not a trap, and the role is checked
         run: npm run verify:export
 
+      # ⚠️ These four existed and ran NOWHERE. A guard nobody runs is not a
+      # guard: `school.subscription.paid` and `data.export` both reached the
+      # dashboard as raw strings ("data export · Activity · Grace Amoah") while
+      # verify:activity sat in package.json with the answer in it. They cost
+      # seconds; the reason they were not here is that nobody added them.
+      - name: Dashboard — the attention cards say what is actually wrong
+        run: npm run verify:attention
+
+      - name: Dashboard — collections arithmetic and the weekly chart
+        run: npm run verify:collections
+
+      - name: Activity feed — every audited action has a phrase
+        run: npm run verify:activity
+
+      - name: Search — what each role may find
+        run: npm run verify:search
+
       - name: Audience — campaign reach, dedupe, debtor filtering
         run: npm run verify:audience
 

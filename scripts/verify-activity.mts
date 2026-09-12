@@ -17,7 +17,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
-import { withBypass, setTenantContext } from "@/lib/tenant-context";
+import { setTenantContext } from "@/lib/tenant-context";
+import { demoSchool } from "./fixture.mjs";
 import { getActivity, ACTIVITY_ACTIONS } from "@/lib/dashboard-data";
 
 let passed = 0;
@@ -36,11 +37,24 @@ function check(label: string, ok: boolean, detail = "") {
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const full = join(dir, name);
-    return statSync(full).isDirectory() ? walk(full) : full.endsWith(".ts") ? [full] : [];
+    return statSync(full).isDirectory()
+      ? walk(full)
+      : /\.tsx?$/.test(full)
+        ? [full]
+        : [];
   });
 }
+/**
+ * ⚠️ `src/app` as well as `src/lib`.
+ *
+ * This walked only `src/lib`, so an audit written from a ROUTE was invisible to
+ * it — and `data.export` was exactly that, reaching the dashboard as the raw
+ * string "data export · Activity · Grace Amoah" with nothing to say it had
+ * slipped through. A check that only looks where it expects the problem is not
+ * looking.
+ */
 const written = new Set<string>();
-for (const file of walk("src/lib")) {
+for (const file of [...walk("src/lib"), ...walk("src/app")]) {
   for (const m of readFileSync(file, "utf8").matchAll(/action: "([a-z][a-z.]+)"/g)) {
     written.add(m[1]);
   }
@@ -54,7 +68,7 @@ check("and no phrase is for an action nobody writes", stale.length === 0,
   stale.length ? `stale: ${stale.join(", ")}` : "none stale");
 
 // ── Payload reading ─────────────────────────────────────────────────────────
-const school = await withBypass(() => prisma.school.findFirst());
+const school = await demoSchool();
 setTenantContext({ schoolId: school!.id });
 
 const now = new Date();

@@ -505,6 +505,29 @@ const ACTIVITY: Record<
     },
     detail: "Nanicle",
   },
+  "school.subscription.paid": {
+    kind: "admin",
+    title: (a) => `A subscription payment of ${money(a.amount)} was recorded`,
+    detail: "Nanicle",
+  },
+  /**
+   * Somebody took a copy of the school's records. This is the entry that most
+   * deserves a phrase rather than a fallback: "data export · Activity · Grace
+   * Amoah" tells a head teacher nothing, and the whole point of auditing an
+   * export is that a head can see WHAT left and how much of it.
+   */
+  "data.export": {
+    kind: "admin",
+    title: (a) => {
+      const dataset = text(a.dataset);
+      const rows = Number(a.rows);
+      const what = dataset ? dataset.replace(/_/g, " ") : "records";
+      return Number.isFinite(rows)
+        ? `${count(rows)} ${what} ${Number(rows) === 1 ? "row was" : "rows were"} exported`
+        : `The ${what} were exported`;
+    },
+    detail: "Export",
+  },
   "user.password.change": {
     kind: "admin",
     title: () => "A password was changed",

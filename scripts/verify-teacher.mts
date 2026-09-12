@@ -18,6 +18,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
+import { demoSchool } from "./fixture.mjs";
 import { landingFor, isTeacherOnly } from "@/lib/permissions";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
@@ -173,13 +174,25 @@ async function main() {
  */
 async function yearScoping() {
   console.log("");
-  const school = await withBypass(() => prisma.school.findFirst());
+  /**
+   * ⚠️ ONE school, and everything else scoped to it.
+   *
+   * This used to be `school.findFirst()` with the year, the term and the class
+   * each found by their own unscoped `findFirst` — so on a machine with more
+   * than one school it built a fixture out of PARTS OF DIFFERENT SCHOOLS: a
+   * teacher in school A marking school B's class in school B's term. The sheet
+   * then correctly had nothing to show, and the failure read "0 score inputs",
+   * which names neither the cause nor the school. See `demoSchool`.
+   */
+  const school = await demoSchool();
   const year = await withBypass(() =>
-    prisma.academicYear.findFirst({ where: { isCurrent: true } }),
+    prisma.academicYear.findFirst({ where: { schoolId: school.id, isCurrent: true } }),
   );
-  const term = await withBypass(() => prisma.term.findFirst({ where: { isCurrent: true } }));
-  if (!school || !year || !term) {
-    console.log("  --   no current year or term — cannot check year scoping");
+  const term = await withBypass(() =>
+    prisma.term.findFirst({ where: { schoolId: school.id, isCurrent: true } }),
+  );
+  if (!year || !term) {
+    console.log(`  --   ${school.slug} has no current year or term — cannot check year scoping`);
     return;
   }
 
@@ -231,13 +244,36 @@ async function yearScoping() {
     }),
   );
 
-  const classGroup = await withBypass(() => prisma.classGroup.findFirst());
-  const offering = await withBypass(() =>
-    prisma.levelSubject.findFirst({
-      where: { levelId: classGroup!.levelId },
-      select: { subjectId: true },
+  /**
+   * A class the sheet can actually show: one with an OPEN sheet this term.
+   *
+   * The old version took any class and any subject its level offers, then
+   * asserted score inputs appeared. A mark sheet has inputs only once its
+   * components exist — a class nobody has opened a sheet for renders "this
+   * sheet has not been opened yet", which is the product working. So the
+   * fixture now starts from a pair that HAS components, and the assertion is
+   * about year scoping rather than about which class the seed happened to
+   * prepare.
+   */
+  const opened = await withBypass(() =>
+    prisma.assessment.findFirst({
+      where: { schoolId: school.id, termId: term.id },
+      select: { classGroupId: true, subjectId: true },
+      orderBy: { createdAt: "asc" },
     }),
   );
+  if (!opened) {
+    check(
+      "the seed has at least one open mark sheet to scope-check",
+      false,
+      `no assessment in ${school.slug}'s current term — re-seed, or the sheet checks below are meaningless`,
+    );
+    return;
+  }
+  const classGroup = await withBypass(() =>
+    prisma.classGroup.findUnique({ where: { id: opened.classGroupId } }),
+  );
+  const offering = { subjectId: opened.subjectId };
 
   const assignment = await withBypass(() =>
     prisma.teachingAssignment.create({
