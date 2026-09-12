@@ -356,9 +356,15 @@ than in a browser tab.
 purpose:
 
 ```
-gh workflow run migrate.yml -f action=status    # what prod has, and what is pending
-gh workflow run migrate.yml -f action=deploy    # apply, in order
+gh workflow run migrate.yml --ref <branch> -f action=status   # what prod has, and what is pending
+gh workflow run migrate.yml --ref <branch> -f action=deploy   # apply, in order
 ```
+
+`--ref <branch>` is what makes "before merging" possible: it runs the migrations
+sitting on that branch. GitHub still resolves `migrate.yml` itself on the DEFAULT
+branch, so a dispatch is a 404 until the workflow file is on main — which is why
+this one PR had to merge before it could be baselined, and why a later PR does
+not.
 
 ⚠️ **Run `deploy` BEFORE merging, not after.** Vercel deploys main the instant it
 is pushed, so a migration in that same pipeline would race the deployment and
