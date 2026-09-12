@@ -305,15 +305,22 @@ jobs:
           fi
           npm run audit:rls
 
-      # Production's schema is changed BY HAND — there are no migrations, and
-      # `db push` needs the owner password, which as of 2026-09-09 is lost (the
-      # last schema change was applied by pasting SQL into Supabase's editor).
-      # So nothing at all connected the repo's schema to the database's, and the
-      # only thing standing between a forgotten ALTER and a 500 on every
-      # authenticated page was somebody remembering. main auto-deploys.
+      # Does the live database still match the repo? main auto-deploys, so a
+      # schema the code expects and does not have is a 500 on every page that
+      # touches it. This check existed before migrations did, when production
+      # was changed by pasting SQL into Supabase's editor and the only thing
+      # between a forgotten ALTER and an outage was somebody remembering.
       #
-      # `migrate diff` exits 2 when they disagree, and prints the SQL that would
-      # reconcile them — which is exactly what you paste into the SQL editor.
+      # It is still the backstop now that migrations exist, because it asks the
+      # DATABASE rather than the migration history: a migration marked applied
+      # that did not do what its filename claims still shows up here.
+      #
+      # ⚠️ EXPECTED TO BE RED for a few minutes after merging a DESTRUCTIVE
+      # change. Those merge first and migrate after the deploy lands (see
+      # CLAUDE.md), so main is briefly ahead of production by exactly one DROP.
+      # Run the migration, then re-run this job. A drift that OUTLIVES that
+      # window is the real thing.
+      #
       # Verified against a real Supabase database that it does NOT report false
       # drift for RLS policies, the school_os_app role, or Supabase's own
       # objects; and that a deliberately added field makes it exit 2.
@@ -338,7 +345,16 @@ jobs:
           fi
           if [ "$code" = "2" ]; then
             echo "DRIFT: production does not match prisma/schema.prisma."
-            echo "Paste this into the Supabase SQL editor to reconcile it:"
+            echo
+            echo "Do NOT paste the SQL below into the Supabase editor — that is"
+            echo "the old way, and it is how the same file got run twice against"
+            echo "dev while production stayed untouched. Reconcile with:"
+            echo "  gh workflow run migrate.yml -f action=status"
+            echo "  gh workflow run migrate.yml -f action=deploy"
+            echo
+            echo "If a migration is pending, deploy it. If none is, the schema"
+            echo "was changed by hand and needs a migration written for it."
+            echo "The difference, for reading only:"
             echo "---"
             cat /tmp/drift.sql
             echo "---"
