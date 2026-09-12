@@ -28,7 +28,7 @@ export default async function SubjectsPage() {
         action={canEdit ? <NewSubjectForm nextOrder={nextOrder} /> : undefined}
       />
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-surface">
+      <div className="overflow-hidden rounded-card border border-hairline bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className={tableHeadClass}>

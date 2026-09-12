@@ -46,7 +46,7 @@ export function Compose({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-surface p-4 lg:p-5">
+    <div className="rounded-card border border-hairline bg-surface p-4 lg:p-5">
       <h2 className="text-sm font-semibold text-slate-900">Compose message</h2>
 
       {!smsEnabled ? (

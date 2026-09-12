@@ -29,7 +29,7 @@ export default async function ForgotPasswordPage() {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-surface p-6 shadow-sm">
+        <div className="rounded-card border border-hairline bg-surface shadow-card p-6 shadow-sm">
           <ForgotForm />
         </div>
 

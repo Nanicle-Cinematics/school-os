@@ -136,7 +136,7 @@ export function SheetForm({
       <input type="hidden" name="classGroupId" value={classGroupId} />
       <input type="hidden" name="subjectId" value={subjectId} />
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-surface">
+      <div className="overflow-x-auto rounded-card border border-hairline bg-surface">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/60">

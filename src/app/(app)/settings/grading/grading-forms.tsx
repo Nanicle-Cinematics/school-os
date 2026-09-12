@@ -202,7 +202,7 @@ export function NewScaleForm() {
   }
 
   return (
-    <form action={formAction} className="w-full rounded-xl border border-slate-200 bg-surface p-4">
+    <form action={formAction} className="w-full rounded-card border border-hairline bg-surface p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-900">New grading scale</h2>
         <button

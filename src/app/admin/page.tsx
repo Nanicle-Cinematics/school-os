@@ -32,7 +32,7 @@ function Stat({
   tone?: "warn";
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-surface p-4">
+    <div className="rounded-card border border-hairline bg-surface shadow-card p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p
         className={`mt-1 text-2xl font-extrabold tabular-nums ${
@@ -118,7 +118,7 @@ export default async function AdminPage() {
         {/* The morning's work: who owes now, and who owes this week. Overdue
             first, because a school past its date is losing access on a clock. */}
         {totals.dueSoon.length > 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+          <div className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
             <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
               Due this week
             </p>
@@ -183,7 +183,7 @@ export default async function AdminPage() {
           <NewSchoolForm />
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-surface">
+        <div className="overflow-hidden rounded-card border border-hairline bg-surface">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

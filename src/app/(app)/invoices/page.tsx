@@ -53,7 +53,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
           termId ? (
             <Link
               href={`/invoices/print?term=${termId}${classGroupId ? `&class=${classGroupId}` : ""}`}
-              className="rounded-xl border border-slate-200 bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Print bills{classGroupId ? " for this class" : ""}
             </Link>
@@ -75,7 +75,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
 
       <GenerateForm terms={terms} currentTermId={currentTerm?.id} />
 
-      <form className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-surface p-3">
+      <form className="flex flex-wrap items-end gap-2 rounded-card border border-hairline bg-surface p-3">
         <select name="term" defaultValue={termId ?? ""} className={`${filterClass} w-auto`}>
           <option value="">All terms</option>
           {terms.map((term) => (

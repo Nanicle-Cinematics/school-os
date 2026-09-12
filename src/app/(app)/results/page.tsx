@@ -48,7 +48,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
         }
       />
 
-      <form className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-surface p-3">
+      <form className="flex flex-wrap items-end gap-2 rounded-card border border-hairline bg-surface p-3">
         <select name="term" defaultValue={termId} className={`${filterClass} w-auto`}>
           {terms.map((option) => (
             <option key={option.id} value={option.id}>
@@ -64,7 +64,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
         </button>
       </form>
 
-      <div className="rounded-xl border border-slate-200 bg-surface px-4 py-3 text-sm text-slate-600">
+      <div className="rounded-card border border-hairline bg-surface px-4 py-3 text-sm text-slate-600">
         <span className="font-medium text-slate-900">How this works: </span>
         enter scores against assessments, compute a class to turn them into subject and term
         results, then submit → approve → publish. Publishing freezes positions and makes report

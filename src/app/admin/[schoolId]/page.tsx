@@ -75,7 +75,7 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+          <div className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
             <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
               Use
             </p>
@@ -99,7 +99,7 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
             ) : null}
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+          <div className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
             <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
               Money and messages
             </p>
@@ -114,7 +114,7 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+        <div className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
           <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
             Who to call
           </p>
@@ -144,7 +144,7 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+        <div className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
           <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
             Subscription
           </p>

@@ -40,7 +40,7 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
         ← All assessments
       </Link>
 
-      <div className="rounded-xl border border-slate-200 bg-surface p-4">
+      <div className="rounded-card border border-hairline bg-surface p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-lg font-semibold text-slate-900">{assessment.title}</h1>

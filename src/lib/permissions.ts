@@ -54,18 +54,35 @@ export type NavIcon =
   | "users"
   | "settings";
 
+/**
+ * One hue per area of the app.
+ *
+ * It rides on the icon chip beside every rail item and nowhere else. Required
+ * rather than optional, so a new section has to CHOOSE — a default would make
+ * the newest part of the app the one grey thing in a coloured rail, which reads
+ * as unfinished rather than as restraint.
+ *
+ * Colour here is information, not decoration: it says which part of the school
+ * you are in before you have read a word. The gold accent keeps its own
+ * separate job — the single figure on a screen that decides what happens next.
+ */
+export type NavHue = "overview" | "people" | "academics" | "finance" | "school";
+
 export type NavSection = {
   heading: string;
   items: NavItem[];
+  hue: NavHue;
 };
 
 export const NAV: NavSection[] = [
   {
     heading: "Overview",
+    hue: "overview",
     items: [{ href: "/dashboard", label: "Dashboard", icon: "dashboard", roles: [...OFFICE, "ACCOUNTANT"] }],
   },
   {
     heading: "People",
+    hue: "people",
     items: [
       { href: "/students", label: "Students", icon: "students", roles: OFFICE },
       { href: "/guardians", label: "Guardians", icon: "guardians", roles: OFFICE },
@@ -75,6 +92,7 @@ export const NAV: NavSection[] = [
   },
   {
     heading: "Academics",
+    hue: "academics",
     items: [
       { href: "/classes", label: "Classes", icon: "classes", roles: OFFICE },
       { href: "/subjects", label: "Subjects", icon: "subjects", roles: OFFICE },
@@ -87,6 +105,7 @@ export const NAV: NavSection[] = [
   },
   {
     heading: "Finance",
+    hue: "finance",
     items: [
       { href: "/fees", label: "Fee structure", icon: "fees", roles: FINANCE },
       { href: "/invoices", label: "Invoices", icon: "invoices", roles: FINANCE },
@@ -96,6 +115,7 @@ export const NAV: NavSection[] = [
   },
   {
     heading: "School",
+    hue: "school",
     items: [
       { href: "/messages", label: "Messages", icon: "messages", roles: OFFICE },
       { href: "/users", label: "Users", icon: "users", roles: OFFICE },

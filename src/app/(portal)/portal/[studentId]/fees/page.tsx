@@ -28,7 +28,7 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
     <div className="space-y-6">
       <ChildHeader child={child} />
 
-      <div className="rounded-2xl border border-slate-200 bg-surface p-5">
+      <div className="rounded-card border border-hairline bg-surface shadow-card p-5">
         <p className="text-sm font-semibold text-slate-600">Outstanding</p>
         <p
           className={`mt-1 text-3xl font-extrabold tabular-nums ${
@@ -49,13 +49,13 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
       <section>
         <h2 className="font-heading text-lg font-extrabold tracking-tight text-slate-900">Bills</h2>
         {invoices.length === 0 ? (
-          <p className="mt-2 rounded-2xl border border-slate-200 bg-surface p-5 text-sm text-slate-600">
+          <p className="mt-2 rounded-card border border-hairline bg-surface shadow-card p-5 text-sm text-slate-600">
             No bills have been issued yet.
           </p>
         ) : (
           <ul className="mt-3 space-y-3">
             {invoices.map((inv) => (
-              <li key={inv.id} className="rounded-2xl border border-slate-200 bg-surface p-4">
+              <li key={inv.id} className="rounded-card border border-hairline bg-surface shadow-card p-4">
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="font-bold text-slate-900">
                     {termLabel(inv.term.name)} Term · {inv.term.academicYear.name}
@@ -104,11 +104,11 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
           Receipts
         </h2>
         {payments.length === 0 ? (
-          <p className="mt-2 rounded-2xl border border-slate-200 bg-surface p-5 text-sm text-slate-600">
+          <p className="mt-2 rounded-card border border-hairline bg-surface shadow-card p-5 text-sm text-slate-600">
             No payments recorded yet. Payments appear here once the school records them.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-surface">
+          <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
             {payments.map((p) => (
               <li key={p.id} className="flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">

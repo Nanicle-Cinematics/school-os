@@ -60,7 +60,7 @@ export default async function ExportPage({ searchParams }: PageProps<"/export">)
               </select>
               <button
                 type="submit"
-                className="rounded-xl border border-slate-200 bg-surface px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-card border border-hairline bg-surface px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
                 Use this term
               </button>

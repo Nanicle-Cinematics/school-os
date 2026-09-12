@@ -146,6 +146,12 @@ jobs:
       # nothing, and the two position toggles printed regardless. The field list
       # comes from the Prisma DMMF, so a setting added tomorrow is covered the
       # day it is added rather than the day somebody remembers to add it here.
+      # The palette is one set of NAMES with four sets of values — light, dark,
+      # .paper and print. A token re-cut for the dark and not put back by paper
+      # is a dark stripe through a report card at night, and nothing errors.
+      - name: Theme — every token dark re-cuts, paper and print put back
+        run: npm run verify:theme
+
       - name: Settings — no dead switches, and the arrears hold actually holds
         run: npm run verify:settings
 

@@ -62,7 +62,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* The app chrome is not part of anything a school hands out — it printed
             on report cards and fee invoices alike until this was added. */}
-        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 bg-surface px-4 lg:px-6 print:hidden">
+        {/* Frosted, like the rail: content scrolls UNDER this rather than
+            stopping at an opaque bar, which is the whole of the macOS effect
+            and the reason both materials carry alpha instead of a flat fill. */}
+        <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-3 border-b border-hairline bg-chrome px-4 backdrop-blur-xl lg:px-7 print:hidden">
           <MobileNav sections={sections} school={school} term={railTerm} />
 
           <div className="min-w-0 lg:hidden">
@@ -99,7 +102,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
                   type="search"
                   name="q"
                   placeholder="Search a pupil, receipt or invoice"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-brand-500 focus:bg-surface focus:ring-2 focus:ring-brand-500/25"
+                  className="w-full rounded-full border border-hairline bg-slate-100 py-2 pl-9 pr-3.5 text-sm outline-none transition focus:border-brand-500/40 focus:bg-surface focus:ring-4 focus:ring-brand-500/12"
                 />
               </label>
             </form>
@@ -110,14 +113,14 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
               <p className="text-sm font-bold text-slate-900">{auth.name}</p>
               <p className="text-xs text-slate-500">{auth.roles.map(roleLabel).join(" · ")}</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-xs font-extrabold text-brand-ink">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-xs font-extrabold text-brand-ink ring-1 ring-hairline">
               {initials}
             </div>
             <ThemeToggle className="print:hidden" />
             <form action={logout}>
               <button
                 type="submit"
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                className="rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
               >
                 Sign out
               </button>
@@ -130,7 +133,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
              thing to meet with no explanation, so the explanation arrives first. */
           <div
             role="status"
-            className={`border-b px-4 py-2.5 text-sm lg:px-6 print:hidden ${
+            className={`border-b px-4 py-2.5 text-sm lg:px-7 print:hidden ${
               auth.subscription.readOnly
                 ? "border-red-200 bg-red-50 text-red-700"
                 : "border-amber-200 bg-amber-50 text-amber-700"
@@ -140,7 +143,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
         ) : null}
 
-        <main className="min-w-0 flex-1 p-4 lg:p-7 print:p-0">{children}</main>
+        <main className="min-w-0 flex-1 space-y-1 p-4 lg:px-7 lg:py-6 print:p-0">{children}</main>
       </div>
     </div>
   );

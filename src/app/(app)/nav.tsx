@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import type { NavIcon, NavSection } from "@/lib/permissions";
+import type { NavHue, NavIcon, NavSection } from "@/lib/permissions";
 
 /**
  * The rail is icon-first: at a glance a head teacher is looking for a shape,
@@ -65,6 +65,22 @@ function Icon({ name, className }: { name: NavIcon; className: string }) {
   );
 }
 
+/**
+ * The tint each area of the app wears, as whole class strings.
+ *
+ * Written out rather than built with `bg-hue-${hue}-50`: Tailwind scans source
+ * text for class names it can see, so an interpolated one is never generated
+ * and every chip arrives transparent. The compiler keeps this honest — `Record`
+ * over `NavHue` means a new area fails the build rather than the eye.
+ */
+const HUE: Record<NavHue, string> = {
+  overview: "bg-hue-overview-50 text-hue-overview-600",
+  people: "bg-hue-people-50 text-hue-people-600",
+  academics: "bg-hue-academics-50 text-hue-academics-600",
+  finance: "bg-hue-finance-50 text-hue-finance-600",
+  school: "bg-hue-school-50 text-hue-school-600",
+};
+
 export type RailTerm = {
   label: string;
   closes: string | null;
@@ -83,13 +99,13 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
     .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <nav className="space-y-5">
+    <nav className="space-y-6">
       {sections.map((section) => (
         <div key={section.heading}>
-          <p className="mb-1.5 px-3 text-[10px] font-extrabold uppercase tracking-[0.13em] text-white/35">
+          <p className="mb-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.13em] text-slate-400">
             {section.heading}
           </p>
-          <ul className="space-y-0.5">
+          <ul className="space-y-1">
             {section.items.map((item) => {
               const active = item.href === activeHref;
               return (
@@ -98,22 +114,24 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
                     href={item.href}
                     onClick={onNavigate}
                     aria-current={active ? "page" : undefined}
-                    className={`relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition ${
+                    /* One UI's active row is a filled PILL, not a tinted strip
+                       with a marker beside it. It is the only fully rounded
+                       thing in the rail, which is what makes it findable at a
+                       glance without any colour of its own. */
+                    className={`flex items-center gap-3 rounded-full py-1.5 pl-1.5 pr-3 text-sm transition ${
                       active
-                        ? "bg-surface/[0.13] font-bold text-white"
-                        : "font-medium text-white/70 hover:bg-surface/[0.07] hover:text-white"
+                        ? "bg-surface font-bold text-slate-900 shadow-card"
+                        : "font-medium text-slate-600 hover:bg-surface/60"
                     }`}
                   >
-                    {active ? (
-                      <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-accent-500" />
-                    ) : null}
-                    <Icon
-                      name={item.icon}
-                      className={`h-[18px] w-[18px] shrink-0 ${active ? "text-accent-400" : "text-white/55"}`}
-                    />
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${HUE[section.hue]}`}
+                    >
+                      <Icon name={item.icon} className="h-[15px] w-[15px]" />
+                    </span>
                     <span className="truncate">{item.label}</span>
                     {item.stub ? (
-                      <span className="ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase text-white/45">
+                      <span className="ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-400">
                         Soon
                       </span>
                     ) : null}
@@ -132,25 +150,25 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
 function TermCard({ term }: { term: RailTerm | null }) {
   if (!term) {
     return (
-      <div className="rounded-2xl bg-surface/[0.07] p-3.5">
-        <p className="text-[11px] font-bold text-accent-400">No current term</p>
-        <p className="mt-0.5 text-[13px] font-bold text-white">Set one in Settings</p>
-        <p className="mt-1 text-[11px] text-white/55">
+      <div className="rounded-card bg-surface p-3.5 shadow-card">
+        <p className="text-[11px] font-bold text-accent-600">No current term</p>
+        <p className="mt-0.5 text-[13px] font-bold text-slate-900">Set one in Settings</p>
+        <p className="mt-1 text-[11px] text-slate-500">
           Invoices, marks and the dashboard all read it.
         </p>
       </div>
     );
   }
   return (
-    <div className="rounded-2xl bg-surface/[0.07] p-3.5">
-      <p className="text-[11px] font-bold text-accent-400">{term.label}</p>
+    <div className="rounded-card bg-surface p-3.5 shadow-card">
+      <p className="text-[11px] font-bold text-accent-600">{term.label}</p>
       {term.closes ? (
-        <p className="mt-0.5 text-[13px] font-bold text-white">
+        <p className="mt-0.5 text-[13px] font-bold text-slate-900">
           Closes {term.closes}
           {term.daysLeft !== null && term.daysLeft >= 0 ? ` · ${term.daysLeft} days` : ""}
         </p>
       ) : (
-        <p className="mt-0.5 text-[13px] font-bold text-white">No closing date set</p>
+        <p className="mt-0.5 text-[13px] font-bold text-slate-900">No closing date set</p>
       )}
     </div>
   );
@@ -169,14 +187,18 @@ function RailBody({
 }) {
   return (
     <>
-      <div className="mb-4 flex items-center gap-2.5 px-1">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface/[0.14] text-[12px] font-extrabold text-white">
+      <div className="mb-5 flex items-center gap-2.5 px-1.5">
+        {/* The one saturated thing in the rail. With the panel now light, the
+            school's own mark is what carries the brand that the dark green
+            gradient used to — one small solid green square instead of a wall
+            of it. */}
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-brand-700 text-[12px] font-extrabold text-white shadow-pill">
           {(school.shortName ?? school.name).slice(0, 2).toUpperCase()}
         </span>
         {/* Two lines rather than an ellipsis: a school's name is the one string
             here that must never be cut off — "St. Mary's Preparator…" is not a
             school. */}
-        <span className="min-w-0 text-[13.5px] font-extrabold leading-[1.15] tracking-tight text-white">
+        <span className="min-w-0 text-[13.5px] font-extrabold leading-[1.15] tracking-tight text-slate-900">
           {school.name}
         </span>
       </div>
@@ -200,7 +222,10 @@ export function Sidebar({
   term: RailTerm | null;
 }) {
   return (
-    <aside className="hidden w-[236px] shrink-0 flex-col bg-linear-to-b from-brand-800 to-brand-900 p-3.5 lg:flex print:lg:hidden">
+    /* Frosted, not filled. `bg-rail` carries its own alpha and inverts with the
+       slate ramp, so this is pale glass by day and near-black glass by night
+       without a single `dark:` class — the same bet the palette makes. */
+    <aside className="hidden w-[248px] shrink-0 flex-col border-r border-hairline bg-rail p-3 backdrop-blur-xl lg:flex print:lg:hidden">
       <RailBody sections={sections} school={school} term={term} />
     </aside>
   );
@@ -223,7 +248,7 @@ export function MobileNav({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
-        className="rounded-lg border border-slate-200 p-2 text-slate-600"
+        className="rounded-control border border-hairline bg-surface p-2 text-slate-600 shadow-card"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 6h16M4 12h16M4 18h16" />
@@ -236,9 +261,9 @@ export function MobileNav({
             type="button"
             aria-label="Close menu"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-brand-900/50"
+            className="absolute inset-0 bg-slate-900/25 backdrop-blur-sm"
           />
-          <div className="relative flex w-[264px] flex-col bg-linear-to-b from-brand-800 to-brand-900 p-3.5">
+          <div className="relative flex w-[276px] flex-col border-r border-hairline bg-rail p-3 backdrop-blur-xl">
             <RailBody
               sections={sections}
               school={school}

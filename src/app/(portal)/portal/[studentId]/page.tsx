@@ -34,7 +34,7 @@ export default async function ChildOverviewPage({ params }: PageProps<"/portal/[
 
       <Link
         href={`/portal/${studentId}/fees`}
-        className="block rounded-2xl border border-slate-200 bg-surface p-5 transition hover:border-brand-300 hover:shadow-sm"
+        className="block rounded-card border border-hairline bg-surface shadow-card p-5 transition hover:border-brand-300 hover:shadow-sm"
       >
         <div className="flex items-baseline justify-between gap-4">
           <p className="text-sm font-semibold text-slate-600">School fees</p>
@@ -56,7 +56,7 @@ export default async function ChildOverviewPage({ params }: PageProps<"/portal/[
 
       <Link
         href={`/portal/${studentId}/results`}
-        className="block rounded-2xl border border-slate-200 bg-surface p-5 transition hover:border-brand-300 hover:shadow-sm"
+        className="block rounded-card border border-hairline bg-surface shadow-card p-5 transition hover:border-brand-300 hover:shadow-sm"
       >
         <div className="flex items-baseline justify-between gap-4">
           <p className="text-sm font-semibold text-slate-600">Report cards</p>
