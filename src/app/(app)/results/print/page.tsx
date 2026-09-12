@@ -96,7 +96,7 @@ export default async function PrintReportCardsPage({
         {unpublished > 0 && !includeDrafts ? (
           <Link
             href={`/results/print?term=${termId}&class=${classGroupId}&drafts=1`}
-            className="rounded-xl border border-slate-200 bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             Include {unpublished} unpublished
           </Link>

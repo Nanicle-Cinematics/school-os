@@ -28,7 +28,10 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="flex min-h-full flex-col bg-slate-50">
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-surface">
+      {/* The same frosted chrome as the staff app. A parent and a bursar are
+          looking at one product, and the portal being the one screen left on the
+          old treatment is exactly how a re-skin ends up half-done. */}
+      <header className="sticky top-0 z-40 border-b border-hairline bg-chrome backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-3xl items-center gap-3 px-4">
           <Link href="/portal" className="min-w-0 flex-1">
             <p className="truncate text-sm font-extrabold tracking-tight text-slate-900">
@@ -45,7 +48,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
           <form action={logout}>
             <button
               type="submit"
-              className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+              className="rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
             >
               Sign out
             </button>

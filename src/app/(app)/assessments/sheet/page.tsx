@@ -53,7 +53,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
         action={
           <Link
             href={isLeadership ? "/assessments" : "/results/remarks"}
-            className="rounded-xl border border-slate-200 bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-full border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-card transition hover:bg-slate-50"
           >
             {isLeadership ? "Single assessments" : "Conduct & remarks"}
           </Link>

@@ -83,7 +83,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
       <RecordForm students={options} />
 
-      <form className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-surface p-3">
+      <form className="flex flex-wrap items-end gap-2 rounded-card border border-hairline bg-surface p-3">
         <input
           type="search"
           name="q"

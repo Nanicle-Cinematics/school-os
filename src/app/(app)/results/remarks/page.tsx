@@ -71,7 +71,7 @@ export default async function ClassRemarksPage({ searchParams }: PageProps<"/res
         action={
           <Link
             href={isLeadership ? "/results" : "/assessments/sheet"}
-            className="rounded-xl border border-slate-200 bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             {isLeadership ? "Results" : "Mark sheet"}
           </Link>

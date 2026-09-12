@@ -66,7 +66,7 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
         }
       />
 
-      <form className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-surface p-3">
+      <form className="flex flex-wrap items-end gap-2 rounded-card border border-hairline bg-surface p-3">
         <select name="term" defaultValue={termId ?? ""} className={`${filterClass} w-auto`}>
           <option value="">All terms</option>
           {terms.map((term) => (

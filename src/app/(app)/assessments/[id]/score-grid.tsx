@@ -30,7 +30,7 @@ export function ScoreGrid({
     <form action={formAction}>
       <input type="hidden" name="assessmentId" value={assessmentId} />
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-surface">
+      <div className="overflow-hidden rounded-card border border-hairline bg-surface">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

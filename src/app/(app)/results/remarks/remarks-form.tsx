@@ -97,7 +97,7 @@ export function RemarksForm({
           return (
             <div
               key={student.id}
-              className="rounded-xl border border-slate-200 bg-surface p-4"
+              className="rounded-card border border-hairline bg-surface p-4"
             >
               <input type="hidden" name={`row:${student.id}`} value="1" />
 

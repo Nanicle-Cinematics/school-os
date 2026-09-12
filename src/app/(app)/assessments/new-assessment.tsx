@@ -36,7 +36,7 @@ export function NewAssessment({
   }
 
   return (
-    <form action={formAction} className="w-full rounded-xl border border-slate-200 bg-surface p-4 lg:p-5">
+    <form action={formAction} className="w-full rounded-card border border-hairline bg-surface p-4 lg:p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-900">New assessment</h2>
         <button
