@@ -42,7 +42,6 @@ export default async function SettingsPage() {
     showClassPosition: settings?.showClassPosition ?? true,
     showSubjectPosition: settings?.showSubjectPosition ?? true,
     showAggregate: settings?.showAggregate ?? true,
-    reportCardTemplate: settings?.reportCardTemplate ?? "ges_standard",
   };
 
   const currentTerm = years.flatMap((year) => year.terms).find((term) => term.isCurrent);

@@ -175,7 +175,6 @@ export type AcademicValues = {
   showClassPosition: boolean;
   showSubjectPosition: boolean;
   showAggregate: boolean;
-  reportCardTemplate: string;
 };
 
 export function AcademicForm({
@@ -241,16 +240,10 @@ export function AcademicForm({
           />
         </Field>
 
-        <Field label="Report card template">
-          <select
-            name="reportCardTemplate"
-            defaultValue={values.reportCardTemplate}
-            className={inputClass}
-          >
-            <option value="ges_standard">GES standard</option>
-            <option value="compact">Compact</option>
-          </select>
-        </Field>
+        {/* No "Report card template" picker. It offered GES standard and
+            "Compact", saved the answer, and there has only ever been one
+            layout — so choosing Compact changed nothing and said nothing.
+            A control with one real option is not a choice. */}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-700">

@@ -44,6 +44,18 @@ export function ReportCard({
   const { student, classGroup, term } = termResult;
   const guardian = student.guardians[0]?.guardian;
 
+  /**
+   * Both default to ON for a school with no settings row, which is what the
+   * column defaults say and what a Ghanaian terminal report normally carries.
+   *
+   * ⚠️ These two were saved by `/settings` and read NOWHERE: a school that
+   * turned positions off — the ones that decide not to rank six-year-olds, and
+   * they exist — printed them on every card anyway. `showAggregate` below was
+   * the only one of the three ever wired up.
+   */
+  const showClassPosition = settings?.showClassPosition ?? true;
+  const showSubjectPosition = settings?.showSubjectPosition ?? true;
+
   return (
     <div
       className={`paper rounded-xl border border-slate-200 bg-white p-6 print:border-0 ${
@@ -94,12 +106,14 @@ export function ReportCard({
             {classGroup.level.name} {classGroup.name}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-500">Position</dt>
-          <dd className="font-semibold text-slate-900">
-            {ordinal(termResult.classPosition)} of {termResult.classSize ?? "—"}
-          </dd>
-        </div>
+        {showClassPosition ? (
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-slate-500">Position</dt>
+            <dd className="font-semibold text-slate-900">
+              {ordinal(termResult.classPosition)} of {termResult.classSize ?? "—"}
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt className="text-xs uppercase tracking-wide text-slate-500">Attendance</dt>
           <dd className="text-slate-900">
@@ -126,7 +140,9 @@ export function ReportCard({
             </th>
             <th className="px-2 py-1.5 text-right font-semibold">Total</th>
             <th className="px-2 py-1.5 text-center font-semibold">Grade</th>
-            <th className="px-2 py-1.5 text-right font-semibold">Pos.</th>
+            {showSubjectPosition ? (
+              <th className="px-2 py-1.5 text-right font-semibold">Pos.</th>
+            ) : null}
             <th className="px-2 py-1.5 text-left font-semibold">Remark</th>
           </tr>
         </thead>
@@ -146,9 +162,11 @@ export function ReportCard({
               <td className="px-2 py-1.5 text-center font-semibold text-slate-900">
                 {result.grade ?? "—"}
               </td>
-              <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">
-                {ordinal(result.subjectPosition)}
-              </td>
+              {showSubjectPosition ? (
+                <td className="px-2 py-1.5 text-right tabular-nums text-slate-600">
+                  {ordinal(result.subjectPosition)}
+                </td>
+              ) : null}
               <td className="px-2 py-1.5 text-slate-600">{result.remark ?? "—"}</td>
             </tr>
           ))}
@@ -164,7 +182,12 @@ export function ReportCard({
             <td className="pt-2 text-center tabular-nums">
               {termResult.average ? Number(termResult.average).toFixed(1) : "—"}
             </td>
-            <td colSpan={2} className="pt-2 text-right text-xs font-normal text-slate-500">
+            {/* Spans whatever is left after the position column may have gone,
+                or the aggregate line lands under the wrong heading. */}
+            <td
+              colSpan={showSubjectPosition ? 2 : 1}
+              className="pt-2 text-right text-xs font-normal text-slate-500"
+            >
               {settings?.showAggregate && termResult.aggregate !== null
                 ? `Aggregate (best ${settings.aggregateSubjects}): ${termResult.aggregate}`
                 : ""}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireMyChild } from "@/lib/portal-auth";
 import { getChildHeader, getPublishedTerms } from "@/lib/portal-data";
 import { termLabel } from "@/lib/academic-year";
+import { formatCedis } from "@/lib/money";
 import { ChildHeader } from "../../child-header";
 
 export const metadata = { title: "Report cards · School OS" };
@@ -54,16 +55,27 @@ export default async function ChildResultsPage({
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  {t.average != null ? (
-                    <p className="font-bold tabular-nums text-slate-900">
-                      {Number(t.average).toFixed(1)}%
+                  {/* A held term shows no average and no position: the summary
+                      IS the result, so leaving it here would withhold the sheet
+                      of paper and publish the outcome. */}
+                  {t.hold ? (
+                    <p className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                      Held · {formatCedis(t.hold.balance)} due
                     </p>
-                  ) : null}
-                  {t.classPosition && t.classSize ? (
-                    <p className="text-xs text-slate-500">
-                      {t.classPosition} of {t.classSize}
-                    </p>
-                  ) : null}
+                  ) : (
+                    <>
+                      {t.average != null ? (
+                        <p className="font-bold tabular-nums text-slate-900">
+                          {Number(t.average).toFixed(1)}%
+                        </p>
+                      ) : null}
+                      {t.classPosition && t.classSize ? (
+                        <p className="text-xs text-slate-500">
+                          {t.classPosition} of {t.classSize}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               </Link>
             </li>

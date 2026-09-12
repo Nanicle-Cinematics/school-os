@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { LEADERSHIP } from "@/lib/permissions";
 import { getClassReportCards } from "@/lib/results-data";
+import { reportHoldsForClass } from "@/lib/report-access";
+import { formatCedis } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { Alert } from "../../ui";
 import { ReportCard } from "../report-card";
@@ -43,10 +45,32 @@ export default async function PrintReportCardsPage({
   }
 
   const { cards, settings } = await getClassReportCards(termId, classGroupId);
-  const printable = includeDrafts
+  const published = includeDrafts
     ? cards
     : cards.filter((card) => card.termResult.status === "PUBLISHED");
-  const withheld = cards.length - printable.length;
+  const unpublished = cards.length - published.length;
+
+  /**
+   * Arrears holds, applied to the batch.
+   *
+   * ⚠️ This is the loophole the setting exists to close: a form teacher prints a
+   * class, forty sheets come out, and the two that were supposed to be held went
+   * home in the middle of the stack because nobody checks the other thirty-eight.
+   * They are removed from the run and NAMED above it, so the office knows what it
+   * is holding and can go and ask for the money.
+   *
+   * There is deliberately no "print them anyway" button here. A head who really
+   * must release one card opens that child's page and prints it — one deliberate
+   * act on one child, which is a decision, rather than a click that quietly undoes
+   * the policy for a whole class.
+   */
+  const holds = await reportHoldsForClass(
+    published.map((card) => card.termResult.studentId),
+    termId,
+    settings,
+  );
+  const printable = published.filter((card) => !holds.has(card.termResult.studentId));
+  const heldCards = published.filter((card) => holds.has(card.termResult.studentId));
 
   const label = `${classGroup.level.name} ${classGroup.name}`;
   const termLabel = `${TERM_NAME[term.name] ?? term.name} Term · ${term.academicYear.name}`;
@@ -69,26 +93,62 @@ export default async function PrintReportCardsPage({
           </p>
         </div>
 
-        {withheld > 0 && !includeDrafts ? (
+        {unpublished > 0 && !includeDrafts ? (
           <Link
             href={`/results/print?term=${termId}&class=${classGroupId}&drafts=1`}
             className="rounded-xl border border-slate-200 bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            Include {withheld} unpublished
+            Include {unpublished} unpublished
           </Link>
         ) : null}
       </div>
 
-      {withheld > 0 && !includeDrafts ? (
+      {unpublished > 0 && !includeDrafts ? (
         <Alert tone="error">
-          {withheld} of {cards.length} cards are not published yet and have been left out. Publish
+          {unpublished} of {cards.length} cards are not published yet and have been left out. Publish
           them from the results screen, or include them deliberately.
         </Alert>
       ) : null}
 
+      {/* Printed with the batch, not just shown on screen: this list is the
+          record of what the school is holding and why, and the person at the
+          printer is rarely the person who read the screen. */}
+      {heldCards.length > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 print:break-after-page">
+          <h2 className="text-sm font-semibold text-amber-900">
+            {heldCards.length} card{heldCards.length === 1 ? "" : "s"} held for arrears
+          </h2>
+          <p className="mt-1 text-xs text-amber-800">
+            Left out of this run and hidden from the parent portal. Each appears as soon as
+            its payment is recorded.
+          </p>
+          <ul className="mt-3 space-y-1 text-sm text-amber-900">
+            {heldCards.map((card) => {
+              const hold = holds.get(card.termResult.studentId)!;
+              const student = card.termResult.student;
+              return (
+                <li key={card.termResult.id} className="flex justify-between gap-4">
+                  <span>
+                    {student.firstName} {student.lastName}{" "}
+                    <span className="font-mono text-xs text-amber-700">
+                      {student.admissionNo}
+                    </span>
+                  </span>
+                  <span className="shrink-0 tabular-nums font-semibold">
+                    {formatCedis(hold.balance)} · {hold.invoiceNo}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
       {printable.length === 0 ? (
         <Alert tone="error">
-          Nothing to print for {label} this term. Results have to be computed and published first.
+          {heldCards.length > 0 && heldCards.length === published.length
+            ? `Nothing to print for ${label} — every card this term is held for arrears.`
+            : `Nothing to print for ${label} this term. Results have to be computed and published first.`}
         </Alert>
       ) : null}
 

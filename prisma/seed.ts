@@ -193,7 +193,6 @@ async function main() {
         create: {
           classScoreWeight: 50,
           examScoreWeight: 50,
-          reportCardTemplate: "ges_standard",
           invoiceDueDays: 21,
           smsEnabled: false,
           smsSenderId: "SMPJHS",

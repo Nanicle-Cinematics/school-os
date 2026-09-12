@@ -99,7 +99,6 @@ export async function saveAcademicPolicy(
     showClassPosition: formData.get("showClassPosition") === "on",
     showSubjectPosition: formData.get("showSubjectPosition") === "on",
     showAggregate: formData.get("showAggregate") === "on",
-    reportCardTemplate: String(formData.get("reportCardTemplate") ?? "ges_standard"),
   };
 
   const before = await prisma.schoolSettings.findUnique({ where: { schoolId: auth.schoolId } });
