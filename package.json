@@ -28,6 +28,8 @@
     "verify:teacher": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-teacher.mts",
     "verify:parent": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-parent.mts",
     "verify:reset": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-reset.mts",
+    "verify:export": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-export.mts",
+    "verify:export:route": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-export-route.mts",
     "verify:settings": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-settings.mts",
     "verify:platform": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-platform.mts",
     "verify:attention": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-attention.mts",

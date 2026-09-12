@@ -34,6 +34,7 @@ export type NavItem = {
 
 export type NavIcon =
   | "dashboard"
+  | "export"
   | "students"
   | "guardians"
   | "staff"
@@ -98,6 +99,7 @@ export const NAV: NavSection[] = [
     items: [
       { href: "/messages", label: "Messages", icon: "messages", roles: OFFICE },
       { href: "/users", label: "Users", icon: "users", roles: OFFICE },
+      { href: "/export", label: "Export", icon: "export", roles: OFFICE },
       { href: "/settings", label: "Settings", icon: "settings", roles: [...LEADERSHIP, "ADMIN"] },
     ],
   },

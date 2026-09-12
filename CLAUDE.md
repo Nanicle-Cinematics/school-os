@@ -496,6 +496,45 @@ must be able to open the card to have the conversation. There is deliberately no
 that child's page, which is a decision rather than a click that quietly undoes
 the policy for forty children.
 
+**A school can get its own data back out** — `/export`, added 2026-09-12. Until
+then data only ever went IN: `/students/import` took a CSV and nothing anywhere
+produced one, so a school could hand over its whole register, its fees and three
+years of results and take back nothing. No GES return, nothing for an auditor,
+no way to leave. For a vendor holding a school's records that is a trust
+question before it is a feature.
+
+Six datasets (`src/lib/export-data.ts`), each declaring its own roles: an export
+is a bulk read of the entire school in one click, which is a different act from
+opening a page. A TEACHER and a PARENT get nothing; an ACCOUNTANT gets the money
+and not the children; results are leadership only. Every download is written to
+the audit trail with who, what and how many rows.
+
+⚠️ **Escaping happens once, in `toCsv`, never in a loader.** It was the other way
+round first — every loader called a `cell()` helper — and that is a rule a new
+dataset can forget, silently: the file only breaks from the first row containing
+a comma, which in a school is the first address. It also made the escaping
+untestable through the front door, and the first version of the test fed in
+hand-quoted strings and proved nothing but that the parser works.
+
+⚠️ **Phone columns must be declared in `textColumns`.** `0244123456` opened in
+Excel becomes the NUMBER 244123456, so a school that exports its contacts, tidies
+them in a spreadsheet and imports them back has just texted the wrong numbers. A
+leading tab keeps it text, and `parseCsv` trims every cell so it still
+round-trips through our own importer. The field is REQUIRED on every dataset, so
+a new one has to decide rather than inherit a default that loses zeros.
+
+**The students export is an import file** — same headers, same order as
+`TEMPLATE_HEADERS`. `verify:export` feeds a real export through the real
+importer, because "same headers" is a claim that rots the first time either side
+is edited alone.
+
+**`verify:export:route` needs a dev server** and covers what the loaders cannot:
+the role refusal, the file headers, the audit row, and that the CSV has rows
+under the header. Two of its checks were vacuous when first written and both were
+caught by forcing them red — the audit count passed with auditing removed because
+28 rows from earlier runs already satisfied it, so it now counts only rows
+created since the run began.
+
 ⚠️ **An invoice's stored status records an EVENT; lateness is DERIVED.**
 `invoiceStatusFor` used to return OVERDUE once the due date had passed, and its
 only caller is `recalcInvoice` — a payment, a reversal, an edited line. Nothing
