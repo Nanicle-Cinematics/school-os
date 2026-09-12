@@ -387,6 +387,12 @@ have taken `/settings`, the report cards and the bills down together. The drift
 job is the backstop either way, and it has already stopped two merges that would
 have been outages.
 
+⚠️ **A destructive change therefore turns main's drift job RED for a few
+minutes**, between the merge and the migration, because main is ahead of
+production by exactly one DROP. That is the ordering working, not a failure. Run
+the migration, re-run the job, and check it goes green — a drift that outlives
+that window is the real thing.
+
 **CI builds its database from the migrations** (`db:deploy`, not `db push`) and
 then asserts the result matches `prisma/schema.prisma`. Applying cleanly is not
 the same as arriving at the right shape — a migration edited by hand can succeed
