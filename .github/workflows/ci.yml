@@ -5,9 +5,10 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    # Daily. Prod schema changes are applied by hand (`db push`, no migrations),
-    # so drift is introduced outside any pipeline — a timer is the only thing
-    # that bounds how long it can go unnoticed. SchoolAsset managed ten days.
+    # Daily. Production schema changes are applied from prisma/migrations by the
+    # `migrate` workflow, but that is still a thing a person remembers to run —
+    # and before migrations existed, drift went unnoticed for ten days
+    # (SchoolAsset). A timer bounds how long it can happen for.
     - cron: "0 6 * * *"
   # Run the production audit on demand: `gh workflow run CI`, or the Run workflow
   # button. Wanted the moment you deploy a schema change rather than waiting for
@@ -80,8 +81,38 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
-      - name: Create the schema
-        run: npm run db:push
+      # Built from the MIGRATIONS, not from `db push`. Every suite below then runs
+      # against a database assembled the same way production is, so a migration
+      # that does not apply — or applies to something subtly different from the
+      # schema — fails here rather than in the Supabase SQL editor at 9pm.
+      - name: Create the schema from migrations
+        run: npm run db:deploy
+
+      # ...and prove the result actually matches prisma/schema.prisma. Applying
+      # cleanly is not the same as arriving at the right shape: a migration
+      # edited by hand can succeed and still leave a column behind.
+      - name: Do the migrations produce the schema they claim?
+        run: |
+          # --from-schema-datasource, not --from-url: shell steps here have no
+          # DATABASE_URL exported — the job writes a .env that the Prisma CLI
+          # loads itself, which is also how db:deploy above finds the database.
+          set +e
+          node_modules/.bin/prisma migrate diff \
+            --from-schema-datasource prisma/schema.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script --exit-code > /tmp/after.sql 2>/tmp/after.err
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "the migrated database matches prisma/schema.prisma"
+            exit 0
+          fi
+          if [ "$code" = "2" ]; then
+            echo "The migrations do not produce prisma/schema.prisma. Missing:"
+            cat /tmp/after.sql
+            exit 1
+          fi
+          cat /tmp/after.err; exit 1
 
       - name: Seed a demo school
         run: npm run db:seed

@@ -327,27 +327,62 @@ Running `apply-rls.mjs` against prod after a deploy that carries a new tenant
 table is still the fix. The daily audit bounds how long forgetting it goes
 unnoticed; it does not remove the step.
 
-**The same job also checks for SCHEMA drift.** Production's schema is changed by
-hand — there are no migrations, and `db push` needs the owner password, which is
-lost (see Passwords). So nothing connected the repo's schema to the database's,
-and the only thing between a forgotten `ALTER` and a 500 on every authenticated
-page was somebody remembering. `prisma migrate diff --exit-code` fails the job
-and prints the SQL that reconciles them — paste that straight into Supabase's SQL
-editor, which needs no password.
+**The same job also checks for SCHEMA drift**, and it is still worth having now
+that migrations exist: `prisma migrate diff --exit-code` compares production to
+`prisma/schema.prisma` and fails if they disagree, whatever the cause.
 
-⚠️ **To change the production schema without the owner password:** diff the two
-datamodels offline — this needs no database at all —
+## Changing the schema
+
+⚠️ **Migrations, since 2026-09-12. Do NOT `db push` at a database anyone else
+uses, and do not hand-write SQL into the Supabase editor.** Both were the old
+way, and both went wrong in one day: the same file was run against the dev
+project twice while production stayed untouched (caught only because the drift
+job refused a merge), and a hand-written `Plan` enum migration needed its cast
+rewritten by hand because Prisma's own `("plan"::text::"Plan_new")` errors on
+every existing row.
+
+The flow:
 
 ```bash
-git show main:prisma/schema.prisma > /tmp/old.prisma
-node_modules/.bin/prisma migrate diff \
-  --from-schema-datamodel /tmp/old.prisma \
-  --to-schema-datamodel prisma/schema.prisma --script
+npm run db:migrate            # prisma migrate dev — writes prisma/migrations/<name>
+npm run db:status             # what this database has applied, and what is pending
 ```
 
-then run that SQL in the Supabase SQL editor and confirm with an
-`information_schema.columns` select BEFORE merging. `main` auto-deploys, so a
-column the code expects and the database lacks is an outage, not a degradation.
+Commit the generated SQL. It is reviewed in the pull request like any other code,
+which is the point: the enum cast above would have been caught in review rather
+than in a browser tab.
+
+**Production is migrated by the `Migrate production` workflow**, by hand on
+purpose:
+
+```
+gh workflow run migrate.yml --ref <branch> -f action=status   # what prod has, and what is pending
+gh workflow run migrate.yml --ref <branch> -f action=deploy   # apply, in order
+```
+
+`--ref <branch>` is what makes "before merging" possible: it runs the migrations
+sitting on that branch. GitHub still resolves `migrate.yml` itself on the DEFAULT
+branch, so a dispatch is a 404 until the workflow file is on main — which is why
+this one PR had to merge before it could be baselined, and why a later PR does
+not.
+
+⚠️ **Run `deploy` BEFORE merging, not after.** Vercel deploys main the instant it
+is pushed, so a migration in that same pipeline would race the deployment and
+sometimes land after the code that needs it. Order: deploy the migration, watch
+it succeed, then merge. The drift job is the backstop, and it has already stopped
+two merges that would have been outages.
+
+**CI builds its database from the migrations** (`db:deploy`, not `db push`) and
+then asserts the result matches `prisma/schema.prisma`. Applying cleanly is not
+the same as arriving at the right shape — a migration edited by hand can succeed
+and still leave a column behind.
+
+⚠️ **`0_init` is a BASELINE, not a history.** Production and dev were built by
+`db push` and hand-written SQL before any of this existed, so they hold the tables
+with no record of how they got them. `0_init` is the whole schema as it stood on
+2026-09-12, marked applied rather than run (`action=baseline`, once per database).
+Running `deploy` against such a database without baselining it first would try to
+CREATE TABLE over live data and fail.
 
 **A school is provisioned with a CALENDAR** — the current academic year on the
 standard Ghanaian September–July shape, split into three terms by
