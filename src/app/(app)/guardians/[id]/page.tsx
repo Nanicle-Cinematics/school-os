@@ -14,7 +14,6 @@ import { LinkStudentForm } from "./link-form";
 import { GuardianLoginForm } from "./login-form";
 
 const COLUMNS: Column[] = [
-  { label: "" },
   { label: "Student" },
   { label: "Class" },
   { label: "Relationship" },

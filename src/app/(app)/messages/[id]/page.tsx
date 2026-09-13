@@ -10,7 +10,6 @@ import { formatCedis } from "@/lib/money";
 import { Card, StatusBadge } from "../../ui";
 
 const COLUMNS: Column[] = [
-  { label: "" },
   { label: "To" },
   { label: "Recipient" },
   { label: "Message" },

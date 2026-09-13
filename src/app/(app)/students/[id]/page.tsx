@@ -14,24 +14,19 @@ import { EditStudentForm } from "../student-form";
 import { EnrolForm } from "./enrol-form";
 
 const COLUMNS_0: Column[] = [
-  { label: "" },
   { label: "Name" },
   { label: "Phone" },
   { label: "Relationship" },
   { label: "Receives" },
-  { label: "" },
 ];
 
 const COLUMNS_1: Column[] = [
-  { label: "" },
   { label: "Year" },
   { label: "Class" },
   { label: "Enrolment" },
-  { label: "" },
 ];
 
 const COLUMNS_2: Column[] = [
-  { label: "" },
   { label: "Invoice" },
   { label: "Term" },
   { label: "Total", numeric: true },
@@ -41,7 +36,6 @@ const COLUMNS_2: Column[] = [
 ];
 
 const COLUMNS_3: Column[] = [
-  { label: "" },
   { label: "Term" },
   { label: "Average", numeric: true },
   { label: "Position" },

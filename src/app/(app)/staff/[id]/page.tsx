@@ -13,7 +13,6 @@ import { EditStaffForm } from "../staff-form";
 import { AssignmentForm } from "./assignment-form";
 
 const COLUMNS: Column[] = [
-  { label: "" },
   { label: "Subject" },
   { label: "Class" },
   { label: "" },

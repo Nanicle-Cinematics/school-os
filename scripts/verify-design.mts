@@ -140,6 +140,39 @@ check(
   pastedPrimary.length ? `${pastedPrimary.length} files paste the filled style` : "one definition",
 );
 
+/**
+ * ⚠️ A header must have exactly as many columns as its rows have cells.
+ *
+ * Found by LOOKING at the console, not by building it: the schools table
+ * rendered "School" above the proprietor and "Since" fell off the edge,
+ * because the conversion gave it one column more than the row had cells.
+ * Twelve tables were out. TypeScript cannot see it — `columns` and the `<td>`s
+ * are unrelated as far as the type system is concerned — and a page with a
+ * header one place to the left still renders perfectly happily.
+ */
+console.log("\nEvery header lines up with its cells");
+
+let misaligned = 0;
+for (const file of files) {
+  if (!/\<DataTable/.test(file.text)) continue;
+  for (const decl of file.text.matchAll(/const (COLUMNS(?:_\d+)?): Column\[\] = \[([\s\S]*?)\];/g)) {
+    const [, name, body] = decl;
+    const columns = (body.match(/\{ label:/g) ?? []).length;
+    const use = file.text.indexOf(`columns={${name}}`);
+    if (use === -1) continue;
+    const chunk = file.text.slice(use, file.text.indexOf("</DataTable>", use));
+    const row = /<Row[^>]*>([\s\S]*?)<\/Row>/.exec(chunk);
+    const cells = row ? (row[1].match(/<td/g) ?? []).length : 0;
+    if (cells && cells !== columns) {
+      misaligned += 1;
+      console.log(
+        `  FAIL ${file.path.replace("src/app/", "")} ${name} — ${columns} columns, ${cells} cells`,
+      );
+    }
+  }
+}
+check("headers and cells agree", misaligned === 0, misaligned === 0 ? "every table" : "");
+
 console.log("\nSentence case, and one icon set");
 
 /**

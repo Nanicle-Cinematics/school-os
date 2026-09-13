@@ -343,11 +343,27 @@ async function main() {
   const consoleRoutes: { path: string; mustContain: string[] }[] = [
     {
       path: "/admin",
-      // The numbers an owner opens this for, and the school just provisioned.
-      // The numbers an owner opens this for. "SMS spend" is here because it is
-      // the cost that scales with use and has already been lost once, into the
-      // unlit branch of a conditional.
-      mustContain: ["Schools", "Monthly revenue", "SMS spend", "Needs chasing", school.name],
+      /**
+       * The numbers an owner opens this for, and the school just provisioned.
+       *
+       * "SMS spend" is here because it is the cost that scales with use and has
+       * already been lost once, into the unlit branch of a conditional.
+       *
+       * ⚠️ "Collected this month" AND "Billing monthly" — both, deliberately.
+       * This used to pin "Monthly revenue", which was MRR wearing the word
+       * revenue: a projection of what schools owe, not a record of what
+       * arrived. Naming both here means the two can never silently collapse
+       * back into one number, which is the shape the mistake took the first
+       * time.
+       */
+      mustContain: [
+        "Schools",
+        "Collected this month",
+        "Billing monthly",
+        "SMS spend",
+        "Needs chasing",
+        school.name,
+      ],
     },
     {
       path: `/admin/${school.id}`,
