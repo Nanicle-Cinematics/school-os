@@ -120,7 +120,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <form action={logout}>
               <button
                 type="submit"
-                className="rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+                /* whitespace-nowrap: at 390px the header ran out of room and
+                   broke the label across two lines as "Sign / out", which reads
+                   as a squashed page rather than a button. */
+                className="whitespace-nowrap rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
               >
                 Sign out
               </button>

@@ -59,8 +59,16 @@ export function Stat({
           : "text-slate-900";
   return (
     <div
+      /**
+       * ⚠️ `lg:col-span-2`, never a bare `col-span-2`.
+       *
+       * The phone grid is two columns wide, so spanning both there does not make
+       * the hero bigger — it makes it a full-width row, and the tile before it is
+       * left sitting beside a hole. On a phone the gold already does the job the
+       * extra width does on a laptop.
+       */
       className={`rounded-card border border-hairline bg-surface p-4.5 shadow-card ${
-        hero ? "col-span-2" : ""
+        hero ? "lg:col-span-2" : ""
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -78,8 +86,18 @@ export function Stat({
         ) : null}
       </div>
       <p
+        /**
+         * ⚠️ The figure is sized for the CARD, not for the page.
+         *
+         * A phone splits this row into two ~165px cards, and "GH₵26,542" set at
+         * 30px is wider than that — the number ran past its own card and looked
+         * clipped. Ghanaian amounts carry a currency mark and a thousands
+         * separator, so nine glyphs is the normal case here, not the long one.
+         */
         className={`font-heading mt-2.5 leading-none tabular-nums ${
-          hero ? "text-[38px]" : "text-[30px]"
+          hero
+            ? "text-[22px] sm:text-[26px] lg:text-[38px]"
+            : "text-[22px] sm:text-[26px] lg:text-[30px]"
         } ${toneClass}`}
       >
         {value}
