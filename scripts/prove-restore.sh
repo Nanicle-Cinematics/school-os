@@ -64,6 +64,18 @@ psql -q -c 'drop schema if exists public cascade' "$scratch_url"
 echo "Restoring…"
 pg_restore --no-owner --no-privileges --exit-on-error --dbname "$scratch_url" "$dump"
 
+# A deliberately broken restore, so the comparison below has something to catch.
+#
+# ⚠️ This hook exists because a comparison that has only ever agreed is
+# indistinguishable from one that cannot disagree. The workflow runs this path
+# every night and asserts it exits 1. Creating a table is the sabotage of choice
+# precisely because it touches no foreign key and no NOT NULL — it cannot fail
+# for an incidental reason and quietly turn the red test green.
+if [ -n "${PROVE_RESTORE_SABOTAGE:-}" ]; then
+  echo "  (sabotaging the restore on purpose)"
+  psql -q -c 'create table "_sabotage" ()' "$scratch_url"
+fi
+
 echo "Counting the restore…"
 psql -At -f "$here/table-counts.sql" "$scratch_url" > /tmp/counts.restored
 

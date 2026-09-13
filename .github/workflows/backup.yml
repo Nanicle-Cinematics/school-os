@@ -128,6 +128,45 @@ jobs:
           scripts/prove-restore.sh \
             "$SCRATCH/selftest" "$SCRATCH/selftest_restored" /tmp/selftest.dump
 
+      # ── 1b. Does the comparison fail when it should? ──────────────────────
+      #
+      # Every check above passed on its first green run, which is exactly when a
+      # check is least trustworthy. These three force each failure mode and
+      # assert the exit code, every night, so "counts identical" keeps meaning
+      # something. This repo has shipped four guards that could not fail.
+      - name: Do the comparisons actually fail when they should?
+        run: |
+          for db in red_mismatch red_empty_source red_empty_target; do
+            psql -q "$SCRATCH/postgres" -c "create database $db"
+          done
+          expect() {
+            local want=$1; shift
+            set +e; "$@" > /tmp/red.log 2>&1; local got=$?; set -e
+            if [ "$got" != "$want" ]; then
+              echo "::error::expected exit $want, got $got"
+              cat /tmp/red.log
+              exit 1
+            fi
+            echo "  ok  exit $want — $(tail -n 2 /tmp/red.log | head -n 1)"
+          }
+
+          echo "A restore that does not match its source:"
+          # Exported, not prefixed: `VAR=1 some_function` has subtle scoping in
+          # bash, and a sabotage that silently did not happen would make this
+          # red test pass for the wrong reason.
+          export PROVE_RESTORE_SABOTAGE=1
+          expect 1 scripts/prove-restore.sh \
+            "$SCRATCH/selftest" "$SCRATCH/red_mismatch" /tmp/red1.dump
+          unset PROVE_RESTORE_SABOTAGE
+
+          echo "A target that already holds data:"
+          expect 2 scripts/prove-restore.sh \
+            "$SCRATCH/selftest" "$SCRATCH/red_mismatch" /tmp/red2.dump
+
+          echo "A source with nothing in it:"
+          expect 3 scripts/prove-restore.sh \
+            "$SCRATCH/red_empty_source" "$SCRATCH/red_empty_target" /tmp/red3.dump
+
       # ── 2. Production ─────────────────────────────────────────────────────
       - name: Dump production, and restore it here
         id: prod
