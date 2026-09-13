@@ -5,7 +5,7 @@ import { canSearch } from "@/lib/search-data";
 import { ThemeToggle } from "../theme-toggle";
 import { logout } from "@/lib/auth-actions";
 import { prisma } from "@/lib/prisma";
-import { Sidebar, MobileNav, type RailTerm } from "./nav";
+import { Sidebar, MobileNav, SectionTint, type RailTerm } from "./nav";
 
 const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", THIRD: "Third" };
 
@@ -146,7 +146,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </div>
         ) : null}
 
-        <main className="min-w-0 flex-1 space-y-1 p-4 lg:px-7 lg:py-6 print:p-0">{children}</main>
+        {/* SectionTint sets two CSS variables and renders `display: contents`,
+            so it colours what is inside without adding a box to the layout. */}
+        <main className="min-w-0 flex-1 space-y-1 p-4 lg:px-7 lg:py-6 print:p-0">
+          <SectionTint>{children}</SectionTint>
+        </main>
       </div>
     </div>
   );

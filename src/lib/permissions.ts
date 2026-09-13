@@ -174,6 +174,41 @@ export function landingFor(roles: Role[]) {
   return "/dashboard";
 }
 
+/**
+ * Which area of the school a path belongs to.
+ *
+ * ⚠️ The SAME longest-prefix rule the rail highlights with, deliberately shared
+ * rather than reimplemented: if the page said Finance while the rail lit
+ * Academics, the colour would be worse than no colour — it would be a confident
+ * wrong answer about where you are.
+ *
+ * Longest match wins, so `/assessments/sheet` resolves to Mark sheet rather than
+ * to Assessments, and a detail page like `/students/abc123` inherits its list's
+ * area instead of falling through to nothing.
+ */
+export function bestHrefMatch(pathname: string, hrefs: string[]): string | undefined {
+  return hrefs
+    .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+    .sort((a, b) => b.length - a.length)[0];
+}
+
+export function sectionFor(pathname: string): { hue: NavHue; icon: NavIcon } | null {
+  const href = bestHrefMatch(
+    pathname,
+    NAV.flatMap((section) => section.items.map((item) => item.href)),
+  );
+  if (!href) {
+    return null;
+  }
+  for (const section of NAV) {
+    const item = section.items.find((candidate) => candidate.href === href);
+    if (item) {
+      return { hue: section.hue, icon: item.icon };
+    }
+  }
+  return null;
+}
+
 export function navFor(roles: Role[]): NavSection[] {
   return NAV.map((section) => ({
     ...section,

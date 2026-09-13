@@ -125,6 +125,19 @@
   --color-hue-school-50: #e5d9f5;
   --color-hue-school-600: #7c4fae;
 
+  /**
+   * The same five hues, for a LARGE area rather than a 28px chip.
+   *
+   * A tint calibrated to read as a small circle on the rail is far too
+   * present stretched across a whole table header — same colour, ten times
+   * the area. These are the quiet version, for bands.
+   */
+  --color-hue-overview-band: #eef7f2;
+  --color-hue-people-band: #eaf4f7;
+  --color-hue-academics-band: #eff1fc;
+  --color-hue-finance-band: #fdf2e6;
+  --color-hue-school-band: #f5f0fb;
+
   /* The one colour that is not part of a ramp: the paper a card is printed on.
      `bg-white` cannot follow a theme — white is white — so every card, header
      and table in the app wears `bg-surface` instead, and this is the value that
@@ -233,6 +246,14 @@ html.dark {
   --color-hue-finance-600: #e0a35f;
   --color-hue-school-50: #2e2145;
   --color-hue-school-600: #bd9ae4;
+
+  /* Bands lift off the surface rather than glowing on it — a table header
+     that shines is a table nobody reads past. */
+  --color-hue-overview-band: #101f1a;
+  --color-hue-people-band: #0d1c21;
+  --color-hue-academics-band: #14172b;
+  --color-hue-finance-band: #241a0e;
+  --color-hue-school-band: #1e1729;
 }
 
 /**
@@ -286,6 +307,12 @@ html.dark {
   --color-hue-finance-600: #b0651d;
   --color-hue-school-50: #e5d9f5;
   --color-hue-school-600: #7c4fae;
+
+  --color-hue-overview-band: #eef7f2;
+  --color-hue-people-band: #eaf4f7;
+  --color-hue-academics-band: #eff1fc;
+  --color-hue-finance-band: #fdf2e6;
+  --color-hue-school-band: #f5f0fb;
   --shadow-pill: 0 1px 2px rgba(12, 40, 28, 0.08), 0 8px 20px -8px rgba(18, 128, 92, 0.45);
 }
 
@@ -332,6 +359,12 @@ html.dark {
     --color-hue-finance-600: #b0651d;
     --color-hue-school-50: #e5d9f5;
     --color-hue-school-600: #7c4fae;
+
+    --color-hue-overview-band: #eef7f2;
+    --color-hue-people-band: #eaf4f7;
+    --color-hue-academics-band: #eff1fc;
+    --color-hue-finance-band: #fdf2e6;
+    --color-hue-school-band: #f5f0fb;
     --shadow-card: 0 1px 2px rgba(12, 40, 28, 0.05), 0 12px 32px -12px rgba(12, 40, 28, 0.12);
     --shadow-raised: 0 2px 4px rgba(12, 40, 28, 0.06), 0 20px 48px -16px rgba(12, 40, 28, 0.18);
     --shadow-pill: 0 1px 2px rgba(12, 40, 28, 0.08), 0 8px 20px -8px rgba(18, 128, 92, 0.45);

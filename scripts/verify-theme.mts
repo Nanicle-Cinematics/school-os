@@ -17,6 +17,7 @@
  *   npm run verify:theme   (no database, no dev server)
  */
 import { readFileSync } from "node:fs";
+import { NAV, sectionFor } from "@/lib/permissions";
 
 let passed = 0;
 let failed = 0;
@@ -111,6 +112,61 @@ for (const [label, block] of [["html.dark", dark], [".paper", paper], ["@media p
     unknown.length ? unknown.join(", ") : `${block.size} checked`,
   );
 }
+
+/**
+ * The area hues, where CSS meets the routing table.
+ *
+ * Two ways this goes wrong quietly. A new area gets a hue in `NAV` and no
+ * tokens in the stylesheet, so its chip renders transparent. Or `sectionFor`
+ * disagrees with the rail about where you are — and a page confidently painted
+ * the wrong colour is worse than a grey one, because it is an answer.
+ */
+console.log("\nEvery area of the school has a colour, and it is the rail's");
+
+const HUES = ["overview", "people", "academics", "finance", "school"] as const;
+
+for (const hue of HUES) {
+  const wanted = [`--color-hue-${hue}-50`, `--color-hue-${hue}-600`, `--color-hue-${hue}-band`];
+  const missing = wanted.filter((token) => !theme.has(token));
+  check(
+    `${hue} has a chip tint, an ink and a band`,
+    missing.length === 0,
+    missing.join(", ") || "3 tokens",
+  );
+}
+
+const hues = new Set(NAV.map((section) => section.hue));
+check(
+  "every section in the rail declares one of them",
+  [...hues].every((hue) => (HUES as readonly string[]).includes(hue)),
+  [...hues].join(", "),
+);
+
+/** Every page the rail can reach must resolve to a colour. */
+const unresolved = NAV.flatMap((section) => section.items.map((item) => item.href)).filter(
+  (href) => sectionFor(href) === null,
+);
+check(
+  "every page in the rail resolves to an area",
+  unresolved.length === 0,
+  unresolved.join(", ") || "all resolved",
+);
+
+check(
+  "a nested page inherits its list's area",
+  sectionFor("/students/abc123")?.hue === "people",
+  String(sectionFor("/students/abc123")?.hue),
+);
+check(
+  "the DEEPEST match wins, as it does in the rail",
+  sectionFor("/assessments/sheet")?.icon === "sheet",
+  `/assessments/sheet -> ${sectionFor("/assessments/sheet")?.icon}`,
+);
+check(
+  "a page outside the rail gets no colour, not a wrong one",
+  sectionFor("/account/password") === null,
+  "the fallback grey is what shows",
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
