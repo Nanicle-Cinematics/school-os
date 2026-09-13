@@ -3,10 +3,20 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { LEADERSHIP, OFFICE, canAccess, roleLabel } from "@/lib/permissions";
 import { ASSIGNABLE_ROLES, PRIVILEGED_ROLES, getUserList } from "@/lib/user-data";
-import { Alert, EmptyRow, PageHeader, tableHeadClass, thClass } from "../ui";
+import { Alert, PageHeader } from "../ui";
+import { UserPlus } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import { NewAccountForm } from "./account-form";
 
 export const metadata: Metadata = { title: "Users · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "Name" },
+  { label: "Signs in with" },
+  { label: "Roles" },
+  { label: "Last seen" },
+  { label: "Status" },
+];
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -46,27 +56,14 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
       />
 
       {error ? <Alert tone="error">{error}</Alert> : null}
-
-      <div className="overflow-hidden rounded-card border border-hairline bg-surface">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Signs in with</th>
-                <th className={thClass}>Roles</th>
-                <th className={thClass}>Last seen</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {users.length === 0 ? (
-                <EmptyRow colSpan={5}>No logins yet.</EmptyRow>
-              ) : (
-                users.map((entry) => {
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: UserPlus, title: "No logins yet. Invite the head, the bursar and the class teachers.", action: undefined }}
+          >
+            {users.map((entry) => {
                   const suspended = entry.statuses.every((status) => status === "SUSPENDED");
                   return (
-                    <tr key={entry.user.id} className="hover:bg-slate-50">
+                    <Row key={entry.user.id}>
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-900">
                         <Link href={`/users/${entry.user.id}`} className="hover:underline">
                           {entry.user.name}
@@ -108,14 +105,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
                           {suspended ? "suspended" : entry.user.passwordHash ? "active" : "no password"}
                         </span>
                       </td>
-                    </tr>
+                    </Row>
                   );
                 })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              }
+          </DataTable>
 
       {staffWithoutAccounts.length > 0 ? (
         <p className="text-xs text-slate-400">

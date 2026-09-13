@@ -309,7 +309,10 @@ const HIDE = {
 
 /** The same class the header uses, so a row's cells line up with it. */
 export function cellClass(column: Column) {
-  return `px-card py-2.5 ${column.numeric ? "text-right tabular-nums" : ""} ${
+  // `text-left` explicitly: a bare <th> centres, and the old tables got their
+  // alignment from a `text-left` on the <table> that this wrapper does not
+  // carry — so every header sat centred over a left-aligned column.
+  return `px-card py-2.5 ${column.numeric ? "text-right tabular-nums" : "text-left"} ${
     column.hideBelow ? HIDE[column.hideBelow] : ""
   }`.trim();
 }
