@@ -13,7 +13,6 @@ import { EditClassForm } from "../class-form";
 import { AssignmentsForm } from "./assignments-form";
 
 const COLUMNS: Column[] = [
-  { label: "" },
   { label: "Admission no." },
   { label: "Name" },
   { label: "Gender" },

@@ -22,6 +22,7 @@ const COLUMNS: Column[] = [
   { label: "Category" },
   { label: "Payee" },
   { label: "Amount", numeric: true },
+  { label: "" },
 ];
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {

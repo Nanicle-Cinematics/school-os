@@ -146,6 +146,76 @@ export async function getPlatformTotals() {
   });
 }
 
+/**
+ * What was actually COLLECTED, as opposed to what is owed.
+ *
+ * ⚠️ The console's headline said "Monthly revenue" and showed MRR — the sum of
+ * every active school's `monthlyFee`. That is a projection: what they should
+ * pay if they all pay. It is the most flattering number on the screen and the
+ * one least likely to be true, and there was nothing anywhere showing the
+ * money that had actually arrived.
+ *
+ * Every payment is already written down — `recordSubscriptionPayment` audits
+ * `school.subscription.paid` with the fee that applied at the time, so the
+ * history is a fact rather than a recomputation from today's price list. A
+ * school that was on GH₵500 last year and GH₵800 now shows what it actually
+ * paid each month.
+ *
+ * Cross-tenant by nature, so withBypass — the console belongs to no school.
+ */
+export type RevenueMonth = { month: string; label: string; amount: number; payments: number };
+
+export async function getRevenue(months = 6) {
+  return withBypass(async () => {
+    const since = new Date();
+    since.setMonth(since.getMonth() - (months - 1));
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+
+    const rows = await prisma.auditLog.findMany({
+      where: { action: "school.subscription.paid", createdAt: { gte: since } },
+      select: { createdAt: true, after: true, schoolId: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const fmt = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" });
+    const buckets = new Map<string, RevenueMonth>();
+    for (let i = 0; i < months; i += 1) {
+      const when = new Date(since);
+      when.setMonth(since.getMonth() + i);
+      const key = `${when.getFullYear()}-${String(when.getMonth() + 1).padStart(2, "0")}`;
+      buckets.set(key, { month: key, label: fmt.format(when), amount: 0, payments: 0 });
+    }
+
+    for (const row of rows) {
+      const key = `${row.createdAt.getFullYear()}-${String(row.createdAt.getMonth() + 1).padStart(2, "0")}`;
+      const bucket = buckets.get(key);
+      if (!bucket) continue;
+      // ⚠️ `amount` is whatever the fee WAS when the payment was taken. A null
+      // means the school had no price set — it is a payment that happened, so
+      // it is counted as one, but it adds nothing to the money.
+      const after = (row.after ?? {}) as { amount?: string | null };
+      bucket.amount += Number(after.amount ?? 0);
+      bucket.payments += 1;
+    }
+
+    const series = [...buckets.values()];
+    const thisMonth = series.at(-1)!;
+    const lastMonth = series.at(-2) ?? null;
+
+    return {
+      series,
+      thisMonth,
+      lastMonth,
+      /** Everything in the window, for "collected in the last N months". */
+      total: series.reduce((sum, m) => sum + m.amount, 0),
+      /** Payments with no price attached — a gap in the record, not revenue. */
+      unpriced: rows.filter((r) => ((r.after ?? {}) as { amount?: string | null }).amount == null)
+        .length,
+    };
+  });
+}
+
 /** One school, for the console's detail screen. */
 export async function getSchoolForPlatform(schoolId: string) {
   return withBypass(async () => {

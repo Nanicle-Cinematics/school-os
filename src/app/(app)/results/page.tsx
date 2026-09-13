@@ -16,7 +16,6 @@ import { ComputeForm } from "./compute-form";
 export const metadata: Metadata = { title: "Results · School OS" };
 
 const COLUMNS: Column[] = [
-  { label: "" },
   { label: "Class" },
   { label: "Form teacher" },
   { label: "Enrolled", numeric: true },

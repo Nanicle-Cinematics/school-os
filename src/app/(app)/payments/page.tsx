@@ -24,6 +24,7 @@ const COLUMNS: Column[] = [
   { label: "Method" },
   { label: "Applied to" },
   { label: "Status" },
+  { label: "" },
 ];
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {

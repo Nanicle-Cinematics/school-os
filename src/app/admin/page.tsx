@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
-import { PageHeader } from "../(app)/ui";
+import { Card, PageHeader } from "../(app)/ui";
 import { DataTable, Row, StatCard, type Column } from "../(app)/primitives";
-import { CircleAlert, CircleCheck, Home, TrendingUp } from "lucide-react";
+import { Banknote, CircleAlert, CircleCheck, Home, TrendingUp } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/platform-auth";
 import Link from "next/link";
-import { getPlatformOverview, getPlatformTotals } from "@/lib/platform-data";
+import { getPlatformOverview, getPlatformTotals, getRevenue } from "@/lib/platform-data";
 import { formatCedis } from "@/lib/money";
 import { logout } from "@/lib/auth-actions";
 import { NewSchoolForm } from "./school-form";
 
 const COLUMNS: Column[] = [
-  { label: "" },
   { label: "School" },
   { label: "Proprietor" },
   { label: "Plan" },
@@ -41,6 +40,10 @@ export default async function AdminPage() {
   const admin = await requirePlatformAdmin();
   const schools = await getPlatformOverview();
   const totals = await getPlatformTotals();
+  const revenue = await getRevenue();
+  // Bars are relative to the best month, so a quiet month reads as quiet
+  // rather than as an empty chart.
+  const best = Math.max(...revenue.series.map((m) => m.amount), 0);
 
   const onRoll = schools.reduce((total, school) => total + school.onRoll, 0);
   const needsAttention =
@@ -76,10 +79,15 @@ export default async function AdminPage() {
       </header>
 
       <div className="mx-auto max-w-6xl space-y-5 px-4 py-6">
-        {/* The business in four numbers. Ordered by what a Monday morning asks:
+        {/* The business in five numbers. Ordered by what a Monday morning asks:
             how many schools, how many children behind them, who has stopped
-            paying, and what the texts are costing. */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            paying, what arrived this month, and what is owed if everybody pays.
+
+            ⚠️ The last two are DIFFERENT numbers and used to be one. "Monthly
+            revenue" showed MRR — the sum of every active school's fee, which is
+            what they should pay rather than what they did. It was the most
+            flattering figure on the screen and the one least likely to be true. */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <StatCard
             label="Schools"
             value={String(totals.schools)}
@@ -101,7 +109,22 @@ export default async function AdminPage() {
             severity={needsAttention > 0 ? "blocking" : "done"}
           />
           <StatCard
-            label="Monthly revenue"
+            label="Collected this month"
+            value={formatCedis(revenue.thisMonth.amount)}
+            caption={
+              revenue.lastMonth
+                ? `${revenue.thisMonth.payments} payment${
+                    revenue.thisMonth.payments === 1 ? "" : "s"
+                  } · ${formatCedis(revenue.lastMonth.amount)} last month`
+                : `${revenue.thisMonth.payments} payment${
+                    revenue.thisMonth.payments === 1 ? "" : "s"
+                  } so far`
+            }
+            icon={Banknote}
+            severity={revenue.thisMonth.amount > 0 ? "done" : "neutral"}
+          />
+          <StatCard
+            label="Billing monthly"
             value={formatCedis(totals.mrr)}
             /* SMS spend rides along here rather than in its own card, but it
                ALWAYS rides: it is the cost that scales with use, and hiding it
@@ -118,6 +141,43 @@ export default async function AdminPage() {
             icon={TrendingUp}
           />
         </div>
+
+        {/* Six months of what actually ARRIVED.
+            A single month's figure has no shape — GH₵1,300 is good or bad only
+            against the months either side of it, and this is the screen where
+            an owner decides whether the business is growing. */}
+        <Card title="Collected, by month">
+          <div className="px-card pb-5 pt-4">
+            <ul className="space-y-2.5">
+              {revenue.series.map((month) => (
+                <li key={month.month} className="flex items-center gap-3">
+                  <span className="w-20 shrink-0 text-caption text-slate-500">{month.label}</span>
+                  <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <span
+                      className="block h-full rounded-full bg-brand-600"
+                      style={{
+                        width: `${
+                          best > 0 ? Math.round((month.amount / best) * 100) : 0
+                        }%`,
+                      }}
+                    />
+                  </span>
+                  <span className="w-24 shrink-0 text-right text-body tabular-nums text-slate-900">
+                    {month.amount > 0 ? formatCedis(month.amount) : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-caption text-slate-500">
+              {formatCedis(revenue.total)} over {revenue.series.length} months
+              {revenue.unpriced > 0
+                ? ` · ${revenue.unpriced} payment${
+                    revenue.unpriced === 1 ? "" : "s"
+                  } recorded with no fee set, so counted but not totalled`
+                : ""}
+            </p>
+          </div>
+        </Card>
 
         {/* The morning's work: who owes now, and who owes this week. Overdue
             first, because a school past its date is losing access on a clock. */}

@@ -13,7 +13,6 @@ import { SubmitButton } from "../submit-button";
 import { AcademicForm, FeesForm, ProfileForm, SmsForm } from "./settings-forms";
 
 const COLUMNS: Column[] = [
-  { label: "" },
   { label: "Year" },
   { label: "Term" },
   { label: "Runs" },
