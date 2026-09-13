@@ -40,8 +40,6 @@ export function CollectionsChart({
    * says which week of how many, which is the fact that makes an early chart
    * read as early.
    */
-  const ahead = Math.max(0, Math.min(termWeeks - weeks.length, 12 - weeks.length));
-
   if (weeks.length === 0) {
     return (
       <Card title="Fees collected by week">
@@ -51,6 +49,60 @@ export function CollectionsChart({
       </Card>
     );
   }
+
+  /**
+   * ⚠️ Under three weeks, this is NOT a bar chart.
+   *
+   * The runway of empty slots was meant to say "the term is young". With one
+   * week of data it said something else entirely: one green bar marooned in
+   * eleven grey ghosts reads as a chart that failed to load, which is the worst
+   * thing a figure on a dashboard can look like — and a head teacher who
+   * believes the dashboard is broken stops believing the rest of it.
+   *
+   * A chart of one point is not a chart. So until there are three weeks to
+   * compare, the card shows the fact plainly: what has come in, against what
+   * was billed, and how far into the term that is.
+   */
+  if (weeks.length < 3) {
+    const pct = billed > 0 ? Math.min(100, (total / billed) * 100) : 0;
+    return (
+      <Card title="Fees collected by week">
+        <div className="px-4.5 pb-5 pt-4">
+          <p className="font-heading text-[30px] leading-none tabular-nums text-slate-900">
+            {formatCedis(total)}
+          </p>
+          <p className="mt-1.5 text-[13px] text-slate-500">
+            collected of {formatCedis(billed)} billed
+            {currentWeek > 0 && termWeeks > 0
+              ? ` · week ${currentWeek} of ${termWeeks}`
+              : ""}
+          </p>
+          <span className="mt-4 block h-2.5 overflow-hidden rounded-full bg-slate-100">
+            <span
+              className="block h-full rounded-full bg-brand-600"
+              style={{ width: `${pct}%` }}
+            />
+          </span>
+          <p className="mt-2.5 text-xs text-slate-500">
+            {weeks.length === 1
+              ? "Week by week comparison begins once the term has a few weeks behind it."
+              : "One more week and this becomes a week-by-week chart."}
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  /**
+   * And once it IS a chart, the runway is no longer than the term behind it.
+   * Four weeks of data earn at most four empty slots; fifteen weeks of runway
+   * behind three bars is the same marooning by a smaller margin.
+   */
+  const ahead = Math.max(
+    0,
+    Math.min(termWeeks - weeks.length, 12 - weeks.length, weeks.length),
+  );
+
 
   return (
     <Card title="Fees collected by week">
