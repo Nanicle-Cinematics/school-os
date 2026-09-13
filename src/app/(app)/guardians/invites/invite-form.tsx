@@ -151,7 +151,7 @@ export function InviteForm({
             ) : null}
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="text-xs font-semibold text-slate-500">
                 The message
               </p>
               <p className="mt-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">

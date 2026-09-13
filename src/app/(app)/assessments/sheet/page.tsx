@@ -64,7 +64,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
       <Card>
         <form method="get" className="flex flex-wrap items-end gap-3 p-4">
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span className="mb-1 block text-xs font-medium text-slate-500">
               Term
             </span>
             <select name="term" defaultValue={termId} className={inputClass}>
@@ -77,7 +77,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
           </label>
 
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span className="mb-1 block text-xs font-medium text-slate-500">
               Class
             </span>
             <select name="class" defaultValue={classGroupId} className={inputClass}>
@@ -91,7 +91,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
           </label>
 
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span className="mb-1 block text-xs font-medium text-slate-500">
               Subject
             </span>
             <select name="subject" defaultValue={subjectId} className={inputClass}>

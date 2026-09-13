@@ -103,7 +103,7 @@ export function AssignmentsForm({
 
       <div className="flex flex-wrap items-end gap-3 border-b border-slate-100 p-4">
         <label className="text-sm">
-          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+          <span className="mb-1 block text-xs font-medium text-slate-500">
             Give every subject to
           </span>
           <select

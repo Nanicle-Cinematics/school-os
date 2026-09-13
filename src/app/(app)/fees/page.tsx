@@ -151,7 +151,7 @@ export default async function FeesPage() {
                   </div>
                 ))}
                 <div className="ml-auto min-w-32 border-l border-slate-100 pl-6">
-                  <p className="text-xs font-medium uppercase text-slate-500">
+                  <p className="text-xs font-medium text-slate-500">
                     Total per term
                   </p>
                   <p className="text-base font-semibold tabular-nums text-slate-900">

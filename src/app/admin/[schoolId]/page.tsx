@@ -133,7 +133,7 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
             )}
             {school.phone || school.email ? (
               <div className="px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-semibold text-slate-500">
                   School office
                 </p>
                 <p className="text-sm text-slate-600">

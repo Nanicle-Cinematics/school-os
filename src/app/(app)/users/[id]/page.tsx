@@ -51,19 +51,19 @@ export default async function UserDetailPage({ params }: PageProps<"/users/[id]"
       <Card title="Account">
         <dl className="grid gap-3 p-4 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Status</dt>
+            <dt className="text-xs text-slate-500">Status</dt>
             <dd className={`mt-0.5 font-medium ${suspended ? "text-red-600" : "text-green-700"}`}>
               {suspended ? "Suspended" : "Active"}
             </dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Last signed in</dt>
+            <dt className="text-xs text-slate-500">Last signed in</dt>
             <dd className="mt-0.5 text-slate-900">
               {user.lastLoginAt ? dateFmt.format(user.lastLoginAt) : "Never"}
             </dd>
           </div>
           <div>
-            <dt className="text-xs uppercase tracking-wide text-slate-500">Open sessions</dt>
+            <dt className="text-xs text-slate-500">Open sessions</dt>
             <dd className="mt-0.5 tabular-nums text-slate-900">{activeSessions}</dd>
           </div>
         </dl>

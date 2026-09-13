@@ -80,7 +80,23 @@ check(
 
 console.log("\nSentence case, and one icon set");
 
-const shouty = hits(/\buppercase\b/, (path) => OWNS(path, "primitives.tsx"));
+/**
+ * ⚠️ Two named exceptions, and they are DOCUMENTS.
+ *
+ * A report card and a fee bill are printed and handed to a parent. Their
+ * column headers are capitalised because that is the convention on a Ghanaian
+ * terminal report, not because somebody reached for `uppercase` to make a
+ * caption look like a caption — and changing the look of a document a school
+ * signs and stamps is a different decision from tidying the chrome around it.
+ *
+ * Listed by name rather than skipped by a pattern, so adding a third is a
+ * deliberate act somebody has to write down.
+ */
+const DOCUMENTS = ["results/report-card.tsx", "invoices/invoice-bill.tsx"];
+
+const shouty = hits(/\buppercase\b/, (path) =>
+  OWNS(path, "primitives.tsx", ...DOCUMENTS),
+);
 check(
   "no ALL CAPS labels",
   shouty.length === 0,

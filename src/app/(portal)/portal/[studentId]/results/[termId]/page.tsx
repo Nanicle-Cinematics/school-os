@@ -52,7 +52,7 @@ export default async function PortalReportCardPage({
           </p>
           {data.paymentInstructions ? (
             <div className="mt-3 border-t border-amber-200 pt-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+              <p className="text-xs font-semibold text-amber-800">
                 How to pay
               </p>
               <p className="mt-1 whitespace-pre-line text-sm text-amber-900">

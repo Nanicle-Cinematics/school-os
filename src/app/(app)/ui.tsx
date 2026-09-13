@@ -204,7 +204,7 @@ export const thClass = "px-4 py-2.5 font-extrabold";
  * outside the rail, so nothing turns transparent when the variable is absent.
  */
 export const tableHeadClass =
-  "border-b border-hairline bg-[var(--section-band,var(--color-slate-50))] text-[10.5px] uppercase tracking-[0.11em] text-slate-500";
+  "border-b border-hairline bg-[var(--section-band,var(--color-slate-50))] text-caption font-semibold text-slate-500";
 
 /**
  * Initials in a tinted square. Rows about a person read faster with a fixed
