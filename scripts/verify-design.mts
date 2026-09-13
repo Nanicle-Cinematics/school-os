@@ -36,6 +36,8 @@ const OWNS = (path: string, ...owners: string[]) => owners.some((o) => path.ends
 const hits = (re: RegExp, allow: (path: string) => boolean = () => false) =>
   files.filter((f) => !allow(f.path) && re.test(f.text)).map((f) => f.path.replace("src/app/", ""));
 
+const DOCUMENTS = ["results/report-card.tsx", "invoices/invoice-bill.tsx"];
+
 console.log("Colour says one thing at a time");
 
 /**
@@ -52,6 +54,28 @@ check(
   "no page paints itself with an area hue",
   areaOutsideRail.length === 0,
   areaOutsideRail.join(", ") || "only the rail and the title chip",
+);
+
+/**
+ * ⚠️ And the stock families are not a second severity palette.
+ *
+ * `bg-amber-50` with `text-amber-700` was the warning pill, written out by hand
+ * in twenty-one places — and written by hand it drifts: the same amber dressed
+ * a held report card, a form hint and a decorative border, so the question
+ * "does amber always mean needs-attention-soon?" had no answer. Using the
+ * tokens is what makes the answer yes.
+ *
+ * The documents are excepted: a report card's green header band and a cancelled
+ * bill's red stamp are PRINT, not chrome.
+ */
+const stockStatus = hits(
+  /\b(?:bg|text|border)-(?:amber|red|green|blue)-[0-9]+\b/,
+  (path) => OWNS(path, ...DOCUMENTS),
+);
+check(
+  "status colour comes from the tokens, not from stock Tailwind",
+  stockStatus.length === 0,
+  stockStatus.length ? stockStatus.join(", ") : "one palette for severity",
 );
 
 console.log("\nOne set of primitives, not thirty copies");
@@ -130,7 +154,7 @@ console.log("\nSentence case, and one icon set");
  * Listed by name rather than skipped by a pattern, so adding a third is a
  * deliberate act somebody has to write down.
  */
-const DOCUMENTS = ["results/report-card.tsx", "invoices/invoice-bill.tsx"];
+
 
 const shouty = hits(/\buppercase\b/, (path) =>
   OWNS(path, "primitives.tsx", ...DOCUMENTS),
