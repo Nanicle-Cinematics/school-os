@@ -103,12 +103,12 @@ export function NewSchoolForm() {
       </div>
 
       {state.error ? (
-        <p role="alert" className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="mt-4 rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger-ink">
           {state.error}
         </p>
       ) : null}
       {state.ok ? (
-        <p role="alert" className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p role="alert" className="mt-4 rounded-lg bg-success-tint px-3 py-2 text-sm text-success-ink">
           {state.ok}
         </p>
       ) : null}

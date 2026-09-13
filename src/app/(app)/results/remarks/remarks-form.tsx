@@ -109,7 +109,7 @@ export function RemarksForm({
                   <p className="text-xs text-slate-400">{student.admissionNo}</p>
                 </div>
                 {published ? (
-                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  <span className="rounded-full bg-warning-tint px-2 py-0.5 text-xs font-medium text-warning-ink">
                     card already published
                   </span>
                 ) : null}

@@ -295,7 +295,7 @@ export default async function DashboardPage() {
                             : ""}
                         </p>
                       </div>
-                      <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-danger-ink">
                         {formatCedis(Number(invoice.balance))}
                       </span>
                     </li>
@@ -307,11 +307,11 @@ export default async function DashboardPage() {
               <dl className="divide-y divide-slate-100">
                 {[
                   ["Billed", formatCedis(data.billed), "text-slate-900"],
-                  ["Collected", formatCedis(data.collected), "text-green-700"],
+                  ["Collected", formatCedis(data.collected), "text-success-ink"],
                   [
                     "Outstanding",
                     formatCedis(data.outstanding),
-                    "text-red-600",
+                    "text-danger-ink",
                   ],
                   ["Expenditure", formatCedis(data.spent), "text-slate-900"],
                   [

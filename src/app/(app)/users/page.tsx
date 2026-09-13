@@ -79,7 +79,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
                         {entry.user.email ?? entry.user.phone ?? (
-                          <span className="text-amber-600">nothing set</span>
+                          <span className="text-warning-ink">nothing set</span>
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-slate-600">
@@ -96,10 +96,10 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
                         <span
                           className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                             suspended
-                              ? "bg-red-50 text-red-700"
+                              ? "bg-danger-tint text-danger-ink"
                               : entry.user.passwordHash
-                                ? "bg-green-50 text-green-700"
-                                : "bg-amber-50 text-amber-700"
+                                ? "bg-success-tint text-success-ink"
+                                : "bg-warning-tint text-warning-ink"
                           }`}
                         >
                           {suspended ? "suspended" : entry.user.passwordHash ? "active" : "no password"}

@@ -69,7 +69,7 @@ export default async function ClassesPage() {
                       </td>
                       <td
                         className={`whitespace-nowrap px-4 py-2.5 tabular-nums ${
-                          over ? "font-medium text-red-600" : "text-slate-600"
+                          over ? "font-medium text-danger-ink" : "text-slate-600"
                         }`}
                       >
                         {group.enrolled}

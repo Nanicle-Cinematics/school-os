@@ -93,7 +93,7 @@ export default async function FeesPage() {
       </Card>
 
       {missing.length > 0 && categories.length > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-hairline bg-warning-tint px-4 py-3 text-sm text-warning-ink">
           <span className="font-medium">No fee structure yet for:</span>{" "}
           {missing.map((level) => level.name).join(", ")}. Students in these
           levels will be skipped when you generate invoices.

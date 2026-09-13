@@ -122,10 +122,10 @@ export default async function MessagesPage() {
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
                       {campaign.totalRecipients}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-green-700">
+                    <td className="px-4 py-2.5 text-right tabular-nums text-success-ink">
                       {campaign.sentCount}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-red-600">
+                    <td className="px-4 py-2.5 text-right tabular-nums text-danger-ink">
                       {campaign.failedCount || "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">

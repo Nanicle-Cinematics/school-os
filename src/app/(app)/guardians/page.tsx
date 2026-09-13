@@ -71,7 +71,7 @@ export default async function GuardiansPage({ searchParams }: PageProps<"/guardi
                       </td>
                       <td className="px-4 py-2.5 text-slate-600">
                         {guardian.students.length === 0 ? (
-                          <span className="text-amber-600">none linked</span>
+                          <span className="text-warning-ink">none linked</span>
                         ) : (
                           guardian.students
                             .map((link) => `${link.student.firstName} ${link.student.lastName}`)

@@ -99,7 +99,7 @@ export function StructureForm({
       <div className="mt-5">
         <p className="mb-2 text-sm font-medium text-slate-700">Fee items (GHS per term)</p>
         {categories.length === 0 ? (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="rounded-lg border border-hairline bg-warning-tint px-3 py-2 text-sm text-warning-ink">
             No fee items exist yet, so there is nothing to price. Add them in the Fee items card
             below first — a structure is a set of amounts, one per item.
           </p>

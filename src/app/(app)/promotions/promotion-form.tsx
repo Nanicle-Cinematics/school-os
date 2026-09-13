@@ -91,7 +91,7 @@ export function PromotionForm({
                         {row.admissionNo}
                       </span>
                       {row.alreadyPlacedIn ? (
-                        <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">
+                        <span className="ml-2 rounded bg-warning-tint px-1.5 py-0.5 text-xs text-warning-ink">
                           already in {row.alreadyPlacedIn}
                         </span>
                       ) : null}

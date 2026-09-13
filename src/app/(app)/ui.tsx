@@ -159,8 +159,8 @@ export function Alert({
       role="alert"
       className={`rounded-control px-3.5 py-2.5 text-sm ${
         tone === "error"
-          ? "bg-red-50 text-red-700"
-          : "bg-green-50 text-green-700"
+          ? "bg-danger-tint text-danger-ink"
+          : "bg-success-tint text-success-ink"
       }`}
     >
       {children}
@@ -169,15 +169,15 @@ export function Alert({
 }
 
 const STATUS_TONE: Record<string, string> = {
-  PAID: "bg-green-50 text-green-700",
-  PARTIALLY_PAID: "bg-amber-50 text-amber-700",
-  ISSUED: "bg-blue-50 text-blue-700",
-  OVERDUE: "bg-red-50 text-red-700",
+  PAID: "bg-success-tint text-success-ink",
+  PARTIALLY_PAID: "bg-warning-tint text-warning-ink",
+  ISSUED: "bg-info-tint text-info-ink",
+  OVERDUE: "bg-danger-tint text-danger-ink",
   DRAFT: "bg-slate-100 text-slate-500",
   CANCELLED: "bg-slate-100 text-slate-400 line-through",
-  CONFIRMED: "bg-green-50 text-green-700",
-  REVERSED: "bg-red-50 text-red-700 line-through",
-  PENDING: "bg-amber-50 text-amber-700",
+  CONFIRMED: "bg-success-tint text-success-ink",
+  REVERSED: "bg-danger-tint text-danger-ink line-through",
+  PENDING: "bg-warning-tint text-warning-ink",
 };
 
 export function StatusBadge({ status }: { status: string }) {
@@ -288,7 +288,7 @@ export function ScoreBadge({ value }: { value: number | null }) {
       ? "bg-brand-50 text-brand-ink"
       : value >= 50
         ? "bg-accent-50 text-accent-700"
-        : "bg-red-50 text-red-600";
+        : "bg-danger-tint text-danger-ink";
   return (
     <span
       className={`inline-block min-w-[3.25rem] rounded-full px-2.5 py-1 text-center text-sm font-extrabold tabular-nums ${tone}`}

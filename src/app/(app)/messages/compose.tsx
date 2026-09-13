@@ -50,7 +50,7 @@ export function Compose({
       <h2 className="text-sm font-semibold text-slate-900">Compose message</h2>
 
       {!smsEnabled ? (
-        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-ink">
           SMS is switched off in Settings, and no gateway credentials are configured. You can still
           compose and preview — messages will be recorded as a dry run and nothing will be sent.
         </p>
@@ -196,7 +196,7 @@ export function Compose({
             about GHS {preview.cost?.toFixed(2)}
           </p>
           {preview.encoding === "UCS2" ? (
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-warning-ink">
               Your message contains a non-GSM character, which cuts each segment from 160 to 70
               characters and multiplies the cost. Replacing smart quotes or emoji usually fixes it.
             </p>

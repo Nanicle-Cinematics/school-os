@@ -86,7 +86,7 @@ export function AssetForm({ slot }: { slot: AssetSlot }) {
             <input type="hidden" name="kind" value={slot.kind} />
             <button
               type="submit"
-              className="text-xs font-medium text-red-600 transition hover:text-red-700"
+              className="text-xs font-medium text-danger-ink transition hover:text-danger-ink"
             >
               Remove
             </button>

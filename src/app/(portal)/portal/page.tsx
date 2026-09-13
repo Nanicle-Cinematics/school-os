@@ -2,6 +2,9 @@ import Link from "next/link";
 import { requireGuardian } from "@/lib/portal-auth";
 import { getMyChildren } from "@/lib/portal-data";
 import { formatCedis } from "@/lib/money";
+import { Users } from "lucide-react";
+import { PageHeader, Card } from "../../(app)/ui";
+import { EmptyState } from "../../(app)/primitives";
 
 export const metadata = { title: "My children · School OS" };
 
@@ -19,27 +22,29 @@ export default async function PortalHomePage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-heading text-2xl font-extrabold tracking-tight text-slate-900">
-          Good to see you, {ctx.name.split(" ")[0]}
-        </h1>
-        <p className="mt-1 text-sm text-slate-600">
-          {children.length === 1
+      {/* The same PageHeader as the staff app. A parent and a bursar are
+          looking at one product, and the portal keeping its own heading sizes
+          is how a re-skin ends up two thirds done. The section chip simply does
+          not render here — /portal is not a rail item, and `sectionFor`
+          returning null is the designed answer rather than a gap. */}
+      <PageHeader
+        title={`Good to see you, ${ctx.name.split(" ")[0]}`}
+        subtitle={
+          children.length === 1
             ? "Your child at this school."
-            : `Your ${children.length} children at this school.`}
-        </p>
-      </div>
+            : `Your ${children.length} children at this school.`
+        }
+      />
 
       {children.length === 0 ? (
-        // A guardian record with no children linked. Says who to ask rather than
-        // showing an empty page that reads as though the school lost them.
-        <div className="rounded-card border border-hairline bg-surface shadow-card p-6 text-center">
-          <p className="text-sm font-semibold text-slate-900">No children linked yet</p>
-          <p className="mt-1 text-sm text-slate-600">
-            The school has not yet linked a pupil to your account. Please ask the
-            office to add your child to your record.
-          </p>
-        </div>
+        /* A guardian record with no children linked. Says who to ask, rather
+           than an empty page that reads as though the school lost them. */
+        <Card>
+          <EmptyState
+            icon={Users}
+            title="The school has not yet linked a pupil to your account. Please ask the office to add your child to your record."
+          />
+        </Card>
       ) : (
         <ul className="space-y-3">
           {children.map((child) => (

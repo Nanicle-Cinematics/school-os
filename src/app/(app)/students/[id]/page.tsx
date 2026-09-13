@@ -244,7 +244,7 @@ export default async function StudentDetailPage({
                     <td
                       className={`whitespace-nowrap px-4 py-2 tabular-nums ${
                         invoice.balance.greaterThan(0)
-                          ? "font-medium text-red-600"
+                          ? "font-medium text-danger-ink"
                           : "text-slate-600"
                       }`}
                     >

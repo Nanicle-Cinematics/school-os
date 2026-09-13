@@ -112,7 +112,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
                       {row.published > 0 ? (
-                        <span className="font-medium text-green-700">{row.published}</span>
+                        <span className="font-medium text-success-ink">{row.published}</span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}

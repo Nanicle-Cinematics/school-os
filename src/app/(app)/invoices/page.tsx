@@ -207,10 +207,10 @@ export default async function InvoicesPage({
                 <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-slate-700">
                   {formatCedis(invoice.total)}
                 </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-green-700">
+                <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-success-ink">
                   {formatCedis(invoice.amountPaid)}
                 </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums text-red-600">
+                <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums text-danger-ink">
                   {Number(invoice.balance) > 0
                     ? formatCedis(invoice.balance)
                     : "—"}
@@ -220,7 +220,7 @@ export default async function InvoicesPage({
                           on every read, because no row is ever written OVERDUE. */}
                   <StatusBadge status={displayStatus(invoice)} />
                   {daysOverdue(invoice) !== null ? (
-                    <span className="ml-2 text-xs text-red-600">
+                    <span className="ml-2 text-xs text-danger-ink">
                       {daysOverdue(invoice)}d
                     </span>
                   ) : null}

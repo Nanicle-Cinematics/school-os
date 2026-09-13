@@ -150,12 +150,12 @@ export function SubscriptionForm({
       </div>
 
       {state.error ? (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger-ink">
           {state.error}
         </p>
       ) : null}
       {state.ok ? (
-        <p role="alert" className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p role="alert" className="rounded-lg bg-success-tint px-3 py-2 text-sm text-success-ink">
           {state.ok}
         </p>
       ) : null}
@@ -173,12 +173,12 @@ export function SubscriptionForm({
           late does not shorten the month bought. */}
       <div className="mt-4 border-t border-slate-100 pt-4">
         {paid.ok ? (
-          <p role="alert" className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+          <p role="alert" className="mb-3 rounded-lg bg-success-tint px-3 py-2 text-sm text-success-ink">
             {paid.ok}
           </p>
         ) : null}
         {paid.error ? (
-          <p role="alert" className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p role="alert" className="mb-3 rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger-ink">
             {paid.error}
           </p>
         ) : null}

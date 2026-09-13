@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PageHeader } from "../(app)/ui";
 import { DataTable, Row, StatCard, type Column } from "../(app)/primitives";
 import { CircleAlert, CircleCheck, Home, TrendingUp } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/platform-auth";
@@ -28,8 +29,8 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 });
 
 const PLAN_TONE: Record<string, string> = {
-  TRIAL: "bg-amber-50 text-amber-700",
-  STANDARD: "bg-green-50 text-green-700",
+  TRIAL: "bg-warning-tint text-warning-ink",
+  STANDARD: "bg-success-tint text-success-ink",
   INSTITUTION_PLUS: "bg-brand-600 text-white",
 };
 
@@ -164,15 +165,15 @@ export default async function AdminPage() {
         ) : null}
 
         {totals.trialsEndingSoon.length > 0 ? (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-sm font-semibold text-amber-700">
+          <div className="rounded-2xl border border-hairline bg-warning-tint px-4 py-3">
+            <p className="text-sm font-semibold text-warning-ink">
               {totals.trialsEndingSoon.length} trial
               {totals.trialsEndingSoon.length === 1 ? "" : "s"} ending within
               the week
             </p>
             <ul className="mt-1 space-y-0.5">
               {totals.trialsEndingSoon.map((school) => (
-                <li key={school.id} className="text-sm text-amber-700">
+                <li key={school.id} className="text-sm text-warning-ink">
                   <Link
                     href={`/admin/${school.id}`}
                     className="font-medium underline"
@@ -187,17 +188,18 @@ export default async function AdminPage() {
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Schools</h1>
-            <p className="mt-0.5 text-sm text-slate-500">
-              Every tenant on the platform. This console sits outside them all.
-            </p>
-          </div>
-          <NewSchoolForm />
-        </div>
-          <DataTable
-            columns={COLUMNS}
+        {/* The console is a different AUDIENCE, not a different product. It had
+            its own heading size, its own Stat and its own table markup, so it
+            drifted from the school screens by construction. The section chip
+            does not render — /admin is outside the rail — which is the designed
+            answer, not a gap. */}
+        <PageHeader
+          title="Schools"
+          subtitle="Every tenant on the platform. This console sits outside them all."
+          action={<NewSchoolForm />}
+        />
+        <DataTable
+          columns={COLUMNS}
             empty={{ icon: Home, title: "No schools provisioned yet.", action: undefined }}
           >
             {schools.map((school) => (
@@ -223,7 +225,7 @@ export default async function AdminPage() {
                             </span>
                           </>
                         ) : (
-                          <span className="text-amber-600">no proprietor</span>
+                          <span className="text-warning-ink">no proprietor</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5">

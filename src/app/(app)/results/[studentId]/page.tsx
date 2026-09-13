@@ -51,7 +51,7 @@ export default async function ReportCardPage({
       </div>
 
       {hold ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 print:hidden">
+        <div className="rounded-xl border border-hairline bg-warning-tint p-3 text-sm text-warning-ink print:hidden">
           <strong className="font-semibold">Held from the parent.</strong>{" "}
           {formatCedis(hold.balance)} outstanding on invoice {hold.invoiceNo}, and the
           school withholds cards in arrears. It is left out of the class print run and

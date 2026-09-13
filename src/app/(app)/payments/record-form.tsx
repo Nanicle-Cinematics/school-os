@@ -102,11 +102,11 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
           <span className="font-medium text-slate-900">{selected.label}</span>
           <span className="text-slate-500"> · {selected.className}</span>
           {selected.balance > 0 ? (
-            <span className="ml-2 font-medium text-red-600">
+            <span className="ml-2 font-medium text-danger-ink">
               Outstanding GHS {selected.balance.toFixed(2)}
             </span>
           ) : (
-            <span className="ml-2 font-medium text-green-700">No outstanding balance</span>
+            <span className="ml-2 font-medium text-success-ink">No outstanding balance</span>
           )}
         </div>
       ) : null}

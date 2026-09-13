@@ -52,7 +52,7 @@ export default async function UserDetailPage({ params }: PageProps<"/users/[id]"
         <dl className="grid gap-3 p-4 text-sm sm:grid-cols-3">
           <div>
             <dt className="text-xs text-slate-500">Status</dt>
-            <dd className={`mt-0.5 font-medium ${suspended ? "text-red-600" : "text-green-700"}`}>
+            <dd className={`mt-0.5 font-medium ${suspended ? "text-danger-ink" : "text-success-ink"}`}>
               {suspended ? "Suspended" : "Active"}
             </dd>
           </div>

@@ -53,7 +53,7 @@ function AskForm({ onSent }: { onSent: (state: ForgotState) => void }) {
       </div>
 
       {state.error ? (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger-ink">
           {state.error}
         </p>
       ) : null}
@@ -71,7 +71,7 @@ function CodeForm({ phone, notice }: { phone: string; notice?: string }) {
   if (done) {
     return (
       <div className="space-y-4">
-        <p role="alert" className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p role="alert" className="rounded-lg bg-success-tint px-3 py-2 text-sm text-success-ink">
           {state.ok}
         </p>
         <Link
@@ -139,7 +139,7 @@ function CodeForm({ phone, notice }: { phone: string; notice?: string }) {
       </div>
 
       {state.error ? (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger-ink">
           {state.error}
         </p>
       ) : null}

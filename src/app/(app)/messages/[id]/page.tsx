@@ -72,7 +72,7 @@ export default async function CampaignPage({
         </p>
 
         {dryRun ? (
-          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p className="mt-3 rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-ink">
             <span className="font-medium">Dry run.</span> No SMS gateway is
             configured, so nothing was actually delivered. Every message below
             was rendered and recorded exactly as it would have been sent — add{" "}

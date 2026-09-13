@@ -39,11 +39,11 @@ export default async function PortalReportCardPage({
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">{back}</div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-          <h2 className="font-heading text-base font-extrabold text-amber-900">
+        <div className="rounded-card border border-hairline bg-warning-tint p-card">
+          <h2 className="font-heading text-section text-warning-ink">
             This report card is being held
           </h2>
-          <p className="mt-2 text-sm text-amber-900">
+          <p className="mt-2 text-sm text-warning-ink">
             The school releases report cards once fees are settled.{" "}
             <strong className="font-semibold tabular-nums">
               {formatCedis(data.hold.balance)}
@@ -51,16 +51,16 @@ export default async function PortalReportCardPage({
             is outstanding on invoice {data.hold.invoiceNo}.
           </p>
           {data.paymentInstructions ? (
-            <div className="mt-3 border-t border-amber-200 pt-3">
-              <p className="text-xs font-semibold text-amber-800">
+            <div className="mt-3 border-t border-hairline pt-3">
+              <p className="text-xs font-semibold text-warning-ink">
                 How to pay
               </p>
-              <p className="mt-1 whitespace-pre-line text-sm text-amber-900">
+              <p className="mt-1 whitespace-pre-line text-sm text-warning-ink">
                 {data.paymentInstructions}
               </p>
             </div>
           ) : null}
-          <p className="mt-3 text-xs text-amber-800">
+          <p className="mt-3 text-xs text-warning-ink">
             The card appears here as soon as the payment is recorded. Speak to the
             school office if you have already paid.
           </p>

@@ -72,7 +72,7 @@ export function AssignmentsForm({
       {state.ok ? <Alert tone="success">{state.ok}</Alert> : null}
 
       {previousYearName && prefilled ? (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-ink">
           No assignments for this year yet, so the teachers below are carried over from{" "}
           {previousYearName}. Change anything that has moved, then save — nothing is written until
           you do.
@@ -88,7 +88,7 @@ export function AssignmentsForm({
       ) : null}
 
       {needsFormTeacher ? (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-ink">
           One teacher takes every subject at this level, but this class has no form teacher yet.
           Set one above and they will be filled in here.
         </p>

@@ -68,7 +68,7 @@ export default async function SubjectsPage() {
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">
                       {subject.levelSubjects.length === 0 ? (
-                        <span className="text-amber-600">no levels</span>
+                        <span className="text-warning-ink">no levels</span>
                       ) : subject.levelSubjects.length === levelCount ? (
                         "All levels"
                       ) : (

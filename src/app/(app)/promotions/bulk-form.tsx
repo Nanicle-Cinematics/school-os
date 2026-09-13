@@ -95,7 +95,7 @@ export function BulkPromotionForm({
                   </td>
                   <td className="whitespace-nowrap px-4 py-2 text-slate-600">
                     {row.blocked ? (
-                      <span className="text-amber-600">no class above — skipped</span>
+                      <span className="text-warning-ink">no class above — skipped</span>
                     ) : (
                       row.destinationLabel
                     )}

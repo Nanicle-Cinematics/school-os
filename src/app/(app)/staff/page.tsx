@@ -20,9 +20,9 @@ const COLUMNS: Column[] = [
 ];
 
 const STATUS_TONE: Record<string, string> = {
-  ACTIVE: "bg-green-50 text-green-700",
-  ON_LEAVE: "bg-amber-50 text-amber-700",
-  SUSPENDED: "bg-red-50 text-red-700",
+  ACTIVE: "bg-success-tint text-success-ink",
+  ON_LEAVE: "bg-warning-tint text-warning-ink",
+  SUSPENDED: "bg-danger-tint text-danger-ink",
   RESIGNED: "bg-slate-100 text-slate-500",
   RETIRED: "bg-slate-100 text-slate-500",
 };

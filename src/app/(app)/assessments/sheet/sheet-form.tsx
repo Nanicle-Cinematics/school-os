@@ -165,7 +165,7 @@ export function SheetForm({
                     />
                   </label>
                   {column.status === "APPROVED" ? (
-                    <p className="mt-0.5 text-[10px] text-amber-600">locked</p>
+                    <p className="mt-0.5 text-[10px] text-warning-ink">locked</p>
                   ) : null}
                 </th>
               ))}

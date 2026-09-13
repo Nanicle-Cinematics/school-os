@@ -79,7 +79,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             {railTerm ? (
               <p className="truncate text-sm font-semibold text-slate-600">{railTerm.label}</p>
             ) : (
-              <p className="truncate text-sm font-semibold text-amber-600">No current term set</p>
+              <p className="truncate text-sm font-semibold text-warning-ink">No current term set</p>
             )}
           </div>
 
@@ -131,8 +131,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             role="status"
             className={`border-b px-4 py-2.5 text-sm lg:px-7 print:hidden ${
               auth.subscription.readOnly
-                ? "border-red-200 bg-red-50 text-red-700"
-                : "border-amber-200 bg-amber-50 text-amber-700"
+                ? "border-hairline bg-danger-tint text-danger-ink"
+                : "border-hairline bg-warning-tint text-warning-ink"
             }`}
           >
             {auth.subscription.notice}
