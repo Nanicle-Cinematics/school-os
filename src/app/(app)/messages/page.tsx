@@ -6,19 +6,24 @@ import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getMessagingSetup, getMessageStats } from "@/lib/message-data";
 import { formatCedis } from "@/lib/money";
-import {
-  PageHeader,
-  Card,
-  StatusBadge,
-  EmptyRow,
-  thClass,
-  tableHeadClass,
-} from "../ui";
+import { PageHeader, Card, StatusBadge } from "../ui";
+import { DataTable, Row, type Column } from "../primitives";
 import { Compose } from "./compose";
 import { StandardMessages } from "./standard-messages";
 import { DEFAULT_MESSAGE_TEMPLATES } from "@/lib/message-defaults";
 
 export const metadata: Metadata = { title: "Messages · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Name" },
+  { label: "Audience" },
+  { label: "Recipients", numeric: true },
+  { label: "Sent", numeric: true },
+  { label: "Failed", numeric: true },
+  { label: "Cost", numeric: true },
+  { label: "When" },
+];
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -96,28 +101,12 @@ export default async function MessagesPage() {
 
       <Card title="Campaigns">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Audience</th>
-                <th className={`${thClass} text-right`}>Recipients</th>
-                <th className={`${thClass} text-right`}>Sent</th>
-                <th className={`${thClass} text-right`}>Failed</th>
-                <th className={`${thClass} text-right`}>Cost</th>
-                <th className={thClass}>When</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {campaigns.length === 0 ? (
-                <EmptyRow colSpan={8}>
-                  No campaigns yet. Compose one above — preview first to see who
-                  it reaches.
-                </EmptyRow>
-              ) : (
-                campaigns.map((campaign) => (
-                  <tr key={campaign.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Send, title: "No campaigns yet. Compose one to a class, a level or the families who owe.", action: undefined }}
+          >
+            {campaigns.map((campaign) => (
+                  <Row key={campaign.id}>
                     <td className="whitespace-nowrap px-4 py-2.5">
                       <Link
                         href={`/messages/${campaign.id}`}
@@ -150,11 +139,10 @@ export default async function MessagesPage() {
                     <td className="px-4 py-2.5">
                       <StatusBadge status={campaign.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
     </div>

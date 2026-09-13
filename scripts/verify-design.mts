@@ -56,11 +56,49 @@ check(
 
 console.log("\nOne set of primitives, not thirty copies");
 
-const rawTables = hits(/<table\b/, (path) => OWNS(path, "primitives.tsx"));
+/**
+ * ⚠️ "Every LIST", and the distinction matters — several `<table>`s in this app
+ * are not lists at all, and forcing them through a list wrapper would make them
+ * worse. Each exception is named with its reason, so the next person can judge
+ * whether a new one belongs here or is somebody avoiding the work.
+ *
+ *   DOCUMENTS      a report card and a fee bill are printed layouts with their
+ *                  own masthead, their own dark header band and their own print
+ *                  rules. They are not chrome.
+ *   MARK ENTRY     the sheet and the score grid are input grids: grouped column
+ *                  headers, per-column totals, locked states, a checkbox in
+ *                  every cell. DataTable renders rows of read-only cells.
+ *   MATRIX         the broadsheet is students down and subjects across, sized
+ *                  by the data rather than by a fixed column list.
+ *   TABULAR FORMS  promotions, imports, level pricing and class assignments
+ *                  edit rows in place; the table is the form.
+ *   THE CHART      collections-chart carries an `sr-only` table so the bars
+ *                  have a readable equivalent. It is an accessibility fallback,
+ *                  not a list anybody sees.
+ */
+const NOT_LISTS = [
+  "results/report-card.tsx",
+  "invoices/invoice-bill.tsx",
+  "assessments/sheet/sheet-form.tsx",
+  "assessments/[id]/score-grid.tsx",
+  "results/broadsheet/page.tsx",
+  "promotions/promotion-form.tsx",
+  "promotions/bulk-form.tsx",
+  "students/import/import-form.tsx",
+  "subjects/[id]/levels-form.tsx",
+  "classes/[id]/assignments-form.tsx",
+  "dashboard/collections-chart.tsx",
+];
+
+const rawTables = hits(/<table\b/, (path) =>
+  OWNS(path, "primitives.tsx", ...NOT_LISTS),
+);
 check(
   "every list goes through DataTable",
   rawTables.length === 0,
-  rawTables.length ? `${rawTables.length} files still hand-roll a <table>` : "no raw tables",
+  rawTables.length
+    ? `${rawTables.length} list(s) still hand-rolled: ${rawTables.join(", ")}`
+    : `no raw lists — ${NOT_LISTS.length} named non-lists excepted`,
 );
 
 /**
