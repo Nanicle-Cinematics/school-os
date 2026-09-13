@@ -141,6 +141,18 @@ jobs:
           fi
           echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
           psql -q "$SCRATCH/postgres" -c 'create database prod_restored'
+          # ⚠️ The role must exist BEFORE the restore, not after. Production's
+          # row-security policies name school_os_app — `CREATE POLICY … TO
+          # school_os_app` — and pg_restore cannot create a policy for a role
+          # the target server has never heard of. Roles are cluster-level, so
+          # they are not in the dump and never will be. This is the single most
+          # likely way a real restore fails at 2am, and it failed here first.
+          psql -q "$SCRATCH/postgres" -c \
+            "do \$\$ begin
+               if not exists (select 1 from pg_roles where rolname = 'school_os_app') then
+                 create role school_os_app nologin;
+               end if;
+             end \$\$" 
           set +e
           scripts/prove-restore.sh "$PROD_URL" "$SCRATCH/prod_restored" /tmp/production.dump
           code=$?

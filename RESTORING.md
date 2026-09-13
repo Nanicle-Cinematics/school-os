@@ -42,7 +42,19 @@ lost, the backups are unreadable — there is no recovery, by design.
 Take the session-pooler URL (port 5432, user `postgres.<ref>`), not the direct
 `db.<ref>.supabase.co` host, which is IPv6-only and unreachable from most Macs.
 
-**3. Restore.** Into an empty database — and it must be genuinely empty,
+**3. Create the `school_os_app` role first.** The dump's row-security policies
+name it (`CREATE POLICY … TO school_os_app`), and roles are cluster-level so the
+dump cannot carry one. Without this the restore dies part-way through, with
+tables restored and policies missing — the worst of both:
+
+```
+psql -c "create role school_os_app nologin" "$TARGET"
+```
+
+A fresh Supabase project will not have it. An existing one will, and this line
+harmlessly errors.
+
+**4. Restore.** Into an empty database — and it must be genuinely empty,
 including its `public` schema. The dump carries `CREATE SCHEMA public`, which
 every database already has, so this fails on its first statement otherwise:
 
@@ -54,8 +66,8 @@ pg_restore --no-owner --no-privileges --exit-on-error --dbname "$TARGET" product
 That first line destroys whatever is in the target. Read the connection string
 again before running it.
 
-**4. Recreate the restricted role.** The app connects as `school_os_app`, which
-the dump does not carry:
+**5. Give the role its password and grants.** Step 3 created it with no login;
+this makes it usable and re-asserts row security on every tenant table:
 
 ```
 DIRECT_URL="$TARGET" APP_DB_PASSWORD="<a new one>" npm run db:rls
@@ -63,7 +75,7 @@ DIRECT_URL="$TARGET" APP_DB_PASSWORD="<a new one>" npm run db:rls
 
 This is idempotent, and also re-asserts row security on every tenant table.
 
-**5. Check what you got**, before pointing anything at it:
+**6. Check what you got**, before pointing anything at it:
 
 ```
 psql -At -f scripts/table-counts.sql "$TARGET"
@@ -72,7 +84,7 @@ psql -At -f scripts/table-counts.sql "$TARGET"
 Compare against the counts printed in the backup run's log. They should be
 identical; the nightly job asserts exactly this comparison every night.
 
-**6. Repoint the app.** In Vercel, set `DATABASE_URL` and `DIRECT_URL` to the
+**7. Repoint the app.** In Vercel, set `DATABASE_URL` and `DIRECT_URL` to the
 owner connection and `APP_DATABASE_URL` to the `school_os_app` one from step 4,
 then redeploy. Update the `PROD_DIRECT_URL` GitHub secret too, or the next
 night's backup silently keeps dumping the old database.
