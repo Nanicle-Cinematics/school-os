@@ -1,13 +1,6 @@
 import type { Metadata } from "next";
-import { StatCard } from "../primitives";
-import {
-  Banknote,
-  Briefcase,
-  CalendarDays,
-  CircleAlert,
-  GraduationCap,
-  Users,
-} from "lucide-react";
+import { EmptyState, ListRow, StatCard } from "../primitives";
+import { Banknote, Briefcase, CalendarDays, CircleAlert, CircleCheck, GraduationCap, Users } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { paymentSource } from "@/lib/payment-labels";
@@ -33,60 +26,32 @@ import { Card } from "../ui";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
 
-const DOT: Record<AttentionItem["kind"], string> = {
-  marking: "bg-accent-500",
-  fees: "bg-red-500",
-  results: "bg-brand-500",
-  staffing: "bg-slate-400",
-  // Setup items only exist before the school is running, and they are the whole
-  // job at that point — the brand dot, not a warning colour.
-  setup: "bg-brand-600",
-};
-
 /**
- * What needs doing, and the link that does it. Deliberately above the money
- * panels: those report how the term is going, this one changes it.
+ * The attention list, on the shared ListRow.
+ *
+ * ⚠️ The colour now comes from `severity` — what the row BLOCKS — and no longer
+ * from `kind`, which is what it is about. A dot chosen by topic made an overdue
+ * invoice and a first-week marking reminder identical, and showed red on a
+ * school where nothing was wrong.
  */
 function Attention({ items }: { items: AttentionItem[] }) {
   return (
     <Card title="Needs your attention">
       {items.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-slate-500">
-          Nothing is waiting on you — marking is up to date, results are
-          published and every class has its teachers.
-        </p>
+        <EmptyState
+          icon={CircleCheck}
+          title="Nothing is waiting on you — marking is up to date, results are published and every class has its teachers."
+        />
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul>
           {items.map((item) => (
-            <li key={item.kind}>
-              <Link
-                href={item.href}
-                className="group flex items-center gap-3.5 px-4 py-3.5 transition hover:bg-slate-50"
-              >
-                <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${DOT[item.kind]}`}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-                    {item.tag}
-                  </span>
-                  {/* Wraps on a phone, truncates on a laptop. "1 class has
-                      results computed but not re…" is not a sentence, and this
-                      card exists to tell somebody what is wrong — a row that
-                      grows by one line costs nothing next to a row that stops
-                      mid-word. */}
-                  <span className="mt-0.5 block text-sm font-bold text-slate-900 lg:truncate">
-                    {item.title}
-                  </span>
-                  <span className="block text-xs text-slate-500 lg:truncate">
-                    {item.detail}
-                  </span>
-                </span>
-                <span className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-[11.5px] font-bold text-brand-ink transition group-hover:border-brand-200 group-hover:bg-brand-50">
-                  {item.cta}
-                </span>
-              </Link>
-            </li>
+            <ListRow
+              key={item.kind}
+              title={item.title}
+              subtitle={item.detail}
+              severity={item.severity}
+              action={{ label: item.cta, href: item.href }}
+            />
           ))}
         </ul>
       )}
