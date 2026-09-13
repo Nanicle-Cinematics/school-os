@@ -132,6 +132,61 @@
    * present stretched across a whole table header — same colour, ten times
    * the area. These are the quiet version, for bands.
    */
+  /**
+   * SEVERITY, and the only four meanings a colour is allowed to carry.
+   *
+   * ⚠️ These are about what BLOCKS WORK, never about what a thing is. Red is
+   * "you cannot proceed", amber is "this runs out soon", blue is "waiting on
+   * somebody, nothing is on fire", green is "done". A payment is not red
+   * because it is money; an overdue one is red because the family cannot get
+   * a report card.
+   *
+   * Deliberately separate from the five AREA hues below. Those say WHERE you
+   * are — the rail and the page-title chip, and nowhere else. If one amber
+   * meant both "Finance" and "due soon", neither would mean anything, so a
+   * stat card, a badge or a list row takes its colour from here and never
+   * from the area.
+   *
+   * Named `info` rather than `accent` because `accent` is already taken, by
+   * the gold marking the single figure on a screen that decides what happens
+   * next. Two jobs, two names.
+   */
+  --color-success-tint: #e7f6ed;
+  --color-success-ink: #146c3a;
+  --color-warning-tint: #fdf1dc;
+  --color-warning-ink: #92600b;
+  --color-danger-tint: #fdeceb;
+  --color-danger-ink: #b3261e;
+  --color-info-tint: #e8eefb;
+  --color-info-ink: #2c5aa8;
+
+  /**
+   * The type scale, as four ROLES rather than a pile of pixel values.
+   *
+   * ⚠️ Sentence case throughout. The app leaned on UPPERCASE with letter
+   * spacing for every label — stat captions, table headers, rail group
+   * headings — which is decoration doing the work of hierarchy, and it reads
+   * badly in a register full of proper nouns. Size and weight separate these.
+   */
+  --text-title: 31px;
+  --text-title--line-height: 1.1;
+  --text-title--font-weight: 800;
+  --text-title--letter-spacing: -0.025em;
+
+  --text-section: 15px;
+  --text-section--line-height: 1.3;
+  --text-section--font-weight: 700;
+  --text-section--letter-spacing: -0.012em;
+
+  --text-body: 14px;
+  --text-body--line-height: 1.5;
+
+  --text-caption: 12.5px;
+  --text-caption--line-height: 1.45;
+
+  /** One padding step for every card, so nothing is 16px beside an 18px. */
+  --spacing-card: 18px;
+
   --color-hue-overview-band: #eef7f2;
   --color-hue-people-band: #eaf4f7;
   --color-hue-academics-band: #eff1fc;
@@ -249,6 +304,16 @@ html.dark {
 
   /* Bands lift off the surface rather than glowing on it — a table header
      that shines is a table nobody reads past. */
+  /* Severity re-cut for a black page, as the status pills are. */
+  --color-success-tint: #0f2a1e;
+  --color-success-ink: #5fd6a2;
+  --color-warning-tint: #2a2109;
+  --color-warning-ink: #eeb540;
+  --color-danger-tint: #2d1615;
+  --color-danger-ink: #ff9086;
+  --color-info-tint: #10202e;
+  --color-info-ink: #7fc5ff;
+
   --color-hue-overview-band: #101f1a;
   --color-hue-people-band: #0d1c21;
   --color-hue-academics-band: #14172b;
@@ -308,6 +373,15 @@ html.dark {
   --color-hue-school-50: #e5d9f5;
   --color-hue-school-600: #7c4fae;
 
+  --color-success-tint: #e7f6ed;
+  --color-success-ink: #146c3a;
+  --color-warning-tint: #fdf1dc;
+  --color-warning-ink: #92600b;
+  --color-danger-tint: #fdeceb;
+  --color-danger-ink: #b3261e;
+  --color-info-tint: #e8eefb;
+  --color-info-ink: #2c5aa8;
+
   --color-hue-overview-band: #eef7f2;
   --color-hue-people-band: #eaf4f7;
   --color-hue-academics-band: #eff1fc;
@@ -359,6 +433,15 @@ html.dark {
     --color-hue-finance-600: #b0651d;
     --color-hue-school-50: #e5d9f5;
     --color-hue-school-600: #7c4fae;
+
+    --color-success-tint: #e7f6ed;
+    --color-success-ink: #146c3a;
+    --color-warning-tint: #fdf1dc;
+    --color-warning-ink: #92600b;
+    --color-danger-tint: #fdeceb;
+    --color-danger-ink: #b3261e;
+    --color-info-tint: #e8eefb;
+    --color-info-ink: #2c5aa8;
 
     --color-hue-overview-band: #eef7f2;
     --color-hue-people-band: #eaf4f7;

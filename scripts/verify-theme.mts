@@ -57,6 +57,12 @@ function tokensIn(startPattern: RegExp): Set<string> {
   return new Set([...body.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]));
 }
 
+/** The declared value of a token in `@theme`, for comparing two palettes. */
+function valueOf(token: string): string | null {
+  const match = css.match(new RegExp(`^\\s*${token}\\s*:\\s*([^;]+);`, "m"));
+  return match ? match[1].trim() : null;
+}
+
 const theme = tokensIn(/^@theme\b/m);
 const dark = tokensIn(/^html\.dark\b/m);
 const paper = tokensIn(/^\.paper\b/m);
@@ -121,6 +127,41 @@ for (const [label, block] of [["html.dark", dark], [".paper", paper], ["@media p
  * disagrees with the rail about where you are — and a page confidently painted
  * the wrong colour is worse than a grey one, because it is an answer.
  */
+/**
+ * The four meanings colour is allowed to carry. Each needs a tint to sit on and
+ * an ink to be read in, or a badge renders as text on nothing.
+ */
+console.log("\nSeverity has four meanings, and each has both halves");
+for (const meaning of ["success", "warning", "danger", "info"]) {
+  const missing = [`--color-${meaning}-tint`, `--color-${meaning}-ink`].filter(
+    (token) => !theme.has(token),
+  );
+  check(`${meaning} has a tint and an ink`, missing.length === 0, missing.join(", ") || "both");
+}
+
+/**
+ * ⚠️ And severity is NOT the area palette. If one amber meant both "Finance"
+ * and "due soon" the colour would stop being information — so the two sets are
+ * kept apart by value as well as by name.
+ */
+const severityValues = new Set(
+  ["success", "warning", "danger", "info"].flatMap((m) => [
+    valueOf(`--color-${m}-tint`),
+    valueOf(`--color-${m}-ink`),
+  ]),
+);
+const areaValues = ["overview", "people", "academics", "finance", "school"].flatMap((h) => [
+  valueOf(`--color-hue-${h}-50`),
+  valueOf(`--color-hue-${h}-600`),
+  valueOf(`--color-hue-${h}-band`),
+]);
+const collisions = areaValues.filter((value) => value && severityValues.has(value));
+check(
+  "no area hue is the same colour as a severity",
+  collisions.length === 0,
+  collisions.join(", ") || "kept apart",
+);
+
 console.log("\nEvery area of the school has a colour, and it is the rail's");
 
 const HUES = ["overview", "people", "academics", "finance", "school"] as const;
