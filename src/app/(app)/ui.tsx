@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SectionMark } from "./nav";
 
 export function PageHeader({
   title,
@@ -20,6 +21,7 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-end justify-between gap-3 px-0.5 pb-1 pt-1">
       <div className="min-w-0">
+        <SectionMark />
         <h1 className="font-heading text-[31px] leading-[1.1] text-slate-900">{title}</h1>
         {subtitle ? <p className="mt-1.5 text-[13.5px] text-slate-500">{subtitle}</p> : null}
       </div>
@@ -87,17 +89,23 @@ export function Stat({
       </div>
       <p
         /**
-         * ⚠️ The figure is sized for the CARD, not for the page.
+         * ⚠️ The figure is sized for the CARD and for ITS OWN LENGTH.
          *
-         * A phone splits this row into two ~165px cards, and "GH₵26,542" set at
+         * A phone splits this row into two ~165px cards, and a figure set at
          * 30px is wider than that — the number ran past its own card and looked
          * clipped. Ghanaian amounts carry a currency mark and a thousands
-         * separator, so nine glyphs is the normal case here, not the long one.
+         * separator, so nine glyphs is the normal case here.
+         *
+         * Sizing to the card alone was not enough, and I checked only the
+         * dashboard when I first did it: /invoices prints pesewas too, so
+         * "GH₵50,700.00" is twelve glyphs and overflowed at the smaller size as
+         * well. The length is part of the measurement, not a property of one
+         * page, so it belongs here rather than in a caller that remembers.
          */
         className={`font-heading mt-2.5 leading-none tabular-nums ${
-          hero
-            ? "text-[22px] sm:text-[26px] lg:text-[38px]"
-            : "text-[22px] sm:text-[26px] lg:text-[30px]"
+          value.length > 10 ? "text-[18px] sm:text-[22px]" : "text-[22px] sm:text-[26px]"
+        } ${
+          hero ? "lg:text-[38px]" : "lg:text-[30px]"
         } ${toneClass}`}
       >
         {value}
@@ -226,8 +234,21 @@ export function EmptyRow({ colSpan, children }: { colSpan: number; children: Rea
 }
 
 export const thClass = "px-4 py-2.5 font-extrabold";
+/**
+ * The one structural place the area's colour earns its keep on a page.
+ *
+ * A list screen has exactly one of these, it sits above everything you are
+ * about to read, and it is already a flat grey band — so tinting it costs
+ * nothing and says "Finance" for as long as you are scanning the table.
+ *
+ * It reads `--section-band`, not `--section-tint`: the chip's value is sized for
+ * a 28px circle and is far too present stretched across a full-width header.
+ *
+ * The fallback matters: `var(--section-band, …)` keeps the old grey on any page
+ * outside the rail, so nothing turns transparent when the variable is absent.
+ */
 export const tableHeadClass =
-  "border-b border-hairline bg-slate-50/70 text-[10.5px] uppercase tracking-[0.11em] text-slate-400";
+  "border-b border-hairline bg-[var(--section-band,var(--color-slate-50))] text-[10.5px] uppercase tracking-[0.11em] text-slate-500";
 
 /**
  * Initials in a tinted square. Rows about a person read faster with a fixed

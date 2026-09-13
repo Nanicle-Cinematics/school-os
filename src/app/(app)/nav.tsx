@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { bestHrefMatch, sectionFor } from "@/lib/permissions";
 import type { NavHue, NavIcon, NavSection } from "@/lib/permissions";
 
 /**
@@ -81,6 +82,85 @@ const HUE: Record<NavHue, string> = {
   school: "bg-hue-school-50 text-hue-school-600",
 };
 
+/**
+ * The area's colour, handed to the page as two CSS variables.
+ *
+ * The hue told you which part of the school you were in and then abandoned you
+ * at the click: the rail was coloured, the page was not. This carries it
+ * through — but as VARIABLES rather than as classes, so the page decides where
+ * a tint is useful instead of every component learning about areas.
+ *
+ * ⚠️ The values are themselves `var(--color-hue-…)`, not literal colours. That
+ * is what keeps a tinted page honest in the dark: the variable re-resolves under
+ * `html.dark` exactly like every other token, so nothing here needs a second
+ * value or a `dark:` class.
+ *
+ * A path outside the rail — /account/password, a stub — simply gets no tint,
+ * and everything that reads these falls back to its neutral.
+ */
+const TINT: Record<NavHue, Record<string, string>> = {
+  overview: {
+    "--section-tint": "var(--color-hue-overview-50)",
+    "--section-ink": "var(--color-hue-overview-600)",
+    "--section-band": "var(--color-hue-overview-band)",
+  },
+  people: {
+    "--section-tint": "var(--color-hue-people-50)",
+    "--section-ink": "var(--color-hue-people-600)",
+    "--section-band": "var(--color-hue-people-band)",
+  },
+  academics: {
+    "--section-tint": "var(--color-hue-academics-50)",
+    "--section-ink": "var(--color-hue-academics-600)",
+    "--section-band": "var(--color-hue-academics-band)",
+  },
+  finance: {
+    "--section-tint": "var(--color-hue-finance-50)",
+    "--section-ink": "var(--color-hue-finance-600)",
+    "--section-band": "var(--color-hue-finance-band)",
+  },
+  school: {
+    "--section-tint": "var(--color-hue-school-50)",
+    "--section-ink": "var(--color-hue-school-600)",
+    "--section-band": "var(--color-hue-school-band)",
+  },
+};
+
+export function SectionTint({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const section = sectionFor(pathname);
+  return (
+    <div
+      className="contents"
+      style={section ? (TINT[section.hue] as React.CSSProperties) : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The area's icon beside a page title, in the area's own colour.
+ *
+ * The same chip as the rail item you clicked, which is the point: it is the
+ * link between "I pressed the amber thing" and "I am on an amber page".
+ */
+export function SectionMark() {
+  const pathname = usePathname();
+  const section = sectionFor(pathname);
+  if (!section) {
+    return null;
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--section-tint)] text-[var(--section-ink)]"
+    >
+      <Icon name={section.icon} className="h-[19px] w-[19px]" />
+    </span>
+  );
+}
+
 export type RailTerm = {
   label: string;
   closes: string | null;
@@ -93,10 +173,10 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
   // Only the BEST match is active, not every prefix of it. "/assessments/sheet"
   // starts with "/assessments", so a plain prefix test lit both Mark sheet and
   // Assessments at once — which reads as the app not knowing where you are.
-  const activeHref = sections
-    .flatMap((section) => section.items.map((item) => item.href))
-    .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
-    .sort((a, b) => b.length - a.length)[0];
+  const activeHref = bestHrefMatch(
+    pathname,
+    sections.flatMap((section) => section.items.map((item) => item.href)),
+  );
 
   return (
     <nav className="space-y-4">
