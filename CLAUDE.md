@@ -1187,6 +1187,32 @@ top-level await.
 `é` is IN the GSM-7 alphabet and does not force UCS-2; an em dash does. Getting
 that backwards silently doubles a school's SMS bill.
 
+## Backups
+
+Nightly, in `.github/workflows/backup.yml`: dump production's `public` schema,
+restore it into a throwaway Postgres, and compare exact row counts table by
+table. The dump is encrypted with `age` and kept as a 30-day artifact.
+`RESTORING.md` is the runbook — read it there, not here.
+
+Three things about it that are not obvious, each of which failed first:
+
+- **The self-test is the real proof.** Production was empty when this was
+  written, and an empty database matches its own restore no matter how broken
+  the machinery is. So the workflow also seeds a database from the migrations
+  and proves the round trip on that. `prove-restore.sh` exits 3 rather than 0
+  when a source has no rows, and the workflow reports UNPROVEN.
+- **Counts come from `query_to_xml`, not `pg_stat_user_tables`.** `n_live_tup`
+  is an autovacuum estimate that reads 0 on a fresh restore, so the obvious
+  version of this check reports a perfect match between a full database and an
+  empty one.
+- **`school_os_app` must exist before `pg_restore` runs.** The policies are
+  `CREATE POLICY … TO school_os_app` and roles are cluster-level, so no dump
+  carries one. Without it the restore dies part-way, tables in and policies
+  missing.
+
+The comparison forces its own three failure modes every night and asserts the
+exit codes, because it had only ever agreed.
+
 ## Commands
 
 ```bash
