@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Search } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
 import { navFor, roleLabel } from "@/lib/permissions";
@@ -109,6 +110,24 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-xs font-extrabold text-brand-ink ring-1 ring-hairline">
               {initials}
             </div>
+            {/**
+             * ⚠️ `isPlatformAdmin` was loaded on every request and read by
+             * NOTHING. The console existed, the flag that opens it existed, and
+             * the only way in was typing /admin from memory — a dead field of
+             * exactly the kind this codebase keeps finding, with the difference
+             * that this one hid a whole screen.
+             *
+             * Shown only to the handful of people who have the flag, so an
+             * ordinary head teacher never sees a door they cannot open.
+             */}
+            {auth.isPlatformAdmin ? (
+              <Link
+                href="/admin"
+                className="hidden whitespace-nowrap rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 sm:inline-flex"
+              >
+                Nanicle console
+              </Link>
+            ) : null}
             <ThemeToggle className="print:hidden" />
             <form action={logout}>
               <button
