@@ -1,4 +1,6 @@
+import React from "react";
 import Link from "next/link";
+import { CircleAlert } from "lucide-react";
 import { buttonClass } from "./button-style";
 import { SectionMark } from "./nav";
 
@@ -66,22 +68,59 @@ export function Card({
   );
 }
 
+/**
+ * A labelled field, with room for the reason it is wrong.
+ *
+ * ⚠️ `aria-invalid` appeared ZERO times in this app before now. A refused save
+ * surfaced as one sentence in a card at the top of the form, so a bursar with a
+ * long form got "That amount is not a number" and no indication of WHICH
+ * amount — and a screen reader got nothing at all, because nothing on the input
+ * said it had failed.
+ *
+ * The error is rendered beside the field AND announced: `aria-invalid` marks
+ * the control, `aria-describedby` ties the message to it, and `role="alert"`
+ * means it is read when it appears rather than only when tabbed onto.
+ */
 export function Field({
   label,
   children,
   hint,
+  error,
+  /** Needed to tie the message to the control; defaults to the label. */
+  htmlFor,
 }: {
   label: string;
   children: React.ReactNode;
   hint?: string;
+  error?: string;
+  htmlFor?: string;
 }) {
+  const id = (htmlFor ?? label).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const messageId = `${id}-error`;
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-slate-700">
-        {label}
-      </span>
-      {children}
-      {hint ? (
+      <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
+      {/* ⚠️ The attributes go on the CONTROL, not on a wrapper. My first attempt
+          put `aria-invalid` on a `display: contents` span around the input,
+          which is invisible to assistive technology — an accessibility fix that
+          reaches nothing is worse than none, because it looks done. Cloning the
+          child puts them where a screen reader actually looks. */}
+      {error && React.isValidElement(children)
+        ? React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+            "aria-invalid": true,
+            "aria-describedby": messageId,
+          })
+        : children}
+      {error ? (
+        <span
+          id={messageId}
+          role="alert"
+          className="mt-1.5 flex items-start gap-1.5 text-xs text-danger-ink"
+        >
+          <CircleAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          {error}
+        </span>
+      ) : hint ? (
         <span className="mt-1 block text-xs text-slate-400">{hint}</span>
       ) : null}
     </label>
