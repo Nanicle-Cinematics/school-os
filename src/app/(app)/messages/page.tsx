@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
+import { StatCard } from "../primitives";
+import { CircleAlert, Send, Wallet } from "lucide-react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getMessagingSetup, getMessageStats } from "@/lib/message-data";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Stat, Card, StatusBadge, EmptyRow, thClass, tableHeadClass } from "../ui";
+import {
+  PageHeader,
+  Card,
+  StatusBadge,
+  EmptyRow,
+  thClass,
+  tableHeadClass,
+} from "../ui";
 import { Compose } from "./compose";
 import { StandardMessages } from "./standard-messages";
 import { DEFAULT_MESSAGE_TEMPLATES } from "@/lib/message-defaults";
@@ -29,12 +38,12 @@ const AUDIENCE_LABEL: Record<string, string> = {
 
 export default async function MessagesPage() {
   await requireRole(OFFICE);
-  const [{ templates, campaigns, classGroups, levels, settings }, stats] = await Promise.all([
-    getMessagingSetup(),
-    getMessageStats(),
-  ]);
+  const [{ templates, campaigns, classGroups, levels, settings }, stats] =
+    await Promise.all([getMessagingSetup(), getMessageStats()]);
 
-  const gatewayConfigured = Boolean(process.env.SMS_API_KEY && process.env.SMS_PROVIDER);
+  const gatewayConfigured = Boolean(
+    process.env.SMS_API_KEY && process.env.SMS_PROVIDER,
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -48,19 +57,32 @@ export default async function MessagesPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Messages" value={String(stats.total)} />
-        <Stat label="Sent" value={String(stats.sent)} tone="positive" />
-        <Stat
+        <StatCard label="Messages" value={String(stats.total)} icon={Send} />
+        <StatCard
+          label="Sent"
+          value={String(stats.sent)}
+          icon={Send}
+          severity="done"
+        />
+        <StatCard
           label="Failed"
           value={String(stats.failed)}
-          tone={stats.failed > 0 ? "negative" : "default"}
+          icon={CircleAlert}
+          severity="blocking"
         />
-        <Stat label="Spend" value={formatCedis(stats.cost)} sub="estimated" />
+        <StatCard
+          label="Spend"
+          value={formatCedis(stats.cost)}
+          caption="estimated"
+          icon={Wallet}
+        />
       </div>
 
       <StandardMessages
         missing={
-          DEFAULT_MESSAGE_TEMPLATES.filter((d) => !templates.some((t) => t.name === d.name)).length
+          DEFAULT_MESSAGE_TEMPLATES.filter(
+            (d) => !templates.some((t) => t.name === d.name),
+          ).length
         }
         total={templates.length}
       />
@@ -90,7 +112,8 @@ export default async function MessagesPage() {
             <tbody className="divide-y divide-slate-100">
               {campaigns.length === 0 ? (
                 <EmptyRow colSpan={8}>
-                  No campaigns yet. Compose one above — preview first to see who it reaches.
+                  No campaigns yet. Compose one above — preview first to see who
+                  it reaches.
                 </EmptyRow>
               ) : (
                 campaigns.map((campaign) => (
@@ -104,7 +127,8 @@ export default async function MessagesPage() {
                       </Link>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                      {AUDIENCE_LABEL[campaign.audienceType] ?? campaign.audienceType}
+                      {AUDIENCE_LABEL[campaign.audienceType] ??
+                        campaign.audienceType}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
                       {campaign.totalRecipients}
@@ -116,7 +140,9 @@ export default async function MessagesPage() {
                       {campaign.failedCount || "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
-                      {campaign.estimatedCost ? formatCedis(campaign.estimatedCost) : "—"}
+                      {campaign.estimatedCost
+                        ? formatCedis(campaign.estimatedCost)
+                        : "—"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-slate-500">
                       {dateFmt.format(campaign.sentAt ?? campaign.createdAt)}

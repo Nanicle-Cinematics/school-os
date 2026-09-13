@@ -22,98 +22,24 @@ export function PageHeader({
     <div className="flex flex-wrap items-end justify-between gap-3 px-0.5 pb-1 pt-1">
       <div className="min-w-0">
         <SectionMark />
-        <h1 className="font-heading text-[31px] leading-[1.1] text-slate-900">{title}</h1>
-        {subtitle ? <p className="mt-1.5 text-[13.5px] text-slate-500">{subtitle}</p> : null}
+        <h1 className="font-heading text-[31px] leading-[1.1] text-slate-900">
+          {title}
+        </h1>
+        {subtitle ? (
+          <p className="mt-1.5 text-[13.5px] text-slate-500">{subtitle}</p>
+        ) : null}
       </div>
       {action}
     </div>
   );
 }
 
-export function Stat({
-  label,
-  value,
-  sub,
-  tone = "default",
-  trend,
-  hero = false,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "default" | "positive" | "negative" | "attention";
-  /** A period-on-period movement, shown as a chip beside the label. */
-  trend?: { value: string; up: boolean };
-  /**
-   * The one figure on the screen that decides what happens next: wider, and
-   * printed larger. Used sparingly — a row where every tile is a hero is a row
-   * with no hero, which is what four identical tiles already were.
-   */
-  hero?: boolean;
-}) {
-  const toneClass =
-    tone === "positive"
-      ? "text-brand-ink"
-      : tone === "negative"
-        ? "text-red-600"
-        : tone === "attention"
-          ? "text-accent-600"
-          : "text-slate-900";
-  return (
-    <div
-      /**
-       * ⚠️ `lg:col-span-2`, never a bare `col-span-2`.
-       *
-       * The phone grid is two columns wide, so spanning both there does not make
-       * the hero bigger — it makes it a full-width row, and the tile before it is
-       * left sitting beside a hole. On a phone the gold already does the job the
-       * extra width does on a laptop.
-       */
-      className={`rounded-card border border-hairline bg-surface p-4.5 shadow-card ${
-        hero ? "lg:col-span-2" : ""
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
-          {label}
-        </p>
-        {trend ? (
-          <span
-            className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
-              trend.up ? "bg-brand-50 text-brand-ink" : "bg-red-50 text-red-600"
-            }`}
-          >
-            {trend.up ? "↑" : "↓"} {trend.value}
-          </span>
-        ) : null}
-      </div>
-      <p
-        /**
-         * ⚠️ The figure is sized for the CARD and for ITS OWN LENGTH.
-         *
-         * A phone splits this row into two ~165px cards, and a figure set at
-         * 30px is wider than that — the number ran past its own card and looked
-         * clipped. Ghanaian amounts carry a currency mark and a thousands
-         * separator, so nine glyphs is the normal case here.
-         *
-         * Sizing to the card alone was not enough, and I checked only the
-         * dashboard when I first did it: /invoices prints pesewas too, so
-         * "GH₵50,700.00" is twelve glyphs and overflowed at the smaller size as
-         * well. The length is part of the measurement, not a property of one
-         * page, so it belongs here rather than in a caller that remembers.
-         */
-        className={`font-heading mt-2.5 leading-none tabular-nums ${
-          value.length > 10 ? "text-[18px] sm:text-[22px]" : "text-[22px] sm:text-[26px]"
-        } ${
-          hero ? "lg:text-[38px]" : "lg:text-[30px]"
-        } ${toneClass}`}
-      >
-        {value}
-      </p>
-      {sub ? <p className="mt-0.5 text-xs text-slate-500">{sub}</p> : null}
-    </div>
-  );
-}
+/**
+ * `Stat` is gone. Every summary figure goes through `StatCard` in
+ * primitives.tsx, which requires an icon and takes a SEVERITY rather than a
+ * decorative tone — keeping both would let a page pick the one with no rules
+ * attached, which is how the old labels stayed uppercase.
+ */
 
 export function Card({
   title,
@@ -128,7 +54,9 @@ export function Card({
     <section className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
       {title ? (
         <div className="flex items-center justify-between border-b border-hairline px-4.5 py-4">
-          <h2 className="text-[14.5px] font-extrabold tracking-tight text-slate-900">{title}</h2>
+          <h2 className="text-[14.5px] font-extrabold tracking-tight text-slate-900">
+            {title}
+          </h2>
           {action}
         </div>
       ) : null}
@@ -148,9 +76,13 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-1.5 block text-sm font-medium text-slate-700">
+        {label}
+      </span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-slate-400">{hint}</span> : null}
+      {hint ? (
+        <span className="mt-1 block text-xs text-slate-400">{hint}</span>
+      ) : null}
     </label>
   );
 }
@@ -175,12 +107,20 @@ export const inputClass =
  */
 export const filterClass = inputClass.replace("w-full ", "");
 
-export function Alert({ tone, children }: { tone: "error" | "success"; children: React.ReactNode }) {
+export function Alert({
+  tone,
+  children,
+}: {
+  tone: "error" | "success";
+  children: React.ReactNode;
+}) {
   return (
     <p
       role="alert"
       className={`rounded-control px-3.5 py-2.5 text-sm ${
-        tone === "error" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+        tone === "error"
+          ? "bg-red-50 text-red-700"
+          : "bg-green-50 text-green-700"
       }`}
     >
       {children}
@@ -212,7 +152,13 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function ButtonLink({ href, children }: { href: string; children: React.ReactNode }) {
+export function ButtonLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
   return (
     <Link
       href={href}
@@ -223,10 +169,19 @@ export function ButtonLink({ href, children }: { href: string; children: React.R
   );
 }
 
-export function EmptyRow({ colSpan, children }: { colSpan: number; children: React.ReactNode }) {
+export function EmptyRow({
+  colSpan,
+  children,
+}: {
+  colSpan: number;
+  children: React.ReactNode;
+}) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-10 text-center text-sm text-slate-500">
+      <td
+        colSpan={colSpan}
+        className="px-4 py-10 text-center text-sm text-slate-500"
+      >
         {children}
       </td>
     </tr>
@@ -264,9 +219,12 @@ export function Avatar({
   lastName: string;
   size?: "sm" | "md";
 }) {
-  const initials = `${firstName.at(0) ?? ""}${lastName.at(0) ?? ""}`.toUpperCase();
+  const initials =
+    `${firstName.at(0) ?? ""}${lastName.at(0) ?? ""}`.toUpperCase();
   const box =
-    size === "sm" ? "h-8 w-8 rounded-full text-[11px]" : "h-9 w-9 rounded-full text-[12px]";
+    size === "sm"
+      ? "h-8 w-8 rounded-full text-[11px]"
+      : "h-9 w-9 rounded-full text-[12px]";
   return (
     <span
       aria-hidden="true"

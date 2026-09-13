@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Banknote, Layers, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
@@ -6,9 +7,8 @@ import { getExpenseList, getTermCashPosition } from "@/lib/expense-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { cancelExpense } from "@/lib/expense-actions";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Stat, Card, filterClass } from "../ui";
-import { Wallet } from "lucide-react";
-import { DataTable, Row, type Column } from "../primitives";
+import { PageHeader, Card, filterClass } from "../ui";
+import { DataTable, Row, StatCard, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { ExpenseForm } from "./expense-form";
 
@@ -23,21 +23,34 @@ const COLUMNS: Column[] = [
   { label: "Amount", numeric: true },
 ];
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const dateFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
 
-export default async function ExpensesPage({ searchParams }: PageProps<"/expenses">) {
+export default async function ExpensesPage({
+  searchParams,
+}: PageProps<"/expenses">) {
   await requireRole(FINANCE);
   const params = await searchParams;
 
   const currentTerm = await getCurrentTerm();
-  const termId = typeof params.term === "string" ? params.term : (currentTerm?.id ?? undefined);
-  const categoryId = typeof params.category === "string" ? params.category : undefined;
+  const termId =
+    typeof params.term === "string"
+      ? params.term
+      : (currentTerm?.id ?? undefined);
+  const categoryId =
+    typeof params.category === "string" ? params.category : undefined;
   const q = typeof params.q === "string" ? params.q.trim() : undefined;
 
   const data = await getExpenseList({ termId, categoryId, q });
   const cash = termId ? await getTermCashPosition(termId) : null;
 
-  const maxCategory = Math.max(1, ...data.byCategory.map((row) => Number(row.total)));
+  const maxCategory = Math.max(
+    1,
+    ...data.byCategory.map((row) => Number(row.total)),
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -58,27 +71,49 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Total spent" value={formatCedis(data.total)} sub={`${data.count} vouchers`} />
+        <StatCard
+          label="Total spent"
+          value={formatCedis(data.total)}
+          caption={`${data.count} vouchers`}
+          icon={Wallet}
+        />
         {cash ? (
           <>
-            <Stat label="Fees collected" value={formatCedis(cash.income)} tone="positive" />
-            <Stat label="Expenditure" value={formatCedis(cash.outgoing)} tone="negative" />
-            <Stat
+            <StatCard
+              label="Fees collected"
+              value={formatCedis(cash.income)}
+              icon={Banknote}
+              severity="done"
+            />
+            <StatCard
+              label="Expenditure"
+              value={formatCedis(cash.outgoing)}
+              icon={Wallet}
+            />
+            <StatCard
               label="Net position"
               value={formatCedis(cash.net)}
-              tone={Number(cash.net) >= 0 ? "positive" : "negative"}
-              sub={Number(cash.net) >= 0 ? "in surplus" : "in deficit"}
+              caption={Number(cash.net) >= 0 ? "in surplus" : "in deficit"}
+              icon={TrendingUp}
             />
           </>
         ) : (
-          <Stat label="Categories" value={String(data.categories.length)} />
+          <StatCard
+            label="Categories"
+            value={String(data.categories.length)}
+            icon={Layers}
+          />
         )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <form className="mb-4 flex flex-wrap items-end gap-2 rounded-card border border-hairline bg-surface p-3">
-            <select name="term" defaultValue={termId ?? ""} className={`${filterClass} w-auto`}>
+            <select
+              name="term"
+              defaultValue={termId ?? ""}
+              className={`${filterClass} w-auto`}
+            >
               <option value="">All terms</option>
               {data.terms.map((term) => (
                 <option key={term.id} value={term.id}>
@@ -86,7 +121,11 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
                 </option>
               ))}
             </select>
-            <select name="category" defaultValue={categoryId ?? ""} className={`${filterClass} w-auto`}>
+            <select
+              name="category"
+              defaultValue={categoryId ?? ""}
+              className={`${filterClass} w-auto`}
+            >
               <option value="">All categories</option>
               {data.categories.map((category) => (
                 <option key={category.id} value={category.id}>
@@ -117,47 +156,61 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
 
           <Card>
             <div className="overflow-x-auto">
-          <DataTable
-            columns={COLUMNS}
-            empty={{ icon: Wallet, title: "No expenditure recorded for this term yet.", action: undefined }}
-          >
-            {data.expenses.map((expense) => (
-                      <Row key={expense.id}>
-                        <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
-                          {expense.voucherNo}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                          {dateFmt.format(expense.spentAt)}
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-900">{expense.description}</td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                          {expense.category?.name ?? "—"}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                          {expense.payee ?? "—"}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums text-slate-900">
-                          {formatCedis(expense.amount)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                          <form action={cancelExpense}>
-                            <input type="hidden" name="expenseId" value={expense.id} />
-                            <SubmitButton variant="danger" pendingLabel="Cancelling…">
-                              Cancel
-                            </SubmitButton>
-                          </form>
-                        </td>
-                      </Row>
-                    ))
-                  }
-          </DataTable>
+              <DataTable
+                columns={COLUMNS}
+                empty={{
+                  icon: Wallet,
+                  title: "No expenditure recorded for this term yet.",
+                  action: undefined,
+                }}
+              >
+                {data.expenses.map((expense) => (
+                  <Row key={expense.id}>
+                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
+                      {expense.voucherNo}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                      {dateFmt.format(expense.spentAt)}
+                    </td>
+                    <td className="px-4 py-2.5 text-slate-900">
+                      {expense.description}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                      {expense.category?.name ?? "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                      {expense.payee ?? "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums text-slate-900">
+                      {formatCedis(expense.amount)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                      <form action={cancelExpense}>
+                        <input
+                          type="hidden"
+                          name="expenseId"
+                          value={expense.id}
+                        />
+                        <SubmitButton
+                          variant="danger"
+                          pendingLabel="Cancelling…"
+                        >
+                          Cancel
+                        </SubmitButton>
+                      </form>
+                    </td>
+                  </Row>
+                ))}
+              </DataTable>
             </div>
           </Card>
         </div>
 
         <Card title="By category">
           {data.byCategory.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-500">Nothing spent yet.</p>
+            <p className="px-4 py-6 text-sm text-slate-500">
+              Nothing spent yet.
+            </p>
           ) : (
             <ul className="divide-y divide-slate-100">
               {data.byCategory.map((row) => (
@@ -171,7 +224,9 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
                   <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-slate-100">
                     <span
                       className="block h-full rounded-full bg-brand-600"
-                      style={{ width: `${(Number(row.total) / maxCategory) * 100}%` }}
+                      style={{
+                        width: `${(Number(row.total) / maxCategory) * 100}%`,
+                      }}
                     />
                   </span>
                 </li>

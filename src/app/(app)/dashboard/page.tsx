@@ -1,9 +1,24 @@
 import type { Metadata } from "next";
+import { StatCard } from "../primitives";
+import {
+  Banknote,
+  Briefcase,
+  CalendarDays,
+  CircleAlert,
+  GraduationCap,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { paymentSource } from "@/lib/payment-labels";
 import { requireAuth } from "@/lib/auth";
-import { canAccess, isTeacherOnly, isParentOnly, landingFor, FINANCE } from "@/lib/permissions";
+import {
+  canAccess,
+  isTeacherOnly,
+  isParentOnly,
+  landingFor,
+  FINANCE,
+} from "@/lib/permissions";
 import {
   getActivity,
   getAttention,
@@ -14,11 +29,9 @@ import {
 } from "@/lib/dashboard-data";
 import { CollectionsChart } from "./collections-chart";
 import { ActivityFeed } from "./activity-feed";
-import { Card, Stat } from "../ui";
+import { Card } from "../ui";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
-
-
 
 const DOT: Record<AttentionItem["kind"], string> = {
   marking: "bg-accent-500",
@@ -39,8 +52,8 @@ function Attention({ items }: { items: AttentionItem[] }) {
     <Card title="Needs your attention">
       {items.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-slate-500">
-          Nothing is waiting on you — marking is up to date, results are published and every
-          class has its teachers.
+          Nothing is waiting on you — marking is up to date, results are
+          published and every class has its teachers.
         </p>
       ) : (
         <ul className="divide-y divide-slate-100">
@@ -50,7 +63,9 @@ function Attention({ items }: { items: AttentionItem[] }) {
                 href={item.href}
                 className="group flex items-center gap-3.5 px-4 py-3.5 transition hover:bg-slate-50"
               >
-                <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[item.kind]}`} />
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${DOT[item.kind]}`}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
                     {item.tag}
@@ -63,7 +78,9 @@ function Attention({ items }: { items: AttentionItem[] }) {
                   <span className="mt-0.5 block text-sm font-bold text-slate-900 lg:truncate">
                     {item.title}
                   </span>
-                  <span className="block text-xs text-slate-500 lg:truncate">{item.detail}</span>
+                  <span className="block text-xs text-slate-500 lg:truncate">
+                    {item.detail}
+                  </span>
                 </span>
                 <span className="shrink-0 rounded-lg border border-slate-200 px-2.5 py-1 text-[11.5px] font-bold text-brand-ink transition group-hover:border-brand-200 group-hover:bg-brand-50">
                   {item.cta}
@@ -99,7 +116,11 @@ export default async function DashboardPage() {
     ? await getCollections(
         auth.schoolId,
         data.term
-          ? { id: data.term.id, startDate: data.term.startDate, endDate: data.term.endDate }
+          ? {
+              id: data.term.id,
+              startDate: data.term.startDate,
+              endDate: data.term.endDate,
+            }
           : null,
       )
     : null;
@@ -108,7 +129,9 @@ export default async function DashboardPage() {
 
   const attention = await getAttention(
     auth.schoolId,
-    data.term ? { id: data.term.id, academicYearId: data.term.academicYearId } : null,
+    data.term
+      ? { id: data.term.id, academicYearId: data.term.academicYearId }
+      : null,
     { outstanding: data.outstanding, debtorCount: data.debtorCount },
   );
 
@@ -130,7 +153,10 @@ export default async function DashboardPage() {
           ) : (
             <>
               No term is marked as current, so there are no termly figures yet.{" "}
-              <Link href="/settings/terms" className="font-medium text-brand-ink hover:underline">
+              <Link
+                href="/settings/terms"
+                className="font-medium text-brand-ink hover:underline"
+              >
                 Set up the year and its terms
               </Link>
               .
@@ -142,35 +168,51 @@ export default async function DashboardPage() {
       {/* Five columns, not four: "Outstanding" is the number that decides what a
           head teacher does today, so it is given twice the room rather than
           being the fourth of four identical tiles. */}
-      <div className={`grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
-        <Stat
+      <div
+        className={`grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}
+      >
+        <StatCard
           label="Students"
           value={String(data.students)}
-          sub={`${data.boys} boys · ${data.girls} girls`}
+          caption={`${data.boys} boys · ${data.girls} girls`}
+          icon={Users}
         />
-        <Stat label="Staff" value={String(data.staff)} sub={`${data.classGroups} classes`} />
+        <StatCard
+          label="Staff"
+          value={String(data.staff)}
+          caption={`${data.classGroups} classes`}
+          icon={Briefcase}
+        />
         {showMoney ? (
           <>
-            <Stat
+            <StatCard
               label="Collected"
               value={formatCedis(data.collected)}
-              sub={`${data.collectionRate.toFixed(0)}% of ${formatCedis(data.billed)} billed`}
+              caption={`${data.collectionRate.toFixed(0)}% of ${formatCedis(data.billed)} billed`}
+              icon={Banknote}
+              severity="done"
             />
-            <Stat
+            <StatCard
               label="Outstanding"
               value={formatCedis(data.outstanding)}
-              sub={`${data.debtorCount} students owing`}
-              tone={data.outstanding > 0 ? "attention" : "default"}
+              caption={`${data.debtorCount} students owing`}
               hero
+              icon={CircleAlert}
+              severity="blocking"
             />
           </>
         ) : (
           <>
-            <Stat label="Classes" value={String(data.classGroups)} />
-            <Stat
+            <StatCard
+              label="Classes"
+              value={String(data.classGroups)}
+              icon={GraduationCap}
+            />
+            <StatCard
               label="Term"
               value={data.term ? `Term ${data.term.sequence}` : "—"}
-              sub={data.term?.academicYear.name}
+              caption={data.term?.academicYear.name}
+              icon={CalendarDays}
             />
           </>
         )}
@@ -196,96 +238,129 @@ export default async function DashboardPage() {
         <div className="grid items-start gap-4 lg:grid-cols-2">
           <div className="space-y-4">
             {collections ? (
-              <CollectionsChart collections={collections} billed={data.billed} />
+              <CollectionsChart
+                collections={collections}
+                billed={data.billed}
+              />
             ) : null}
             <Card title="Recent payments">
-                        {data.recentPayments.length === 0 ? (
-                          <p className="px-4 py-6 text-sm text-slate-500">No payments recorded yet.</p>
-                        ) : (
-                          <ul className="divide-y divide-slate-100">
-                            {data.recentPayments.map((payment) => (
-                              <li key={payment.id} className="flex items-center justify-between px-4 py-3">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium text-slate-900">
-                                    {payment.student.firstName} {payment.student.lastName}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {payment.student.admissionNo} · {payment.receiptNo} ·{" "}
-                                    {paymentSource(payment.method, payment.momoNetwork)}
-                                  </p>
-                                </div>
-                                <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
-                                  {formatCedis(Number(payment.amount))}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </Card>
+              {data.recentPayments.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-slate-500">
+                  No payments recorded yet.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {data.recentPayments.map((payment) => (
+                    <li
+                      key={payment.id}
+                      className="flex items-center justify-between px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {payment.student.firstName} {payment.student.lastName}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {payment.student.admissionNo} · {payment.receiptNo} ·{" "}
+                          {paymentSource(payment.method, payment.momoNetwork)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                        {formatCedis(Number(payment.amount))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
             <Card title="Enrolment by level">
-                      <ul className="divide-y divide-slate-100">
-                        {data.enrolmentByLevel.map((level) => (
-                          <li key={level.id} className="flex items-center gap-3 px-4 py-2">
-                            <span className="w-28 shrink-0 truncate text-sm text-slate-700">{level.name}</span>
-                            <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                              <span
-                                className="block h-full rounded-full bg-brand-600"
-                                style={{ width: `${(level.count / maxLevel) * 100}%` }}
-                              />
-                            </span>
-                            <span className="w-8 shrink-0 text-right text-sm tabular-nums text-slate-600">
-                              {level.count}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </Card>
+              <ul className="divide-y divide-slate-100">
+                {data.enrolmentByLevel.map((level) => (
+                  <li
+                    key={level.id}
+                    className="flex items-center gap-3 px-4 py-2"
+                  >
+                    <span className="w-28 shrink-0 truncate text-sm text-slate-700">
+                      {level.name}
+                    </span>
+                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                      <span
+                        className="block h-full rounded-full bg-brand-600"
+                        style={{ width: `${(level.count / maxLevel) * 100}%` }}
+                      />
+                    </span>
+                    <span className="w-8 shrink-0 text-right text-sm tabular-nums text-slate-600">
+                      {level.count}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
           </div>
 
           <div className="space-y-4">
             <ActivityFeed items={activity} />
             <Card title="Largest balances">
-                        {data.topDebtors.length === 0 ? (
-                          <p className="px-4 py-6 text-sm text-slate-500">Every invoice is settled.</p>
-                        ) : (
-                          <ul className="divide-y divide-slate-100">
-                            {data.topDebtors.map((invoice) => (
-                              <li key={invoice.id} className="flex items-center justify-between px-4 py-3">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium text-slate-900">
-                                    {invoice.student.firstName} {invoice.student.lastName}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {invoice.student.admissionNo}
-                                    {invoice.student.currentClassGroup
-                                      ? ` · ${invoice.student.currentClassGroup.level.name} ${invoice.student.currentClassGroup.name}`
-                                      : ""}
-                                  </p>
-                                </div>
-                                <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
-                                  {formatCedis(Number(invoice.balance))}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </Card>
+              {data.topDebtors.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-slate-500">
+                  Every invoice is settled.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {data.topDebtors.map((invoice) => (
+                    <li
+                      key={invoice.id}
+                      className="flex items-center justify-between px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">
+                          {invoice.student.firstName} {invoice.student.lastName}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {invoice.student.admissionNo}
+                          {invoice.student.currentClassGroup
+                            ? ` · ${invoice.student.currentClassGroup.level.name} ${invoice.student.currentClassGroup.name}`
+                            : ""}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-red-600">
+                        {formatCedis(Number(invoice.balance))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
             <Card title="Term finances">
-                        <dl className="divide-y divide-slate-100">
-                          {[
-                            ["Billed", formatCedis(data.billed), "text-slate-900"],
-                            ["Collected", formatCedis(data.collected), "text-green-700"],
-                            ["Outstanding", formatCedis(data.outstanding), "text-red-600"],
-                            ["Expenditure", formatCedis(data.spent), "text-slate-900"],
-                            ["Net", formatCedis(data.collected - data.spent), "text-slate-900"],
-                          ].map(([label, value, tone]) => (
-                            <div key={label} className="flex items-center justify-between px-4 py-2.5">
-                              <dt className="text-sm text-slate-600">{label}</dt>
-                              <dd className={`text-sm font-semibold tabular-nums ${tone}`}>{value}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </Card>
+              <dl className="divide-y divide-slate-100">
+                {[
+                  ["Billed", formatCedis(data.billed), "text-slate-900"],
+                  ["Collected", formatCedis(data.collected), "text-green-700"],
+                  [
+                    "Outstanding",
+                    formatCedis(data.outstanding),
+                    "text-red-600",
+                  ],
+                  ["Expenditure", formatCedis(data.spent), "text-slate-900"],
+                  [
+                    "Net",
+                    formatCedis(data.collected - data.spent),
+                    "text-slate-900",
+                  ],
+                ].map(([label, value, tone]) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between px-4 py-2.5"
+                  >
+                    <dt className="text-sm text-slate-600">{label}</dt>
+                    <dd
+                      className={`text-sm font-semibold tabular-nums ${tone}`}
+                    >
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
           </div>
         </div>
       ) : (
@@ -295,23 +370,28 @@ export default async function DashboardPage() {
         <>
           <ActivityFeed items={activity} />
           <Card title="Enrolment by level">
-                    <ul className="divide-y divide-slate-100">
-                      {data.enrolmentByLevel.map((level) => (
-                        <li key={level.id} className="flex items-center gap-3 px-4 py-2">
-                          <span className="w-28 shrink-0 truncate text-sm text-slate-700">{level.name}</span>
-                          <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                            <span
-                              className="block h-full rounded-full bg-brand-600"
-                              style={{ width: `${(level.count / maxLevel) * 100}%` }}
-                            />
-                          </span>
-                          <span className="w-8 shrink-0 text-right text-sm tabular-nums text-slate-600">
-                            {level.count}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </Card>
+            <ul className="divide-y divide-slate-100">
+              {data.enrolmentByLevel.map((level) => (
+                <li
+                  key={level.id}
+                  className="flex items-center gap-3 px-4 py-2"
+                >
+                  <span className="w-28 shrink-0 truncate text-sm text-slate-700">
+                    {level.name}
+                  </span>
+                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                    <span
+                      className="block h-full rounded-full bg-brand-600"
+                      style={{ width: `${(level.count / maxLevel) * 100}%` }}
+                    />
+                  </span>
+                  <span className="w-8 shrink-0 text-right text-sm tabular-nums text-slate-600">
+                    {level.count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
         </>
       )}
     </div>

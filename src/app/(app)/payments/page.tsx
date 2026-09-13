@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Banknote, CircleAlert, Users } from "lucide-react";
 import Link from "next/link";
 import { paymentSource } from "@/lib/payment-labels";
 import { requireRole } from "@/lib/auth";
@@ -7,9 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { getPaymentList } from "@/lib/payment-data";
 import { reversePayment } from "@/lib/payment-actions";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Stat, Card, StatusBadge, Alert, filterClass } from "../ui";
-import { Banknote } from "lucide-react";
-import { DataTable, Row, type Column } from "../primitives";
+import { PageHeader, Card, StatusBadge, Alert, filterClass } from "../ui";
+import { DataTable, Row, StatCard, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { RecordForm, type StudentOption } from "./record-form";
 
@@ -25,14 +25,21 @@ const COLUMNS: Column[] = [
   { label: "Status" },
 ];
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const dateFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
 
-export default async function PaymentsPage({ searchParams }: PageProps<"/payments">) {
+export default async function PaymentsPage({
+  searchParams,
+}: PageProps<"/payments">) {
   await requireRole(FINANCE);
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.trim() : undefined;
   const method = typeof params.method === "string" ? params.method : undefined;
-  const receipt = typeof params.receipt === "string" ? params.receipt : undefined;
+  const receipt =
+    typeof params.receipt === "string" ? params.receipt : undefined;
 
   const [data, students] = await Promise.all([
     getPaymentList({ q, method }),
@@ -44,7 +51,9 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
         firstName: true,
         lastName: true,
         admissionNo: true,
-        currentClassGroup: { select: { name: true, level: { select: { name: true } } } },
+        currentClassGroup: {
+          select: { name: true, level: { select: { name: true } } },
+        },
         invoices: {
           where: { balance: { gt: 0 }, status: { not: "CANCELLED" } },
           select: { balance: true },
@@ -60,7 +69,10 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
     className: student.currentClassGroup
       ? `${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
       : "Unassigned",
-    balance: student.invoices.reduce((sum, invoice) => sum + Number(invoice.balance), 0),
+    balance: student.invoices.reduce(
+      (sum, invoice) => sum + Number(invoice.balance),
+      0,
+    ),
   }));
 
   const owing = options.filter((option) => option.balance > 0).length;
@@ -71,16 +83,31 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
       {receipt ? (
         <Alert tone="success">
-          Payment recorded. Receipt number <span className="font-mono font-semibold">{receipt}</span>{" "}
-          — give this to the parent.
+          Payment recorded. Receipt number{" "}
+          <span className="font-mono font-semibold">{receipt}</span> — give this
+          to the parent.
         </Alert>
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Total received" value={formatCedis(data.total)} tone="positive" />
-        <Stat label="Payments" value={String(data.count)} />
-        <Stat label="Students owing" value={String(owing)} tone={owing > 0 ? "negative" : "positive"} />
-        <Stat label="Students on roll" value={String(options.length)} />
+        <StatCard
+          label="Total received"
+          value={formatCedis(data.total)}
+          icon={Banknote}
+          severity="done"
+        />
+        <StatCard label="Payments" value={String(data.count)} icon={Banknote} />
+        <StatCard
+          label="Students owing"
+          value={String(owing)}
+          icon={CircleAlert}
+          severity="blocking"
+        />
+        <StatCard
+          label="Students on roll"
+          value={String(options.length)}
+          icon={Users}
+        />
       </div>
 
       <RecordForm students={options} />
@@ -93,7 +120,11 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
           placeholder="Receipt no., reference or student"
           className={`${filterClass} w-64`}
         />
-        <select name="method" defaultValue={method ?? ""} className={`${filterClass} w-auto`}>
+        <select
+          name="method"
+          defaultValue={method ?? ""}
+          className={`${filterClass} w-auto`}
+        >
           <option value="">Any method</option>
           <option value="CASH">Cash</option>
           <option value="MOBILE_MONEY">Mobile money</option>
@@ -119,53 +150,66 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
         <div className="overflow-x-auto">
           <DataTable
             columns={COLUMNS}
-            empty={{ icon: Banknote, title: "No payments recorded for these filters yet.", action: undefined }}
+            empty={{
+              icon: Banknote,
+              title: "No payments recorded for these filters yet.",
+              action: undefined,
+            }}
           >
             {data.payments.map((payment) => (
-                  <Row key={payment.id}>
-                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
-                      {payment.receiptNo}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                      {dateFmt.format(payment.paidAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5">
-                      <span className="font-medium text-slate-900">
-                        {payment.student.lastName}, {payment.student.firstName}
-                      </span>
-                      <span className="ml-2 font-mono text-xs text-slate-400">
-                        {payment.student.admissionNo}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                      {paymentSource(payment.method, payment.momoNetwork)}
-                      {payment.momoNetwork ? ` (${payment.momoNetwork})` : ""}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-500">
-                      {payment.allocations.length === 0
-                        ? "unallocated"
-                        : payment.allocations.map((a) => a.invoice.invoiceNo).join(", ")}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums text-slate-900">
-                      {formatCedis(payment.amount)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5">
-                      <StatusBadge status={payment.status} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 text-right">
-                      {payment.status === "CONFIRMED" ? (
-                        <form action={reversePayment}>
-                          <input type="hidden" name="paymentId" value={payment.id} />
-                          <input type="hidden" name="reason" value="Reversed by bursar" />
-                          <SubmitButton variant="danger" pendingLabel="Reversing…">
-                            Reverse
-                          </SubmitButton>
-                        </form>
-                      ) : null}
-                    </td>
-                  </Row>
-                ))
-              }
+              <Row key={payment.id}>
+                <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
+                  {payment.receiptNo}
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                  {dateFmt.format(payment.paidAt)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5">
+                  <span className="font-medium text-slate-900">
+                    {payment.student.lastName}, {payment.student.firstName}
+                  </span>
+                  <span className="ml-2 font-mono text-xs text-slate-400">
+                    {payment.student.admissionNo}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
+                  {paymentSource(payment.method, payment.momoNetwork)}
+                  {payment.momoNetwork ? ` (${payment.momoNetwork})` : ""}
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-500">
+                  {payment.allocations.length === 0
+                    ? "unallocated"
+                    : payment.allocations
+                        .map((a) => a.invoice.invoiceNo)
+                        .join(", ")}
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums text-slate-900">
+                  {formatCedis(payment.amount)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5">
+                  <StatusBadge status={payment.status} />
+                </td>
+                <td className="whitespace-nowrap px-4 py-2.5 text-right">
+                  {payment.status === "CONFIRMED" ? (
+                    <form action={reversePayment}>
+                      <input
+                        type="hidden"
+                        name="paymentId"
+                        value={payment.id}
+                      />
+                      <input
+                        type="hidden"
+                        name="reason"
+                        value="Reversed by bursar"
+                      />
+                      <SubmitButton variant="danger" pendingLabel="Reversing…">
+                        Reverse
+                      </SubmitButton>
+                    </form>
+                  ) : null}
+                </td>
+              </Row>
+            ))}
           </DataTable>
         </div>
       </Card>
