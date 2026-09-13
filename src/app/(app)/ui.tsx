@@ -174,7 +174,7 @@ const STATUS_TONE: Record<string, string> = {
   ISSUED: "bg-info-tint text-info-ink",
   OVERDUE: "bg-danger-tint text-danger-ink",
   DRAFT: "bg-slate-100 text-slate-500",
-  CANCELLED: "bg-slate-100 text-slate-400 line-through",
+  CANCELLED: "bg-slate-100 text-slate-500 line-through",
   CONFIRMED: "bg-success-tint text-success-ink",
   REVERSED: "bg-danger-tint text-danger-ink line-through",
   PENDING: "bg-warning-tint text-warning-ink",

@@ -28,7 +28,7 @@ function Flag({ on, label }: { on: boolean; label: string }) {
   return (
     <span
       className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-        on ? "bg-success-tint text-success-ink" : "bg-slate-100 text-slate-400"
+        on ? "bg-success-tint text-success-ink" : "bg-slate-100 text-slate-500"
       }`}
     >
       {label}
