@@ -7,21 +7,23 @@ import { prisma } from "@/lib/prisma";
 import { getPaymentList } from "@/lib/payment-data";
 import { reversePayment } from "@/lib/payment-actions";
 import { formatCedis } from "@/lib/money";
-import {
-  PageHeader,
-  Stat,
-  Card,
-  StatusBadge,
-  EmptyRow,
-  Alert,
-  filterClass,
-  thClass,
-  tableHeadClass,
-} from "../ui";
+import { PageHeader, Stat, Card, StatusBadge, Alert, filterClass } from "../ui";
+import { Banknote } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { RecordForm, type StudentOption } from "./record-form";
 
 export const metadata: Metadata = { title: "Payments · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "Receipt" },
+  { label: "Date" },
+  { label: "Student" },
+  { label: "Amount", numeric: true },
+  { label: "Method" },
+  { label: "Applied to" },
+  { label: "Status" },
+];
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
@@ -115,25 +117,12 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Receipt</th>
-                <th className={thClass}>Date</th>
-                <th className={thClass}>Student</th>
-                <th className={thClass}>Method</th>
-                <th className={thClass}>Applied to</th>
-                <th className={`${thClass} text-right`}>Amount</th>
-                <th className={thClass}>Status</th>
-                <th className={thClass} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.payments.length === 0 ? (
-                <EmptyRow colSpan={8}>No payments recorded yet.</EmptyRow>
-              ) : (
-                data.payments.map((payment) => (
-                  <tr key={payment.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Banknote, title: "No payments recorded for these filters yet.", action: undefined }}
+          >
+            {data.payments.map((payment) => (
+                  <Row key={payment.id}>
                     <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
                       {payment.receiptNo}
                     </td>
@@ -174,11 +163,10 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/payment
                         </form>
                       ) : null}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
     </div>

@@ -7,10 +7,22 @@ import { getInvoiceList, getInvoiceFilterOptions } from "@/lib/invoice-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { formatCedis } from "@/lib/money";
 import { displayStatus, daysOverdue } from "@/lib/invoice-engine";
-import { PageHeader, Stat, Card, StatusBadge, EmptyRow, filterClass, thClass, tableHeadClass } from "../ui";
+import { PageHeader, Stat, Card, StatusBadge, filterClass } from "../ui";
+import { FileText } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import { GenerateForm } from "./generate-form";
 
 export const metadata: Metadata = { title: "Invoices · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "Invoice" },
+  { label: "Student" },
+  { label: "Class" },
+  { label: "Total", numeric: true },
+  { label: "Paid", numeric: true },
+  { label: "Balance", numeric: true },
+  { label: "Status" },
+];
 
 const STATUSES: (InvoiceStatus | "DEBTORS")[] = [
   "DEBTORS",
@@ -127,27 +139,12 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Invoice</th>
-                <th className={thClass}>Student</th>
-                <th className={thClass}>Class</th>
-                <th className={`${thClass} text-right`}>Total</th>
-                <th className={`${thClass} text-right`}>Paid</th>
-                <th className={`${thClass} text-right`}>Balance</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.invoices.length === 0 ? (
-                <EmptyRow colSpan={7}>
-                  No invoices match these filters. Generate them for the term above if you
-                  haven&rsquo;t yet.
-                </EmptyRow>
-              ) : (
-                data.invoices.map((invoice) => (
-                  <tr key={invoice.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: FileText, title: "No invoices match these filters. Generate the term's bills, or widen the search.", action: undefined }}
+          >
+            {data.invoices.map((invoice) => (
+                  <Row key={invoice.id}>
                     <td className="whitespace-nowrap px-4 py-2.5">
                       <Link
                         href={`/invoices/${invoice.id}`}
@@ -188,11 +185,10 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/invoice
                         </span>
                       ) : null}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
     </div>

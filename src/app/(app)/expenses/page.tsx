@@ -6,11 +6,22 @@ import { getExpenseList, getTermCashPosition } from "@/lib/expense-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { cancelExpense } from "@/lib/expense-actions";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Stat, Card, EmptyRow, filterClass, thClass, tableHeadClass } from "../ui";
+import { PageHeader, Stat, Card, filterClass } from "../ui";
+import { Wallet } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { ExpenseForm } from "./expense-form";
 
 export const metadata: Metadata = { title: "Expenses · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "Voucher" },
+  { label: "Date" },
+  { label: "Description" },
+  { label: "Category" },
+  { label: "Payee" },
+  { label: "Amount", numeric: true },
+];
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
@@ -106,24 +117,12 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
 
           <Card>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className={tableHeadClass}>
-                  <tr>
-                    <th className={thClass}>Voucher</th>
-                    <th className={thClass}>Date</th>
-                    <th className={thClass}>Description</th>
-                    <th className={thClass}>Category</th>
-                    <th className={thClass}>Payee</th>
-                    <th className={`${thClass} text-right`}>Amount</th>
-                    <th className={thClass} />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.expenses.length === 0 ? (
-                    <EmptyRow colSpan={7}>No expenses recorded for these filters.</EmptyRow>
-                  ) : (
-                    data.expenses.map((expense) => (
-                      <tr key={expense.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Wallet, title: "No expenditure recorded for this term yet.", action: undefined }}
+          >
+            {data.expenses.map((expense) => (
+                      <Row key={expense.id}>
                         <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
                           {expense.voucherNo}
                         </td>
@@ -148,11 +147,10 @@ export default async function ExpensesPage({ searchParams }: PageProps<"/expense
                             </SubmitButton>
                           </form>
                         </td>
-                      </tr>
+                      </Row>
                     ))
-                  )}
-                </tbody>
-              </table>
+                  }
+          </DataTable>
             </div>
           </Card>
         </div>
