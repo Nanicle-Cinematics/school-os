@@ -75,7 +75,23 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17 age
-          pg_dump --version
+
+          # ⚠️ Installing 17 is not the same as USING it. PGDG puts its binaries
+          # in /usr/lib/postgresql/17/bin, while the runner's preinstalled
+          # postgresql-client-16 owns /usr/bin/pg_dump and comes first on PATH —
+          # so the install succeeded, `pg_dump --version` printed 16, and the
+          # first dump died on "server version mismatch" anyway.
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+          export PATH=/usr/lib/postgresql/17/bin:$PATH
+
+          # And assert it, because a version line that is only printed is a
+          # version line nobody reads until it is too late.
+          version=$(pg_dump --version | grep -oE '[0-9]+' | head -1)
+          echo "pg_dump $(pg_dump --version)"
+          if [ "$version" != "17" ]; then
+            echo "::error::pg_dump is $version, not 17 — it cannot dump the Supabase server."
+            exit 1
+          fi
 
       - uses: actions/setup-node@v4
         with:
