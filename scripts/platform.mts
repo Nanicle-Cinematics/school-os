@@ -8,6 +8,7 @@
  *
  * Run it against whichever database the env file points at:
  *
+ *   npm run platform -- sql you@example.com              # prints SQL to paste
  *   npm run platform -- admin you@example.com            # create or reset
  *   npm run platform -- delete-school st-mary-demo       # tenant + orphans
  *
@@ -147,7 +148,55 @@ async function deleteSchool(slug: string) {
   console.log(`\nDeleted ${school.name} and ${orphans.count} orphaned login(s).\n`);
 }
 
-if (command === "admin" && argument) {
+/**
+ * The same account, without needing the database password.
+ *
+ * ⚠️ Supabase will not SHOW an existing database password — it only offers to
+ * reset one, and resetting it breaks production until Vercel's environment
+ * variables are updated and the app redeployed. So when the password is lost
+ * rather than merely unused, `admin` cannot run at all.
+ *
+ * This path needs no connection: it hashes the password here and prints the one
+ * statement to paste into the Supabase SQL editor, which is authenticated by
+ * the dashboard session rather than by the database password. The password
+ * itself never leaves this machine — only its scrypt hash does, and a hash in a
+ * SQL editor is not a credential.
+ */
+async function printSql(email: string) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const password = (await rl.question("Choose a password for this account: ")).trim();
+  rl.close();
+
+  if (password.length < 8) {
+    console.error("\nUse at least 8 characters.");
+    process.exitCode = 1;
+    return;
+  }
+
+  const hash = await hashPassword(password);
+  console.log(`
+Paste this into the Supabase SQL editor for the PRODUCTION project.
+It promotes the account if it exists, and creates it if it does not.
+
+──────────────────────────────────────────────────────────────────────
+insert into "User" (id, email, name, "passwordHash", "isPlatformAdmin",
+                    "mustChangePassword", "createdAt", "updatedAt")
+values (gen_random_uuid()::text, '${email}', '${email.split("@")[0]}',
+        '${hash}', true, false, now(), now())
+on conflict (email) do update
+  set "passwordHash"      = excluded."passwordHash",
+      "isPlatformAdmin"   = true,
+      "mustChangePassword" = false,
+      "updatedAt"          = now();
+──────────────────────────────────────────────────────────────────────
+
+Then sign in at /login with ${email} and the password you just typed.
+`);
+}
+
+if (command === "sql" && argument) {
+  await printSql(argument.trim().toLowerCase());
+} else if (command === "admin" && argument) {
   console.log(`\nDatabase: ${target()}`);
   await makeAdmin(argument.trim().toLowerCase());
 } else if (command === "delete-school" && argument) {
@@ -155,6 +204,7 @@ if (command === "admin" && argument) {
 } else {
   console.error(
     "Usage:\n" +
+      "  npm run platform -- sql <email>            # no DB password needed\n" +
       "  npm run platform -- admin <email>\n" +
       "  npm run platform -- delete-school <slug>",
   );
