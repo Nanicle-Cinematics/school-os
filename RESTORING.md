@@ -42,14 +42,17 @@ lost, the backups are unreadable — there is no recovery, by design.
 Take the session-pooler URL (port 5432, user `postgres.<ref>`), not the direct
 `db.<ref>.supabase.co` host, which is IPv6-only and unreachable from most Macs.
 
-**3. Restore.** Into an empty database:
+**3. Restore.** Into an empty database — and it must be genuinely empty,
+including its `public` schema. The dump carries `CREATE SCHEMA public`, which
+every database already has, so this fails on its first statement otherwise:
 
 ```
+psql -c 'drop schema if exists public cascade' "$TARGET"
 pg_restore --no-owner --no-privileges --exit-on-error --dbname "$TARGET" production.dump
 ```
 
-If the target is not empty, add `--clean --if-exists` — and be certain, because
-that drops what is there first.
+That first line destroys whatever is in the target. Read the connection string
+again before running it.
 
 **4. Recreate the restricted role.** The app connects as `school_os_app`, which
 the dump does not carry:

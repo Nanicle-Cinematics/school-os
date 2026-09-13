@@ -11,6 +11,7 @@
 # Exit codes, which the workflow reads:
 #   0  restored, and the counts match
 #   1  the counts DISAGREE — the dump does not reproduce the source
+#   2  the target was not empty, and this script will not overwrite it
 #   3  nothing to prove: the source holds no rows at all
 #
 # ⚠️ 3 is not success, and must never be reported as a tick. An empty source
@@ -44,6 +45,21 @@ psql -At -f "$here/table-counts.sql" "$source_url" > /tmp/counts.source
 total=$(awk -F= '{ s += $2 } END { print s + 0 }' /tmp/counts.source)
 tables=$(wc -l < /tmp/counts.source | tr -d ' ')
 echo "  $tables tables, $total rows"
+
+# ⚠️ The target must not already own a `public` schema. A --schema=public dump
+# carries `CREATE SCHEMA public`, and every database ever created has one, so a
+# restore into an otherwise perfectly empty database fails on its first
+# statement. Dropping it first is what makes the restore deterministic — and it
+# is the step the runbook needs too, for a fresh Supabase project.
+existing=$(psql -At -c "select count(*) from information_schema.tables
+                         where table_schema = 'public' and table_type = 'BASE TABLE'" \
+           "$scratch_url")
+if [ "$existing" != "0" ]; then
+  echo "REFUSING: the restore target already holds $existing tables."
+  echo "This script drops and recreates its target's public schema; point it at an empty database."
+  exit 2
+fi
+psql -q -c 'drop schema if exists public cascade' "$scratch_url"
 
 echo "Restoring…"
 pg_restore --no-owner --no-privileges --exit-on-error --dbname "$scratch_url" "$dump"
