@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { buttonClass } from "../button-style";
 import { saveFeeStructure, type ActionState } from "@/lib/fee-actions";
 import { SubmitButton } from "../submit-button";
 import { Alert, Field, inputClass } from "../ui";
@@ -28,7 +29,7 @@ export function StructureForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+        className={buttonClass("primary")}
       >
         New fee structure
       </button>
@@ -98,7 +99,7 @@ export function StructureForm({
       <div className="mt-5">
         <p className="mb-2 text-sm font-medium text-slate-700">Fee items (GHS per term)</p>
         {categories.length === 0 ? (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="rounded-lg border border-hairline bg-warning-tint px-3 py-2 text-sm text-warning-ink">
             No fee items exist yet, so there is nothing to price. Add them in the Fee items card
             below first — a structure is a set of amounts, one per item.
           </p>

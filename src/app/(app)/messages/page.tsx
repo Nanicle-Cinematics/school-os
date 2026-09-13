@@ -1,15 +1,29 @@
 import type { Metadata } from "next";
+import { StatCard } from "../primitives";
+import { CircleAlert, Send, Wallet } from "lucide-react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getMessagingSetup, getMessageStats } from "@/lib/message-data";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Stat, Card, StatusBadge, EmptyRow, thClass, tableHeadClass } from "../ui";
+import { PageHeader, Card, StatusBadge } from "../ui";
+import { DataTable, Row, type Column } from "../primitives";
 import { Compose } from "./compose";
 import { StandardMessages } from "./standard-messages";
 import { DEFAULT_MESSAGE_TEMPLATES } from "@/lib/message-defaults";
 
 export const metadata: Metadata = { title: "Messages · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Name" },
+  { label: "Audience" },
+  { label: "Recipients", numeric: true },
+  { label: "Sent", numeric: true },
+  { label: "Failed", numeric: true },
+  { label: "Cost", numeric: true },
+  { label: "When" },
+];
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -29,12 +43,12 @@ const AUDIENCE_LABEL: Record<string, string> = {
 
 export default async function MessagesPage() {
   await requireRole(OFFICE);
-  const [{ templates, campaigns, classGroups, levels, settings }, stats] = await Promise.all([
-    getMessagingSetup(),
-    getMessageStats(),
-  ]);
+  const [{ templates, campaigns, classGroups, levels, settings }, stats] =
+    await Promise.all([getMessagingSetup(), getMessageStats()]);
 
-  const gatewayConfigured = Boolean(process.env.SMS_API_KEY && process.env.SMS_PROVIDER);
+  const gatewayConfigured = Boolean(
+    process.env.SMS_API_KEY && process.env.SMS_PROVIDER,
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -48,19 +62,32 @@ export default async function MessagesPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Messages" value={String(stats.total)} />
-        <Stat label="Sent" value={String(stats.sent)} tone="positive" />
-        <Stat
+        <StatCard label="Messages" value={String(stats.total)} icon={Send} />
+        <StatCard
+          label="Sent"
+          value={String(stats.sent)}
+          icon={Send}
+          severity="done"
+        />
+        <StatCard
           label="Failed"
           value={String(stats.failed)}
-          tone={stats.failed > 0 ? "negative" : "default"}
+          icon={CircleAlert}
+          severity={stats.failed > 0 ? "blocking" : "done"}
         />
-        <Stat label="Spend" value={formatCedis(stats.cost)} sub="estimated" />
+        <StatCard
+          label="Spend"
+          value={formatCedis(stats.cost)}
+          caption="estimated"
+          icon={Wallet}
+        />
       </div>
 
       <StandardMessages
         missing={
-          DEFAULT_MESSAGE_TEMPLATES.filter((d) => !templates.some((t) => t.name === d.name)).length
+          DEFAULT_MESSAGE_TEMPLATES.filter(
+            (d) => !templates.some((t) => t.name === d.name),
+          ).length
         }
         total={templates.length}
       />
@@ -74,27 +101,12 @@ export default async function MessagesPage() {
 
       <Card title="Campaigns">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Audience</th>
-                <th className={`${thClass} text-right`}>Recipients</th>
-                <th className={`${thClass} text-right`}>Sent</th>
-                <th className={`${thClass} text-right`}>Failed</th>
-                <th className={`${thClass} text-right`}>Cost</th>
-                <th className={thClass}>When</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {campaigns.length === 0 ? (
-                <EmptyRow colSpan={8}>
-                  No campaigns yet. Compose one above — preview first to see who it reaches.
-                </EmptyRow>
-              ) : (
-                campaigns.map((campaign) => (
-                  <tr key={campaign.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Send, title: "No campaigns yet. Compose one to a class, a level or the families who owe.", action: undefined }}
+          >
+            {campaigns.map((campaign) => (
+                  <Row key={campaign.id}>
                     <td className="whitespace-nowrap px-4 py-2.5">
                       <Link
                         href={`/messages/${campaign.id}`}
@@ -104,19 +116,22 @@ export default async function MessagesPage() {
                       </Link>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                      {AUDIENCE_LABEL[campaign.audienceType] ?? campaign.audienceType}
+                      {AUDIENCE_LABEL[campaign.audienceType] ??
+                        campaign.audienceType}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
                       {campaign.totalRecipients}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-green-700">
+                    <td className="px-4 py-2.5 text-right tabular-nums text-success-ink">
                       {campaign.sentCount}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-red-600">
+                    <td className="px-4 py-2.5 text-right tabular-nums text-danger-ink">
                       {campaign.failedCount || "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
-                      {campaign.estimatedCost ? formatCedis(campaign.estimatedCost) : "—"}
+                      {campaign.estimatedCost
+                        ? formatCedis(campaign.estimatedCost)
+                        : "—"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-slate-500">
                       {dateFmt.format(campaign.sentAt ?? campaign.createdAt)}
@@ -124,11 +139,10 @@ export default async function MessagesPage() {
                     <td className="px-4 py-2.5">
                       <StatusBadge status={campaign.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
     </div>

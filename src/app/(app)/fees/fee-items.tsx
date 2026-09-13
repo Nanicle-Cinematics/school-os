@@ -103,7 +103,7 @@ export function FeeItemSection({ items }: { items: FeeItemRow[] }) {
   return (
     <>
       {items.length === 0 ? (
-        <div className="border-b border-slate-100 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
+        <div className="border-b border-slate-100 bg-warning-tint/60 px-4 py-3 text-sm text-warning-ink">
           This school has no fee items yet, so there is nothing to enter an amount against. Start
           from the usual ones below and edit them, or add your own.
         </div>

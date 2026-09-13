@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import { StatCard } from "../primitives";
+import { Layers, Receipt, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
 import { getFeeSetup } from "@/lib/fee-data";
 import { deleteFeeStructure } from "@/lib/fee-actions";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Card, Stat } from "../ui";
+import { PageHeader, Card } from "../ui";
 import { SubmitButton } from "../submit-button";
 import { StructureForm } from "./structure-form";
 import { FeeItemSection } from "./fee-items";
@@ -22,7 +24,10 @@ export default async function FeesPage() {
         <Card>
           <p className="px-4 py-10 text-center text-sm text-slate-500">
             No academic year is marked as current, and fees are priced per term.{" "}
-            <Link href="/settings/terms" className="font-medium text-brand-ink hover:underline">
+            <Link
+              href="/settings/terms"
+              className="font-medium text-brand-ink hover:underline"
+            >
               Set up the year and its terms
             </Link>{" "}
             first.
@@ -52,19 +57,34 @@ export default async function FeesPage() {
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Structures" value={String(structures.length)} sub={`${levels.length} levels`} />
-        <Stat
+        <StatCard
+          label="Structures"
+          value={String(structures.length)}
+          caption={`${levels.length} levels`}
+          icon={Layers}
+        />
+        <StatCard
           label="Levels priced"
           value={`${covered.size}/${levels.length}`}
-          tone={missing.length > 0 ? "negative" : "positive"}
-          sub={missing.length > 0 ? `${missing.length} missing` : "all covered"}
+          caption={
+            missing.length > 0 ? `${missing.length} missing` : "all covered"
+          }
+          icon={Layers}
         />
-        <Stat label="Fee items" value={String(categories.length)} />
-        <Stat
+        <StatCard
+          label="Fee items"
+          value={String(categories.length)}
+          icon={Receipt}
+        />
+        <StatCard
           label="Highest termly fee"
           value={formatCedis(
-            structures.reduce((max, s) => (Number(s.total) > max ? Number(s.total) : max), 0),
+            structures.reduce(
+              (max, s) => (Number(s.total) > max ? Number(s.total) : max),
+              0,
+            ),
           )}
+          icon={TrendingUp}
         />
       </div>
 
@@ -73,10 +93,10 @@ export default async function FeesPage() {
       </Card>
 
       {missing.length > 0 && categories.length > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-hairline bg-warning-tint px-4 py-3 text-sm text-warning-ink">
           <span className="font-medium">No fee structure yet for:</span>{" "}
-          {missing.map((level) => level.name).join(", ")}. Students in these levels will be skipped
-          when you generate invoices.
+          {missing.map((level) => level.name).join(", ")}. Students in these
+          levels will be skipped when you generate invoices.
         </div>
       ) : null}
 
@@ -95,12 +115,23 @@ export default async function FeesPage() {
               action={
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-slate-500">
-                    {structure.term ? `Term ${structure.term.sequence}` : "All terms"} ·{" "}
-                    {structure.residency === "ANY" ? "day & boarding" : structure.residency.toLowerCase()}
-                    {structure.studentType !== "ANY" ? ` · ${structure.studentType.toLowerCase()}` : ""}
+                    {structure.term
+                      ? `Term ${structure.term.sequence}`
+                      : "All terms"}{" "}
+                    ·{" "}
+                    {structure.residency === "ANY"
+                      ? "day & boarding"
+                      : structure.residency.toLowerCase()}
+                    {structure.studentType !== "ANY"
+                      ? ` · ${structure.studentType.toLowerCase()}`
+                      : ""}
                   </span>
                   <form action={deleteFeeStructure}>
-                    <input type="hidden" name="structureId" value={structure.id} />
+                    <input
+                      type="hidden"
+                      name="structureId"
+                      value={structure.id}
+                    />
                     <SubmitButton variant="danger" pendingLabel="Removing…">
                       Remove
                     </SubmitButton>
@@ -111,14 +142,18 @@ export default async function FeesPage() {
               <div className="flex flex-wrap gap-x-8 gap-y-2 px-4 py-3">
                 {structure.items.map((item) => (
                   <div key={item.id} className="min-w-32">
-                    <p className="text-xs text-slate-500">{item.feeCategory.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {item.feeCategory.name}
+                    </p>
                     <p className="text-sm font-medium tabular-nums text-slate-900">
                       {formatCedis(item.amount)}
                     </p>
                   </div>
                 ))}
                 <div className="ml-auto min-w-32 border-l border-slate-100 pl-6">
-                  <p className="text-xs font-medium uppercase text-slate-500">Total per term</p>
+                  <p className="text-xs font-medium text-slate-500">
+                    Total per term
+                  </p>
                   <p className="text-base font-semibold tabular-nums text-slate-900">
                     {formatCedis(structure.total)}
                   </p>

@@ -1,14 +1,23 @@
 import type { Metadata } from "next";
+import { BookOpen } from "lucide-react";
+import { DataTable, Row, type Column } from "../../primitives";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { OFFICE, roleLabel } from "@/lib/permissions";
 import { getStaffMember } from "@/lib/staff-data";
 import { removeStaff, removeTeachingAssignment } from "@/lib/staff-actions";
-import { Alert, Card, EmptyRow, tableHeadClass, thClass } from "../../ui";
+import { Alert, Card } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditStaffForm } from "../staff-form";
 import { AssignmentForm } from "./assignment-form";
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Subject" },
+  { label: "Class" },
+  { label: "" },
+];
 
 export const metadata: Metadata = { title: "Staff member · School OS" };
 
@@ -58,24 +67,12 @@ export default async function StaffDetailPage({ params, searchParams }: PageProp
 
       <Card title={year ? `Teaching assignments · ${year.name}` : "Teaching assignments"}>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Subject</th>
-                <th className={thClass}>Class</th>
-                <th className={thClass} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {assignments.length === 0 ? (
-                <EmptyRow colSpan={3}>
-                  {year
-                    ? "No assignments yet — without one, this teacher cannot enter scores for any subject."
-                    : "No academic year is marked current. Set one in Settings."}
-                </EmptyRow>
-              ) : (
-                assignments.map((assignment) => (
-                  <tr key={assignment.id}>
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: BookOpen, title: "Nothing assigned to this member of staff this year.", action: undefined }}
+          >
+            {assignments.map((assignment) => (
+                  <Row key={assignment.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                       {assignment.subject.name}
                     </td>
@@ -91,11 +88,10 @@ export default async function StaffDetailPage({ params, searchParams }: PageProp
                         </SubmitButton>
                       </form>
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
         {year ? (
           <div className="border-t border-slate-100">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { buttonClass } from "../../button-style";
 import { deleteBand, saveBand, saveScale, type GradingState } from "@/lib/grading-actions";
 import { SubmitButton } from "../../submit-button";
 import { Alert, inputClass } from "../../ui";
@@ -194,7 +195,7 @@ export function NewScaleForm() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+        className={buttonClass("primary")}
       >
         New scale
       </button>

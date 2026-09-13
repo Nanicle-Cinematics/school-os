@@ -3,15 +3,26 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getStaffList } from "@/lib/staff-data";
-import { EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
+import { PageHeader, filterClass } from "../ui";
+import { Briefcase } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import { NewStaffForm } from "./staff-form";
 
 export const metadata: Metadata = { title: "Staff · School OS" };
 
+const COLUMNS: Column[] = [
+  { label: "Staff no." },
+  { label: "Name" },
+  { label: "Designation" },
+  { label: "Form class" },
+  { label: "Subjects taught" },
+  { label: "Status" },
+];
+
 const STATUS_TONE: Record<string, string> = {
-  ACTIVE: "bg-green-50 text-green-700",
-  ON_LEAVE: "bg-amber-50 text-amber-700",
-  SUSPENDED: "bg-red-50 text-red-700",
+  ACTIVE: "bg-success-tint text-success-ink",
+  ON_LEAVE: "bg-warning-tint text-warning-ink",
+  SUSPENDED: "bg-danger-tint text-danger-ink",
   RESIGNED: "bg-slate-100 text-slate-500",
   RETIRED: "bg-slate-100 text-slate-500",
 };
@@ -58,28 +69,12 @@ export default async function StaffPage({ searchParams }: PageProps<"/staff">) {
           Apply
         </button>
       </form>
-
-      <div className="overflow-hidden rounded-card border border-hairline bg-surface">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Staff no.</th>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Designation</th>
-                <th className={thClass}>Form class</th>
-                <th className={thClass}>Subjects taught</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {staff.length === 0 ? (
-                <EmptyRow colSpan={6}>
-                  {query ? "Nobody matches that." : "No staff on file yet."}
-                </EmptyRow>
-              ) : (
-                staff.map((person) => (
-                  <tr key={person.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Briefcase, title: "No staff on file yet. Add a teacher or an administrator to get started.", action: { label: "Add staff", href: "/staff" } }}
+          >
+            {staff.map((person) => (
+                  <Row key={person.id}>
                     <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-500">
                       {person.staffNo}
                     </td>
@@ -110,13 +105,10 @@ export default async function StaffPage({ searchParams }: PageProps<"/staff">) {
                         {person.status.replace(/_/g, " ").toLowerCase()}
                       </span>
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              }
+          </DataTable>
     </div>
   );
 }

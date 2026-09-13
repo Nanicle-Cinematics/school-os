@@ -1,21 +1,27 @@
 import type { Metadata } from "next";
+import { ClipboardCheck } from "lucide-react";
+import { buttonClass } from "../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { LEADERSHIP } from "@/lib/permissions";
 import { getTeachingScope, getAssessmentList, getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
-import {
-  PageHeader,
-  Card,
-  StatusBadge,
-  EmptyRow,
-  filterClass,
-  thClass,
-  tableHeadClass,
-} from "../ui";
+import { PageHeader, Card, StatusBadge, filterClass } from "../ui";
+import { DataTable, Row, type Column } from "../primitives";
 import { NewAssessment } from "./new-assessment";
 
 export const metadata: Metadata = { title: "Assessments · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Title" },
+  { label: "Class" },
+  { label: "Subject" },
+  { label: "Type" },
+  { label: "Max", numeric: true },
+  { label: "Weight", numeric: true },
+  { label: "Scored", numeric: true },
+];
 
 const TYPE_LABEL: Record<string, string> = {
   CLASS_EXERCISE: "Exercise",
@@ -93,7 +99,7 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
         </select>
         <button
           type="submit"
-          className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+          className={buttonClass("secondary")}
         >
           Filter
         </button>
@@ -107,27 +113,12 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Title</th>
-                <th className={thClass}>Class</th>
-                <th className={thClass}>Subject</th>
-                <th className={thClass}>Type</th>
-                <th className={`${thClass} text-right`}>Max</th>
-                <th className={`${thClass} text-right`}>Weight</th>
-                <th className={`${thClass} text-right`}>Scored</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {assessments.length === 0 ? (
-                <EmptyRow colSpan={8}>
-                  No assessments yet. Create one to start entering scores.
-                </EmptyRow>
-              ) : (
-                assessments.map((assessment) => (
-                  <tr key={assessment.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: ClipboardCheck, title: "No assessments for this term yet. The mark sheet creates the standard set when you open it.", action: undefined }}
+          >
+            {assessments.map((assessment) => (
+                  <Row key={assessment.id}>
                     <td className="whitespace-nowrap px-4 py-2.5">
                       <Link
                         href={`/assessments/${assessment.id}`}
@@ -157,11 +148,10 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
                     <td className="whitespace-nowrap px-4 py-2.5">
                       <StatusBadge status={assessment.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
     </div>

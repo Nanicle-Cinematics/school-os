@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { CalendarDays } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
@@ -6,9 +8,18 @@ import { OFFICE } from "@/lib/permissions";
 import { getSettings, getYearUsage } from "@/lib/settings-data";
 import { setCurrentTerm } from "@/lib/settings-actions";
 import { deleteAcademicYear } from "@/lib/term-actions";
-import { Alert, Card, EmptyRow, PageHeader, tableHeadClass, thClass } from "../ui";
+import { Alert, Card, PageHeader } from "../ui";
 import { SubmitButton } from "../submit-button";
 import { AcademicForm, FeesForm, ProfileForm, SmsForm } from "./settings-forms";
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Year" },
+  { label: "Term" },
+  { label: "Runs" },
+  { label: "Vacation" },
+  { label: "" },
+];
 
 export const metadata: Metadata = { title: "Settings · School OS" };
 
@@ -76,30 +87,13 @@ export default async function SettingsPage() {
         }
       >
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Year</th>
-                <th className={thClass}>Term</th>
-                <th className={thClass}>Runs</th>
-                <th className={thClass}>Vacation</th>
-                <th className={thClass} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {years.length === 0 ? (
-                <EmptyRow colSpan={5}>
-                  No academic years yet — and until one exists nothing can be invoiced, marked or
-                  reported.{" "}
-                  <Link href="/settings/terms" className="font-medium text-slate-900 underline">
-                    Add the first one
-                  </Link>
-                  ; its three terms are generated for you.
-                </EmptyRow>
-              ) : (
-                years.flatMap((year) =>
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: CalendarDays, title: "No academic year set up yet.", action: undefined }}
+          >
+            {years.flatMap((year) =>
                   year.terms.map((term) => (
-                    <tr key={term.id} className={term.isCurrent ? "bg-slate-50" : ""}>
+                    <Row key={term.id}>
                       <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                         {year.name}
                       </td>
@@ -148,12 +142,11 @@ export default async function SettingsPage() {
                           ) : null}
                         </div>
                       </td>
-                    </tr>
+                    </Row>
                   )),
                 )
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
         <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
           Switching the current term changes what every other page is talking about — invoices,
@@ -268,7 +261,7 @@ export default async function SettingsPage() {
                       key={band.id}
                       title={`${band.remark} · ${band.points} point${band.points === 1 ? "" : "s"}`}
                       className={`rounded px-1.5 py-0.5 text-xs ${
-                        band.isPass ? "bg-slate-100 text-slate-700" : "bg-red-50 text-red-700"
+                        band.isPass ? "bg-slate-100 text-slate-700" : "bg-danger-tint text-danger-ink"
                       }`}
                     >
                       {band.grade} {band.minScore.toString()}–{band.maxScore.toString()}

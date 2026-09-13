@@ -109,7 +109,7 @@ export function RemarksForm({
                   <p className="text-xs text-slate-400">{student.admissionNo}</p>
                 </div>
                 {published ? (
-                  <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  <span className="rounded-full bg-warning-tint px-2 py-0.5 text-xs font-medium text-warning-ink">
                     card already published
                   </span>
                 ) : null}
@@ -117,7 +117,7 @@ export function RemarksForm({
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="text-sm">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">
                     Conduct
                   </span>
                   <input
@@ -131,7 +131,7 @@ export function RemarksForm({
                 </label>
 
                 <label className="text-sm">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">
                     Attitude
                   </span>
                   <input
@@ -145,7 +145,7 @@ export function RemarksForm({
                 </label>
 
                 <label className="text-sm">
-                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <span className="mb-1 block text-xs font-medium text-slate-500">
                     Interest
                   </span>
                   <input
@@ -160,7 +160,7 @@ export function RemarksForm({
 
                 <div className="grid grid-cols-2 gap-2">
                   <label className="text-sm">
-                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <span className="mb-1 block text-xs font-medium text-slate-500">
                       Present
                     </span>
                     <input
@@ -172,7 +172,7 @@ export function RemarksForm({
                     />
                   </label>
                   <label className="text-sm">
-                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <span className="mb-1 block text-xs font-medium text-slate-500">
                       Out of
                     </span>
                     <input
@@ -187,7 +187,7 @@ export function RemarksForm({
               </div>
 
               <label className="mt-3 block text-sm">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                <span className="mb-1 block text-xs font-medium text-slate-500">
                   Form teacher&rsquo;s remark
                 </span>
                 <input

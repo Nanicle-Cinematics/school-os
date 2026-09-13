@@ -3,10 +3,20 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getSubjectList } from "@/lib/subject-data";
-import { EmptyRow, PageHeader, tableHeadClass, thClass } from "../ui";
+import { PageHeader } from "../ui";
+import { BookOpen } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import { NewSubjectForm } from "./subject-form";
 
 export const metadata: Metadata = { title: "Subjects · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "Code" },
+  { label: "Subject" },
+  { label: "Type" },
+  { label: "Offered at" },
+  { label: "Assessments", numeric: true },
+];
 
 export default async function SubjectsPage() {
   const auth = await requireRole(OFFICE);
@@ -27,28 +37,12 @@ export default async function SubjectsPage() {
         }
         action={canEdit ? <NewSubjectForm nextOrder={nextOrder} /> : undefined}
       />
-
-      <div className="overflow-hidden rounded-card border border-hairline bg-surface">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Code</th>
-                <th className={thClass}>Subject</th>
-                <th className={thClass}>Type</th>
-                <th className={thClass}>Offered at</th>
-                <th className={thClass}>Assessments</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {subjects.length === 0 ? (
-                <EmptyRow colSpan={5}>
-                  No subjects yet. Add the ones this school teaches, then say which levels offer
-                  each.
-                </EmptyRow>
-              ) : (
-                subjects.map((subject) => (
-                  <tr key={subject.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: BookOpen, title: "No subjects yet. Every school starts on the GES list; add one the school teaches beyond it.", action: undefined }}
+          >
+            {subjects.map((subject) => (
+                  <Row key={subject.id}>
                     <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-500">
                       {subject.code}
                     </td>
@@ -74,7 +68,7 @@ export default async function SubjectsPage() {
                     </td>
                     <td className="px-4 py-2.5 text-slate-600">
                       {subject.levelSubjects.length === 0 ? (
-                        <span className="text-amber-600">no levels</span>
+                        <span className="text-warning-ink">no levels</span>
                       ) : subject.levelSubjects.length === levelCount ? (
                         "All levels"
                       ) : (
@@ -84,13 +78,10 @@ export default async function SubjectsPage() {
                     <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-600">
                       {subject._count.assessments}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              }
+          </DataTable>
 
       <p className="text-xs text-slate-400">
         A subject with no levels never appears in score entry — that is the usual reason a teacher

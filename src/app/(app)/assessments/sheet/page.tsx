@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buttonClass } from "../../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
@@ -63,7 +64,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
       <Card>
         <form method="get" className="flex flex-wrap items-end gap-3 p-4">
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span className="mb-1 block text-xs font-medium text-slate-500">
               Term
             </span>
             <select name="term" defaultValue={termId} className={inputClass}>
@@ -76,7 +77,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
           </label>
 
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span className="mb-1 block text-xs font-medium text-slate-500">
               Class
             </span>
             <select name="class" defaultValue={classGroupId} className={inputClass}>
@@ -90,7 +91,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
           </label>
 
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+            <span className="mb-1 block text-xs font-medium text-slate-500">
               Subject
             </span>
             <select name="subject" defaultValue={subjectId} className={inputClass}>
@@ -105,7 +106,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
 
           <button
             type="submit"
-            className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+            className={buttonClass("primary")}
           >
             Open sheet
           </button>

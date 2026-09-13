@@ -64,7 +64,7 @@ function Report({ state }: { state: ImportState }) {
               <EmptyRow colSpan={5}>Nothing to show.</EmptyRow>
             ) : (
               report.rows.map((row) => (
-                <tr key={row.line} className={row.errors.length ? "bg-red-50/40" : ""}>
+                <tr key={row.line} className={row.errors.length ? "bg-danger-tint/40" : ""}>
                   <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-400">
                     {row.line}
                   </td>
@@ -84,11 +84,11 @@ function Report({ state }: { state: ImportState }) {
                   </td>
                   <td className="px-4 py-2 text-xs">
                     {row.errors.length ? (
-                      <span className="text-red-700">{row.errors.join("; ")}</span>
+                      <span className="text-danger-ink">{row.errors.join("; ")}</span>
                     ) : row.warnings.length ? (
-                      <span className="text-amber-600">{row.warnings.join("; ")}</span>
+                      <span className="text-warning-ink">{row.warnings.join("; ")}</span>
                     ) : (
-                      <span className="text-green-700">ready</span>
+                      <span className="text-success-ink">ready</span>
                     )}
                   </td>
                 </tr>

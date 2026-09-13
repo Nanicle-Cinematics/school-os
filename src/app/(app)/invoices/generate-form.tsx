@@ -52,14 +52,14 @@ export function GenerateForm({ terms, currentTermId }: { terms: Term[]; currentT
           {state.blocked.map((group) => (
             <div
               key={group.problem}
-              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+              className="rounded-lg border border-hairline bg-warning-tint px-3 py-2 text-sm text-warning-ink"
             >
               <p className="font-medium">
                 {group.students.length} student{group.students.length === 1 ? "" : "s"} skipped —{" "}
                 {group.problem}
               </p>
-              <p className="mt-0.5 text-amber-800">{group.fix}</p>
-              <p className="mt-1 text-xs text-amber-800/80">
+              <p className="mt-0.5 text-warning-ink">{group.fix}</p>
+              <p className="mt-1 text-xs text-warning-ink/80">
                 {group.students
                   .slice(0, 12)
                   .map((s) => `${s.admissionNo} ${s.name}`)

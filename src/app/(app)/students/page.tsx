@@ -3,20 +3,20 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE, canAccess } from "@/lib/permissions";
 import { getStudentFormOptions, getStudentList } from "@/lib/student-data";
-import { Avatar, EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
+import { Users } from "lucide-react";
+import { Avatar, PageHeader, StatusBadge, filterClass } from "../ui";
+import { DataTable, Row, cellClass, type Column } from "../primitives";
 import { AdmitStudentForm } from "./student-form";
 
 export const metadata: Metadata = { title: "Students · School OS" };
 
-const STATUS_TONE: Record<string, string> = {
-  ACTIVE: "bg-green-50 text-green-700",
-  APPLICANT: "bg-blue-50 text-blue-700",
-  ADMITTED: "bg-blue-50 text-blue-700",
-  SUSPENDED: "bg-amber-50 text-amber-700",
-  WITHDRAWN: "bg-slate-100 text-slate-500",
-  TRANSFERRED: "bg-slate-100 text-slate-500",
-  GRADUATED: "bg-slate-100 text-slate-500",
-};
+const COLUMNS: Column[] = [
+  { label: "Pupil" },
+  { label: "Class" },
+  { label: "House", hideBelow: "md" },
+  { label: "Primary guardian", hideBelow: "lg" },
+  { label: "Status", hideBelow: "sm" },
+];
 
 const STATUSES = [
   "ACTIVE",
@@ -120,77 +120,61 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
         ) : null}
       </form>
 
-      <div className="overflow-hidden rounded-card border border-hairline bg-surface">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Pupil</th>
-                <th className={thClass}>Class</th>
-                <th className={thClass}>House</th>
-                <th className={thClass}>Primary guardian</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {students.length === 0 ? (
-                <EmptyRow colSpan={5}>No students found.</EmptyRow>
-              ) : (
-                students.map((student) => {
-                  const guardian = student.guardians[0]?.guardian;
-                  return (
-                    <tr key={student.id} className="hover:bg-slate-50">
-                      <td className="whitespace-nowrap px-4 py-2.5">
-                        <Link
-                          href={`/students/${student.id}`}
-                          className="group flex items-center gap-3"
-                        >
-                          <Avatar firstName={student.firstName} lastName={student.lastName} />
-                          <span className="min-w-0">
-                            <span className="block truncate font-bold text-slate-900 group-hover:underline">
-                              {student.lastName}, {student.firstName}
-                            </span>
-                            <span className="block font-mono text-[11px] text-slate-400">
-                              {student.admissionNo}
-                            </span>
-                          </span>
-                        </Link>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                        {student.currentClassGroup
-                          ? `${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
-                          : "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                        {student.house?.name ?? "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
-                        {guardian ? (
-                          <>
-                            {guardian.firstName} {guardian.lastName}
-                            <span className="ml-2 text-xs text-slate-400">{guardian.phone}</span>
-                          </>
-                        ) : (
-                          <span className="text-amber-600">none</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-2.5">
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-extrabold ${
-                            STATUS_TONE[student.status] ?? "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {student.status.toLowerCase()}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+  <DataTable
+        columns={COLUMNS}
+        empty={{
+          icon: Users,
+          title: query
+            ? `No pupil matches “${query}”. Try a surname or an admission number.`
+            : "No pupils on the roll yet. Admit one, or import a whole class from a spreadsheet.",
+          action: query ? undefined : { label: "Import a class", href: "/students/import" },
+        }}
+      >
+        {students.map((student) => {
+          const guardian = student.guardians[0]?.guardian;
+          return (
+            <Row key={student.id}>
+              <td className={cellClass(COLUMNS[0])}>
+                <Link href={`/students/${student.id}`} className="group flex items-center gap-3">
+                  <Avatar firstName={student.firstName} lastName={student.lastName} />
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-slate-900 group-hover:underline">
+                      {student.lastName}, {student.firstName}
+                    </span>
+                    <span className="block font-mono text-[11px] text-slate-400">
+                      {student.admissionNo}
+                    </span>
+                  </span>
+                </Link>
+              </td>
+              <td className={`${cellClass(COLUMNS[1])} whitespace-nowrap text-slate-600`}>
+                {student.currentClassGroup
+                  ? `${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
+                  : "—"}
+              </td>
+              <td className={`${cellClass(COLUMNS[2])} whitespace-nowrap text-slate-600`}>
+                {student.house?.name ?? "—"}
+              </td>
+              <td className={`${cellClass(COLUMNS[3])} text-slate-600`}>
+                {guardian ? (
+                  <>
+                    {guardian.firstName} {guardian.lastName}
+                    <span className="ml-2 text-xs text-slate-400">{guardian.phone}</span>
+                  </>
+                ) : (
+                  /* A pupil with no guardian cannot be texted, invoiced or
+                     sent a report card — that is a gap in the record, so it
+                     takes the severity that means "this blocks work". */
+                  <span className="text-warning-ink">None on file</span>
+                )}
+              </td>
+              <td className={cellClass(COLUMNS[4])}>
+                <StatusBadge status={student.status} />
+              </td>
+            </Row>
+          );
+        })}
+  </DataTable>
 
       {pageCount > 1 ? (
         <div className="flex items-center justify-between text-sm">

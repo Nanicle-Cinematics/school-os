@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { buttonClass } from "../(app)/button-style";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { askForCode, useCode, type ForgotState } from "@/lib/forgot-actions";
@@ -14,7 +15,7 @@ function SubmitButton({ label, pendingLabel }: { label: string; pendingLabel: st
     <button
       type="submit"
       disabled={pending}
-      className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
+      className={buttonClass("primary", "md", "w-full")}
     >
       {pending ? pendingLabel : label}
     </button>
@@ -52,7 +53,7 @@ function AskForm({ onSent }: { onSent: (state: ForgotState) => void }) {
       </div>
 
       {state.error ? (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger-ink">
           {state.error}
         </p>
       ) : null}
@@ -70,12 +71,12 @@ function CodeForm({ phone, notice }: { phone: string; notice?: string }) {
   if (done) {
     return (
       <div className="space-y-4">
-        <p role="alert" className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p role="alert" className="rounded-lg bg-success-tint px-3 py-2 text-sm text-success-ink">
           {state.ok}
         </p>
         <Link
           href="/login"
-          className="block w-full rounded-lg bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition hover:bg-brand-700"
+          className={buttonClass("primary", "md", "w-full")}
         >
           Sign in
         </Link>
@@ -138,7 +139,7 @@ function CodeForm({ phone, notice }: { phone: string; notice?: string }) {
       </div>
 
       {state.error ? (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p role="alert" className="rounded-lg bg-danger-tint px-3 py-2 text-sm text-danger-ink">
           {state.error}
         </p>
       ) : null}

@@ -77,7 +77,7 @@ export default async function InvoiceDetailPage({ params }: PageProps<"/invoices
                     {allocation.payment.reference ? ` · ${allocation.payment.reference}` : ""}
                   </p>
                 </div>
-                <span className="text-sm font-semibold tabular-nums text-green-700">
+                <span className="text-sm font-semibold tabular-nums text-success-ink">
                   {formatCedis(allocation.amount)}
                 </span>
               </li>

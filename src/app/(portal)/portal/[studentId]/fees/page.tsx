@@ -47,7 +47,7 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
       </div>
 
       <section>
-        <h2 className="font-heading text-lg font-extrabold tracking-tight text-slate-900">Bills</h2>
+        <h2 className="font-heading text-section text-slate-900">Bills</h2>
         {invoices.length === 0 ? (
           <p className="mt-2 rounded-card border border-hairline bg-surface shadow-card p-5 text-sm text-slate-600">
             No bills have been issued yet.
@@ -100,7 +100,7 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
       </section>
 
       <section>
-        <h2 className="font-heading text-lg font-extrabold tracking-tight text-slate-900">
+        <h2 className="font-heading text-section text-slate-900">
           Receipts
         </h2>
         {payments.length === 0 ? (

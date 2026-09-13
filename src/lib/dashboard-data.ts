@@ -113,8 +113,24 @@ export async function getDashboard(schoolId: string) {
 }
 
 export type AttentionItem = {
-  /** Stable key, also used to pick the dot colour. */
+  /** Stable key, and what the row is ABOUT. Not what colour it wears. */
   kind: "marking" | "fees" | "results" | "staffing" | "setup";
+  /**
+   * ⚠️ What this BLOCKS, which is a different question from what it is about.
+   *
+   * The dot used to be picked from `kind` — fees red, marking blue, results
+   * green — so an overdue invoice and a first-week reminder were the same
+   * colour, a school with nothing wrong still showed red, and the one row that
+   * genuinely stopped work looked like the other four.
+   *
+   * blocking: somebody cannot do their job until this is dealt with. A school
+   *           with no term cannot bill, mark or report; a class with no teacher
+   *           has nobody who can enter its marks.
+   * soon:     it runs out shortly. Money owed mid-term is chasing, not crisis —
+   *           it becomes blocking when report cards are withheld for it.
+   * pending:  waiting on a person, entirely routine. Marks still coming in.
+   */
+  severity: "blocking" | "soon" | "pending";
   tag: string;
   title: string;
   detail: string;
@@ -160,6 +176,7 @@ export async function getAttention(
   if (years === 0) {
     items.push({
       kind: "setup",
+      severity: "blocking",
       tag: "Setup",
       title: "The school has no academic year yet",
       detail: "Fees are billed per term and results are computed per term, so nothing can start without one",
@@ -170,6 +187,7 @@ export async function getAttention(
   if (classCount === 0) {
     items.push({
       kind: "setup",
+      severity: "blocking",
       tag: "Setup",
       title: "No classes have been created",
       detail: "The GES levels are already here — each one needs at least a class for pupils to sit in",
@@ -180,6 +198,7 @@ export async function getAttention(
   if (studentCount === 0) {
     items.push({
       kind: "setup",
+      severity: "blocking",
       tag: "Setup",
       title: "No pupils are on roll",
       detail: "Admit them one at a time, or paste the whole register in at once",
@@ -209,6 +228,7 @@ export async function getAttention(
       const classes = new Set(unfinished.map((a) => a.classGroupId)).size;
       items.push({
         kind: "marking",
+        severity: "pending",
         tag: "Marking",
         title: `${unfinished.length} ${unfinished.length === 1 ? "sheet is" : "sheets are"} unfinished`,
         detail: `Across ${classes} ${classes === 1 ? "class" : "classes"} this term`,
@@ -227,6 +247,7 @@ export async function getAttention(
       const cards = pending.reduce((sum, row) => sum + row._count._all, 0);
       items.push({
         kind: "results",
+        severity: "pending",
         tag: "Results",
         title: `${cards} report ${cards === 1 ? "card is" : "cards are"} unpublished`,
         detail: `${pending.length} ${pending.length === 1 ? "class has" : "classes have"} results computed but not released`,
@@ -260,6 +281,7 @@ export async function getAttention(
     if (short.length > 0) {
       items.push({
         kind: "staffing",
+        severity: "blocking",
         tag: "Staffing",
         title: `${short.length} ${short.length === 1 ? "class is" : "classes are"} missing a teacher`,
         detail: "Some subjects have nobody assigned, so their marks cannot be entered",
@@ -273,6 +295,7 @@ export async function getAttention(
   if (fees.debtorCount > 0) {
     items.push({
       kind: "fees",
+      severity: "soon",
       tag: "Fees",
       title: `${fees.debtorCount} ${fees.debtorCount === 1 ? "family owes" : "families owe"} ${formatCedis(fees.outstanding)}`,
       detail: "Unpaid invoices for the current term",

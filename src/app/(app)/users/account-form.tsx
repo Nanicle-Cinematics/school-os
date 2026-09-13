@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { buttonClass } from "../button-style";
 import type { Role } from "@prisma/client";
 import { roleLabel } from "@/lib/permissions";
 import { createUserAccount, type UserState } from "@/lib/user-actions";
@@ -80,7 +81,7 @@ export function NewAccountForm({
         onClick={() => setOpen(true)}
         disabled={staff.length === 0}
         title={staff.length === 0 ? "Every member of staff already has a login." : undefined}
-        className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700 disabled:opacity-50"
+        className={buttonClass("primary")}
       >
         Create login
       </button>

@@ -140,7 +140,7 @@ export function ComponentSection({
   return (
     <>
       {components.length === 0 ? (
-        <div className="border-b border-slate-100 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
+        <div className="border-b border-slate-100 bg-warning-tint/60 px-4 py-3 text-sm text-warning-ink">
           No components are set up, so a teacher opening a mark sheet finds nothing to mark. Start
           from the standard six below.
         </div>

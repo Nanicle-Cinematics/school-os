@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { DataTable, Row, StatCard, type Column } from "../../primitives";
+import { CircleAlert, FileText, GraduationCap, Heart, LineChart } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
@@ -6,14 +8,54 @@ import { OFFICE } from "@/lib/permissions";
 import { getStudent, getStudentFormOptions } from "@/lib/student-data";
 import { deleteStudent, withdrawStudent } from "@/lib/student-actions";
 import { formatCedis } from "@/lib/money";
-import { Alert, Card, EmptyRow, Stat, StatusBadge, tableHeadClass, thClass } from "../../ui";
+import { Alert, Card, StatusBadge } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditStudentForm } from "../student-form";
 import { EnrolForm } from "./enrol-form";
 
+const COLUMNS_0: Column[] = [
+  { label: "" },
+  { label: "Name" },
+  { label: "Phone" },
+  { label: "Relationship" },
+  { label: "Receives" },
+  { label: "" },
+];
+
+const COLUMNS_1: Column[] = [
+  { label: "" },
+  { label: "Year" },
+  { label: "Class" },
+  { label: "Enrolment" },
+  { label: "" },
+];
+
+const COLUMNS_2: Column[] = [
+  { label: "" },
+  { label: "Invoice" },
+  { label: "Term" },
+  { label: "Total", numeric: true },
+  { label: "Paid", numeric: true },
+  { label: "Balance", numeric: true },
+  { label: "Status" },
+];
+
+const COLUMNS_3: Column[] = [
+  { label: "" },
+  { label: "Term" },
+  { label: "Average", numeric: true },
+  { label: "Position" },
+  { label: "Aggregate", numeric: true },
+  { label: "Status" },
+];
+
 export const metadata: Metadata = { title: "Student · School OS" };
 
-const TERM_LABEL: Record<string, string> = { FIRST: "First", SECOND: "Second", THIRD: "Third" };
+const TERM_LABEL: Record<string, string> = {
+  FIRST: "First",
+  SECOND: "Second",
+  THIRD: "Third",
+};
 
 export default async function StudentDetailPage({
   params,
@@ -28,7 +70,8 @@ export default async function StudentDetailPage({
     notFound();
   }
 
-  const { student, year, enrollments, invoices, termResults, outstanding } = result;
+  const { student, year, enrollments, invoices, termResults, outstanding } =
+    result;
   const { classGroups, houses, programmes } = await getStudentFormOptions();
 
   const owes = outstanding.greaterThan(0);
@@ -37,7 +80,10 @@ export default async function StudentDetailPage({
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <div>
-        <Link href="/students" className="text-sm text-slate-500 hover:text-slate-900">
+        <Link
+          href="/students"
+          className="text-sm text-slate-500 hover:text-slate-900"
+        >
           ← Students
         </Link>
         <h1 className="mt-1 text-xl font-semibold text-slate-900">
@@ -54,52 +100,56 @@ export default async function StudentDetailPage({
 
       {query.error === "has-money" ? (
         <Alert tone="error">
-          This student has invoices or payments on file, so the record cannot be removed — deleting
-          it would take the money records with it. Withdraw them instead.
+          This student has invoices or payments on file, so the record cannot be
+          removed — deleting it would take the money records with it. Withdraw
+          them instead.
         </Alert>
       ) : null}
 
       {student.guardians.length === 0 ? (
         <Alert tone="error">
-          No guardian is linked, so no bill, result or notice can reach anyone. Link one from the
-          guardian&rsquo;s page.
+          No guardian is linked, so no bill, result or notice can reach anyone.
+          Link one from the guardian&rsquo;s page.
         </Alert>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Stat
+        <StatCard
           label="Outstanding"
           value={formatCedis(outstanding)}
-          tone={owes ? "negative" : "positive"}
-          sub={owes ? "across all terms" : "fully paid"}
+          caption={owes ? "across all terms" : "fully paid"}
+          icon={CircleAlert}
+          severity={Number(outstanding) > 0 ? "blocking" : "done"}
         />
-        <Stat label="Invoices" value={String(invoices.length)} sub="most recent 12" />
-        <Stat
+        <StatCard
+          label="Invoices"
+          value={String(invoices.length)}
+          caption="most recent 12"
+          icon={FileText}
+        />
+        <StatCard
           label="Results"
           value={String(termResults.length)}
-          sub={termResults.length > 0 ? "term results computed" : "none yet"}
+          caption={
+            termResults.length > 0 ? "term results computed" : "none yet"
+          }
+          icon={LineChart}
         />
       </div>
 
       <Card title="Guardians">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Phone</th>
-                <th className={thClass}>Relationship</th>
-                <th className={thClass}>Receives</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {student.guardians.length === 0 ? (
-                <EmptyRow colSpan={4}>Nobody linked.</EmptyRow>
-              ) : (
-                student.guardians.map((link) => (
-                  <tr key={link.id}>
+          <DataTable
+            columns={COLUMNS_0}
+            empty={{ icon: Heart, title: "No guardian on file for this pupil.", action: undefined }}
+          >
+            {student.guardians.map((link) => (
+                  <Row key={link.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
-                      <Link href={`/guardians/${link.guardian.id}`} className="hover:underline">
+                      <Link
+                        href={`/guardians/${link.guardian.id}`}
+                        className="hover:underline"
+                      >
                         {link.guardian.firstName} {link.guardian.lastName}
                       </Link>
                       {link.isPrimary ? (
@@ -115,15 +165,17 @@ export default async function StudentDetailPage({
                       {link.relationship.toLowerCase()}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-slate-600">
-                      {[link.receivesBills ? "bills" : null, link.receivesReports ? "results" : null]
+                      {[
+                        link.receivesBills ? "bills" : null,
+                        link.receivesReports ? "results" : null,
+                      ]
                         .filter(Boolean)
                         .join(", ") || "—"}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 
@@ -135,20 +187,12 @@ export default async function StudentDetailPage({
           yearName={year?.name ?? null}
         />
         <div className="overflow-x-auto border-t border-slate-100">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Year</th>
-                <th className={thClass}>Class</th>
-                <th className={thClass}>Enrolment</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {enrollments.length === 0 ? (
-                <EmptyRow colSpan={3}>Never enrolled.</EmptyRow>
-              ) : (
-                enrollments.map((enrollment) => (
-                  <tr key={enrollment.id}>
+          <DataTable
+            columns={COLUMNS_1}
+            empty={{ icon: GraduationCap, title: "No enrolment history yet.", action: undefined }}
+          >
+            {enrollments.map((enrollment) => (
+                  <Row key={enrollment.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                       {enrollment.academicYear.name}
                     </td>
@@ -157,41 +201,33 @@ export default async function StudentDetailPage({
                         href={`/classes/${enrollment.classGroup.id}`}
                         className="hover:underline"
                       >
-                        {enrollment.classGroup.level.name} {enrollment.classGroup.name}
+                        {enrollment.classGroup.level.name}{" "}
+                        {enrollment.classGroup.name}
                       </Link>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-slate-600">
                       {enrollment.status.toLowerCase()}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 
       <Card title="Fees">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Invoice</th>
-                <th className={thClass}>Term</th>
-                <th className={thClass}>Total</th>
-                <th className={thClass}>Paid</th>
-                <th className={thClass}>Balance</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {invoices.length === 0 ? (
-                <EmptyRow colSpan={6}>No invoices raised for this student.</EmptyRow>
-              ) : (
-                invoices.map((invoice) => (
-                  <tr key={invoice.id}>
+          <DataTable
+            columns={COLUMNS_2}
+            empty={{ icon: FileText, title: "No invoices for this pupil yet.", action: undefined }}
+          >
+            {invoices.map((invoice) => (
+                  <Row key={invoice.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-500">
-                      <Link href={`/invoices/${invoice.id}`} className="hover:underline">
+                      <Link
+                        href={`/invoices/${invoice.id}`}
+                        className="hover:underline"
+                      >
                         {invoice.invoiceNo}
                       </Link>
                     </td>
@@ -208,7 +244,7 @@ export default async function StudentDetailPage({
                     <td
                       className={`whitespace-nowrap px-4 py-2 tabular-nums ${
                         invoice.balance.greaterThan(0)
-                          ? "font-medium text-red-600"
+                          ? "font-medium text-danger-ink"
                           : "text-slate-600"
                       }`}
                     >
@@ -217,39 +253,29 @@ export default async function StudentDetailPage({
                     <td className="whitespace-nowrap px-4 py-2">
                       <StatusBadge status={invoice.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 
       <Card title="Results">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Term</th>
-                <th className={thClass}>Average</th>
-                <th className={thClass}>Position</th>
-                <th className={thClass}>Aggregate</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {termResults.length === 0 ? (
-                <EmptyRow colSpan={5}>No term results computed yet.</EmptyRow>
-              ) : (
-                termResults.map((termResult) => (
-                  <tr key={termResult.id}>
+          <DataTable
+            columns={COLUMNS_3}
+            empty={{ icon: LineChart, title: "No published results for this pupil yet.", action: undefined }}
+          >
+            {termResults.map((termResult) => (
+                  <Row key={termResult.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                       <Link
                         href={`/results/${student.id}?term=${termResult.term.id}`}
                         className="hover:underline"
                       >
-                        {TERM_LABEL[termResult.term.name] ?? termResult.term.name} ·{" "}
-                        {termResult.term.academicYear.name}
+                        {TERM_LABEL[termResult.term.name] ??
+                          termResult.term.name}{" "}
+                        · {termResult.term.academicYear.name}
                       </Link>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-600">
@@ -266,11 +292,10 @@ export default async function StudentDetailPage({
                     <td className="whitespace-nowrap px-4 py-2">
                       <StatusBadge status={termResult.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 
@@ -305,7 +330,10 @@ export default async function StudentDetailPage({
 
       <Card title="Leaving the school">
         <div className="space-y-4 p-4">
-          <form action={withdrawStudent} className="flex flex-wrap items-center gap-3">
+          <form
+            action={withdrawStudent}
+            className="flex flex-wrap items-center gap-3"
+          >
             <input type="hidden" name="studentId" value={student.id} />
             <select
               name="status"
@@ -326,7 +354,10 @@ export default async function StudentDetailPage({
             </p>
           </form>
 
-          <form action={deleteStudent} className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+          <form
+            action={deleteStudent}
+            className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4"
+          >
             <input type="hidden" name="studentId" value={student.id} />
             <SubmitButton variant="danger" pendingLabel="Removing…">
               Delete record

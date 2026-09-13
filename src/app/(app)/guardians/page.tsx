@@ -3,10 +3,19 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getGuardianList } from "@/lib/guardian-data";
-import { ButtonLink, EmptyRow, PageHeader, filterClass, tableHeadClass, thClass } from "../ui";
+import { ButtonLink, PageHeader, filterClass } from "../ui";
+import { Heart } from "lucide-react";
+import { DataTable, Row, type Column } from "../primitives";
 import { NewGuardianForm } from "./guardian-form";
 
 export const metadata: Metadata = { title: "Guardians · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "Name" },
+  { label: "Phone" },
+  { label: "Children", numeric: true },
+  { label: "Gets bills" },
+];
 
 export default async function GuardiansPage({ searchParams }: PageProps<"/guardians">) {
   await requireRole(OFFICE);
@@ -44,28 +53,14 @@ export default async function GuardiansPage({ searchParams }: PageProps<"/guardi
           Search
         </button>
       </form>
-
-      <div className="overflow-hidden rounded-card border border-hairline bg-surface">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Phone</th>
-                <th className={thClass}>Children</th>
-                <th className={thClass}>Gets bills</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {guardians.length === 0 ? (
-                <EmptyRow colSpan={4}>
-                  {query ? "No guardian matches that." : "No guardians on file yet."}
-                </EmptyRow>
-              ) : (
-                guardians.map((guardian) => {
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Heart, title: "No guardians on file yet. They are added with a pupil, or on their own here.", action: undefined }}
+          >
+            {guardians.map((guardian) => {
                   const bills = guardian.students.filter((link) => link.receivesBills).length;
                   return (
-                    <tr key={guardian.id} className="hover:bg-slate-50">
+                    <Row key={guardian.id}>
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-900">
                         <Link href={`/guardians/${guardian.id}`} className="hover:underline">
                           {guardian.lastName}, {guardian.firstName}
@@ -76,7 +71,7 @@ export default async function GuardiansPage({ searchParams }: PageProps<"/guardi
                       </td>
                       <td className="px-4 py-2.5 text-slate-600">
                         {guardian.students.length === 0 ? (
-                          <span className="text-amber-600">none linked</span>
+                          <span className="text-warning-ink">none linked</span>
                         ) : (
                           guardian.students
                             .map((link) => `${link.student.firstName} ${link.student.lastName}`)
@@ -86,14 +81,11 @@ export default async function GuardiansPage({ searchParams }: PageProps<"/guardi
                       <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-slate-600">
                         {bills}
                       </td>
-                    </tr>
+                    </Row>
                   );
                 })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+              }
+          </DataTable>
 
       <p className="text-xs text-slate-400">
         A guardian with no children linked receives nothing — no bill, no result, no closing-date

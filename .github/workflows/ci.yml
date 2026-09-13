@@ -152,6 +152,13 @@ jobs:
       - name: Theme — every token dark re-cuts, paper and print put back
         run: npm run verify:theme
 
+      # The redesign's rules, as something that fails rather than a memory: one
+      # table wrapper, one primary button, sentence case, one icon set, and area
+      # hues confined to the rail. Each exception is named in the script with
+      # its reason, so a new one is a deliberate act somebody has to write down.
+      - name: Design — one set of primitives, and colour that says one thing
+        run: npm run verify:design
+
       - name: Settings — no dead switches, and the arrears hold actually holds
         run: npm run verify:settings
 

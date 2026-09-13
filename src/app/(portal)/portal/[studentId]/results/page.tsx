@@ -29,7 +29,7 @@ export default async function ChildResultsPage({
     <div className="space-y-5">
       <ChildHeader child={child} />
 
-      <h2 className="font-heading text-lg font-extrabold tracking-tight text-slate-900">
+      <h2 className="font-heading text-section text-slate-900">
         Report cards
       </h2>
 
@@ -59,7 +59,7 @@ export default async function ChildResultsPage({
                       IS the result, so leaving it here would withhold the sheet
                       of paper and publish the outcome. */}
                   {t.hold ? (
-                    <p className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                    <p className="rounded-full bg-warning-tint px-2.5 py-1 text-xs font-semibold text-warning-ink">
                       Held · {formatCedis(t.hold.balance)} due
                     </p>
                   ) : (

@@ -81,7 +81,7 @@ export default async function GradingPage() {
                           band.points === 1 ? "" : "s"
                         }`}
                         className={`rounded px-1.5 py-0.5 text-xs ${
-                          band.isPass ? "bg-slate-100 text-slate-700" : "bg-red-50 text-red-700"
+                          band.isPass ? "bg-slate-100 text-slate-700" : "bg-danger-tint text-danger-ink"
                         }`}
                       >
                         {band.grade} {band.minScore.toString()}–{band.maxScore.toString()}

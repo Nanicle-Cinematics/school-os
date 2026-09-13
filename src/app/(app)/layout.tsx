@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Search } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
 import { navFor, roleLabel } from "@/lib/permissions";
 import { canSearch } from "@/lib/search-data";
@@ -78,7 +79,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             {railTerm ? (
               <p className="truncate text-sm font-semibold text-slate-600">{railTerm.label}</p>
             ) : (
-              <p className="truncate text-sm font-semibold text-amber-600">No current term set</p>
+              <p className="truncate text-sm font-semibold text-warning-ink">No current term set</p>
             )}
           </div>
 
@@ -86,18 +87,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <form method="get" action="/search" className="ml-2 hidden min-w-0 flex-1 md:block">
               <label className="relative block max-w-sm">
                 <span className="sr-only">Search the school</span>
-                <svg
+                <Search
                   aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.9"
-                  strokeLinecap="round"
                   className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                >
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20.5 20.5 16.7 16.7" />
-                </svg>
+                />
                 <input
                   type="search"
                   name="q"
@@ -138,8 +131,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             role="status"
             className={`border-b px-4 py-2.5 text-sm lg:px-7 print:hidden ${
               auth.subscription.readOnly
-                ? "border-red-200 bg-red-50 text-red-700"
-                : "border-amber-200 bg-amber-50 text-amber-700"
+                ? "border-hairline bg-danger-tint text-danger-ink"
+                : "border-hairline bg-warning-tint text-warning-ink"
             }`}
           >
             {auth.subscription.notice}

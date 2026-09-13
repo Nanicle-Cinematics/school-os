@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { LineChart } from "lucide-react";
+import { buttonClass } from "../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { LEADERSHIP, canAccess } from "@/lib/permissions";
@@ -6,11 +8,23 @@ import { getResultsOverview } from "@/lib/results-data";
 import { getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { setResultsStatus } from "@/lib/results-actions";
-import { PageHeader, Card, EmptyRow, filterClass, thClass, tableHeadClass } from "../ui";
+import { PageHeader, Card, filterClass } from "../ui";
+import { DataTable, Row, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { ComputeForm } from "./compute-form";
 
 export const metadata: Metadata = { title: "Results · School OS" };
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Class" },
+  { label: "Form teacher" },
+  { label: "Enrolled", numeric: true },
+  { label: "Assessments", numeric: true },
+  { label: "Computed", numeric: true },
+  { label: "Published", numeric: true },
+  { label: "Actions" },
+];
 
 export default async function ResultsPage({ searchParams }: PageProps<"/results">) {
   const auth = await requireRole(LEADERSHIP);
@@ -58,7 +72,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
         </select>
         <button
           type="submit"
-          className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+          className={buttonClass("primary")}
         >
           Show
         </button>
@@ -73,24 +87,12 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
 
       <Card>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Class</th>
-                <th className={thClass}>Form teacher</th>
-                <th className={`${thClass} text-right`}>Enrolled</th>
-                <th className={`${thClass} text-right`}>Assessments</th>
-                <th className={`${thClass} text-right`}>Computed</th>
-                <th className={`${thClass} text-right`}>Published</th>
-                <th className={thClass}>Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {overview.length === 0 ? (
-                <EmptyRow colSpan={7}>No classes set up yet.</EmptyRow>
-              ) : (
-                overview.map((row) => (
-                  <tr key={row.classGroup.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: LineChart, title: "No classes to compute results for yet.", action: undefined }}
+          >
+            {overview.map((row) => (
+                  <Row key={row.classGroup.id}>
                     <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-900">
                       {row.classGroup.level.name} {row.classGroup.name}
                     </td>
@@ -110,7 +112,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
                       {row.published > 0 ? (
-                        <span className="font-medium text-green-700">{row.published}</span>
+                        <span className="font-medium text-success-ink">{row.published}</span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
@@ -149,11 +151,10 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
                         ) : null}
                       </div>
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
     </div>

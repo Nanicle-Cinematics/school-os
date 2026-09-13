@@ -114,15 +114,15 @@ export default async function PrintReportCardsPage({
           record of what the school is holding and why, and the person at the
           printer is rarely the person who read the screen. */}
       {heldCards.length > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 print:break-after-page">
-          <h2 className="text-sm font-semibold text-amber-900">
+        <div className="rounded-xl border border-hairline bg-warning-tint p-4 print:break-after-page">
+          <h2 className="text-sm font-semibold text-warning-ink">
             {heldCards.length} card{heldCards.length === 1 ? "" : "s"} held for arrears
           </h2>
-          <p className="mt-1 text-xs text-amber-800">
+          <p className="mt-1 text-xs text-warning-ink">
             Left out of this run and hidden from the parent portal. Each appears as soon as
             its payment is recorded.
           </p>
-          <ul className="mt-3 space-y-1 text-sm text-amber-900">
+          <ul className="mt-3 space-y-1 text-sm text-warning-ink">
             {heldCards.map((card) => {
               const hold = holds.get(card.termResult.studentId)!;
               const student = card.termResult.student;
@@ -130,7 +130,7 @@ export default async function PrintReportCardsPage({
                 <li key={card.termResult.id} className="flex justify-between gap-4">
                   <span>
                     {student.firstName} {student.lastName}{" "}
-                    <span className="font-mono text-xs text-amber-700">
+                    <span className="font-mono text-xs text-warning-ink">
                       {student.admissionNo}
                     </span>
                   </span>

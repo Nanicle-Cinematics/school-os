@@ -30,6 +30,7 @@
     "verify:reset": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-reset.mts",
     "verify:export": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-export.mts",
     "verify:export:route": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-export-route.mts",
+    "verify:design": "tsx scripts/verify-design.mts",
     "verify:theme": "tsx scripts/verify-theme.mts",
     "verify:settings": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-settings.mts",
     "verify:platform": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-platform.mts",
@@ -47,6 +48,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "lucide-react": "^1.45.0",
     "next": "16.3.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",

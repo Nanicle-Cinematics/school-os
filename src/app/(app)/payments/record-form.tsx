@@ -13,6 +13,37 @@ export type StudentOption = {
   balance: number;
 };
 
+
+/**
+ * Which field a refusal is ABOUT.
+ *
+ * ⚠️ A presentational bridge, and deliberately not a change to the action.
+ * `recordPayment` returns one `error` string, and rewriting it to return a
+ * field key would be a change to a Server Action — out of scope for a visual
+ * pass. So the form maps the messages it knows to the fields they concern, and
+ * anything unmatched still falls through to the card-level alert exactly as
+ * before. Nothing is lost if this map goes stale; the error simply shows where
+ * it always did.
+ *
+ * The fix this stands in for: have the action return `{ field, message }`, and
+ * delete this.
+ */
+const FIELD_FOR: { match: RegExp; field: "student" | "amount" | "reference" }[] = [
+  { match: /student this payment is for|student no longer exists/i, field: "student" },
+  { match: /amount/i, field: "amount" },
+  { match: /transaction reference/i, field: "reference" },
+];
+
+function fieldError(error: string | undefined, field: string) {
+  if (!error) return undefined;
+  return FIELD_FOR.find((rule) => rule.match.test(error))?.field === field ? error : undefined;
+}
+
+/** True when the message belongs to a field, so the card does not repeat it. */
+function isFieldError(error: string | undefined) {
+  return Boolean(error && FIELD_FOR.some((rule) => rule.match.test(error)));
+}
+
 export function RecordForm({ students }: { students: StudentOption[] }) {
   const [state, formAction] = useActionState<PaymentState, FormData>(recordPayment, {});
   const [studentId, setStudentId] = useState("");
@@ -48,7 +79,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
           />
         </Field>
 
-        <Field label="Student">
+        <Field label="Student" error={fieldError(state.error, "student")}>
           <select
             value={studentId}
             onChange={(event) => setStudentId(event.target.value)}
@@ -71,17 +102,17 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
           <span className="font-medium text-slate-900">{selected.label}</span>
           <span className="text-slate-500"> · {selected.className}</span>
           {selected.balance > 0 ? (
-            <span className="ml-2 font-medium text-red-600">
+            <span className="ml-2 font-medium text-danger-ink">
               Outstanding GHS {selected.balance.toFixed(2)}
             </span>
           ) : (
-            <span className="ml-2 font-medium text-green-700">No outstanding balance</span>
+            <span className="ml-2 font-medium text-success-ink">No outstanding balance</span>
           )}
         </div>
       ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Amount (GHS)">
+        <Field label="Amount (GHS)" error={fieldError(state.error, "amount")}>
           <input
             type="text"
             inputMode="decimal"
@@ -124,6 +155,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
         <Field
           label="Reference"
           hint={method === "MOBILE_MONEY" ? "Required for mobile money." : "Slip or cheque number."}
+          error={fieldError(state.error, "reference")}
         >
           <input type="text" name="reference" className={inputClass} />
         </Field>
@@ -143,7 +175,9 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
         </Field>
       </div>
 
-      {state.error ? (
+      {/* Only what no field claimed. A message shown beside the control AND
+          repeated in a banner reads as two problems. */}
+      {state.error && !isFieldError(state.error) ? (
         <div className="mt-4">
           <Alert tone="error">{state.error}</Alert>
         </div>

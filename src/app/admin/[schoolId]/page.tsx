@@ -44,8 +44,8 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
           <Link href="/admin" className="text-sm text-slate-500 hover:text-slate-900">
             ← All schools
           </Link>
-          <h1 className="mt-1 text-xl font-semibold text-slate-900">{school.name}</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <h1 className="font-heading mt-1 text-title text-slate-900">{school.name}</h1>
+          <p className="mt-1.5 text-caption text-slate-500">
             <span className="font-mono">{school.slug}</span>
             {school.town ? ` · ${school.town}` : ""}
             {school.region ? `, ${school.region}` : ""} · opened {dateFmt.format(school.createdAt)}
@@ -58,15 +58,15 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
         <div
           className={`rounded-2xl border px-4 py-3 ${
             state.readOnly
-              ? "border-red-200 bg-red-50"
+              ? "border-hairline bg-danger-tint"
               : "border-slate-200 bg-surface"
           }`}
         >
-          <p className={`text-sm font-semibold ${state.readOnly ? "text-red-700" : "text-slate-900"}`}>
+          <p className={`text-sm font-semibold ${state.readOnly ? "text-danger-ink" : "text-slate-900"}`}>
             {PLANS[school.plan].label} · {STATUS_LABELS[school.subscriptionStatus]}
             {state.readOnly ? " · read-only" : ""}
           </p>
-          <p className={`mt-0.5 text-sm ${state.readOnly ? "text-red-700" : "text-slate-600"}`}>
+          <p className={`mt-0.5 text-sm ${state.readOnly ? "text-danger-ink" : "text-slate-600"}`}>
             {state.notice ??
               (state.trialDaysLeft !== null && school.subscriptionStatus === "TRIALING"
                 ? `Trial ends in ${state.trialDaysLeft} days.`
@@ -92,7 +92,7 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
               />
             </div>
             {overCap ? (
-              <p className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
+              <p className="border-t border-hairline bg-warning-tint px-4 py-2.5 text-xs text-warning-ink">
                 Over the cap for this plan. Existing pupils keep working; new admissions are refused
                 until the cap or the plan changes.
               </p>
@@ -133,7 +133,7 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
             )}
             {school.phone || school.email ? (
               <div className="px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <p className="text-xs font-semibold text-slate-500">
                   School office
                 </p>
                 <p className="text-sm text-slate-600">
