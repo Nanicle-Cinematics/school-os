@@ -522,8 +522,12 @@ const ACTIVITY: Record<
       const dataset = text(a.dataset);
       const rows = Number(a.rows);
       const what = dataset ? dataset.replace(/_/g, " ") : "records";
+      // "44 rows exported from invoices", not "44 invoices rows were exported".
+      // The dataset names are already plural, so any phrasing that puts the
+      // count in front of them reads wrong for one of them — this one reads
+      // right for all six, and for a single row.
       return Number.isFinite(rows)
-        ? `${count(rows)} ${what} ${Number(rows) === 1 ? "row was" : "rows were"} exported`
+        ? `${count(rows)} ${plural(rows, "row")} exported from ${what}`
         : `The ${what} were exported`;
     },
     detail: "Export",
