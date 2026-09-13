@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import { EmptyState, ListRow, StatCard } from "../primitives";
-import { Banknote, Briefcase, CalendarDays, CircleAlert, CircleCheck, GraduationCap, Users } from "lucide-react";
+import {
+  Banknote,
+  Briefcase,
+  CalendarDays,
+  CircleAlert,
+  CircleCheck,
+  GraduationCap,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { paymentSource } from "@/lib/payment-labels";
@@ -22,7 +30,7 @@ import {
 } from "@/lib/dashboard-data";
 import { CollectionsChart } from "./collections-chart";
 import { ActivityFeed } from "./activity-feed";
-import { Card } from "../ui";
+import { Card, PageHeader } from "../ui";
 
 export const metadata: Metadata = { title: "Dashboard · School OS" };
 
@@ -105,30 +113,30 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* The same large title every other screen got. This one kept a 20px
-          heading, so the page a head teacher opens every morning was the only
-          one with no entry point — six equal cards and nothing to read first. */}
-      <div className="px-0.5 pt-1">
-        <h1 className="font-heading text-[31px] leading-[1.1] text-slate-900">
-          Good day, {firstName}
-        </h1>
-        <p className="mt-1.5 text-[13.5px] text-slate-500">
-          {data.term ? (
-            `Here is where ${auth.schoolName} stands this term.`
-          ) : (
-            <>
-              No term is marked as current, so there are no termly figures yet.{" "}
-              <Link
-                href="/settings/terms"
-                className="font-medium text-brand-ink hover:underline"
-              >
-                Set up the year and its terms
-              </Link>
-              .
-            </>
-          )}
+      {/* PageHeader like every other screen. It had its own <h1>, so it was the
+          one page with no section chip — and the one people open most. The
+          no-term case keeps its link, which a plain subtitle string cannot
+          carry, so it renders underneath. */}
+      <PageHeader
+        title={`Good day, ${firstName}`}
+        subtitle={
+          data.term
+            ? `Here is where ${auth.schoolName} stands this term.`
+            : undefined
+        }
+      />
+      {!data.term ? (
+        <p className="px-0.5 text-[13.5px] text-slate-500">
+          No term is marked as current, so there are no termly figures yet.{" "}
+          <Link
+            href="/settings/terms"
+            className="font-medium text-brand-ink hover:underline"
+          >
+            Set up the year and its terms
+          </Link>
+          .
         </p>
-      </div>
+      ) : null}
 
       {/* Five columns, not four: "Outstanding" is the number that decides what a
           head teacher does today, so it is given twice the room rather than
