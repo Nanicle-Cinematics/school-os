@@ -8,9 +8,14 @@
  *
  * Run it against whichever database the env file points at:
  *
- *   npm run platform -- sql you@example.com              # prints SQL to paste
  *   npm run platform -- admin you@example.com            # create or reset
  *   npm run platform -- delete-school st-mary-demo       # tenant + orphans
+ *
+ * Or, when the database password is lost rather than merely unused, the same
+ * two things as SQL to paste into the Supabase editor — no connection at all:
+ *
+ *   npm run platform -- sql you@example.com
+ *   npm run platform -- sql-delete-school st-mary-demo
  *
  * For PRODUCTION, put the connection string in `.env.prod` — covered by
  * .gitignore's `.env*`, and NOT a name Next auto-loads, unlike `.env.local`:
@@ -194,8 +199,102 @@ Then sign in at /login with ${email} and the password you just typed.
 `);
 }
 
+/**
+ * The same deletion, without needing the database password.
+ *
+ * Everything `deleteSchool` does, written out as SQL to paste into the Supabase
+ * editor — which is authenticated by the dashboard session, not by the database
+ * password. Three parts, in order: see what will go, delete it, confirm it went.
+ *
+ * ⚠️ A single statement CANNOT do this. Data-modifying CTEs all read the same
+ * snapshot, so a `delete from "User"` chained onto the school delete would still
+ * see the proprietor's `schoolId` pointing at the school and their memberships
+ * present — the SetNull and the cascade are invisible to it — and would quietly
+ * remove nobody. The DO block runs its statements in sequence, each seeing the
+ * last one's effects, which is the only shape that works.
+ */
+function printDeleteSql(slug: string) {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+    console.error(`\n"${slug}" is not a slug. Expected lowercase letters, digits and hyphens.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`
+Paste these into the Supabase SQL editor, one at a time, in order.
+
+── 1. What will go ───────────────────────────────────────────────────
+select s.name,
+       (select count(*) from "Student"    t where t."schoolId" = s.id) as students,
+       (select count(*) from "Staff"      t where t."schoolId" = s.id) as staff,
+       (select count(*) from "Membership" t where t."schoolId" = s.id) as memberships,
+       (select count(*) from "Invoice"    t where t."schoolId" = s.id) as invoices,
+       (select coalesce(string_agg(u.email, ', '), 'none')
+          from "User" u
+         where u."isPlatformAdmin" = false
+           and (u."schoolId" = s.id
+                or exists (select 1 from "Membership" m
+                            where m."userId" = u.id and m."schoolId" = s.id))
+           and (u."schoolId" = s.id or u."schoolId" is null)
+           and not exists (select 1 from "Membership" m
+                            where m."userId" = u.id and m."schoolId" <> s.id))
+                                                                       as logins_removed
+  from "School" s
+ where s.slug = '${slug}';
+
+No row means no school with that slug — stop, and check the slug.
+
+── 2. Delete it ──────────────────────────────────────────────────────
+do $$
+declare
+  target   text;
+  belonged text[];
+  removed  int;
+begin
+  perform set_config('app.bypass_rls', 'on', true);
+
+  select id into target from "School" where slug = '${slug}';
+  if target is null then
+    raise exception 'No school with the slug %', '${slug}';
+  end if;
+
+  -- Collect this school's logins BEFORE the delete. "User"."schoolId" is
+  -- SET NULL, so once the school is gone nothing records who belonged to it.
+  select coalesce(array_agg(u.id), '{}') into belonged
+    from "User" u
+   where u."isPlatformAdmin" = false
+     and (u."schoolId" = target
+          or exists (select 1 from "Membership" m
+                      where m."userId" = u.id and m."schoolId" = target));
+
+  delete from "School" where id = target;   -- 40 tenant tables cascade
+
+  -- Only this school's own logins, and only those the cascade left with
+  -- nothing: a member of staff who also works elsewhere keeps their account.
+  delete from "User" u
+   where u.id = any(belonged)
+     and u."schoolId" is null
+     and not exists (select 1 from "Membership" m where m."userId" = u.id);
+  get diagnostics removed = row_count;
+
+  raise notice 'Deleted the school and % orphaned login(s).', removed;
+end $$;
+
+── 3. Confirm ────────────────────────────────────────────────────────
+select (select count(*) from "School" where slug = '${slug}') as school_left,
+       (select count(*) from "School")                        as schools_remaining,
+       (select count(*) from "User" where "isPlatformAdmin")  as admins_remaining;
+
+school_left must be 0, and admins_remaining must still be at least 1 —
+that second number is your own way back in.
+──────────────────────────────────────────────────────────────────────
+`);
+}
+
 if (command === "sql" && argument) {
   await printSql(argument.trim().toLowerCase());
+} else if (command === "sql-delete-school" && argument) {
+  printDeleteSql(argument.trim());
 } else if (command === "admin" && argument) {
   console.log(`\nDatabase: ${target()}`);
   await makeAdmin(argument.trim().toLowerCase());
@@ -204,7 +303,8 @@ if (command === "sql" && argument) {
 } else {
   console.error(
     "Usage:\n" +
-      "  npm run platform -- sql <email>            # no DB password needed\n" +
+      "  npm run platform -- sql <email>                  # no DB password needed\n" +
+      "  npm run platform -- sql-delete-school <slug>     # no DB password needed\n" +
       "  npm run platform -- admin <email>\n" +
       "  npm run platform -- delete-school <slug>",
   );

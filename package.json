@@ -37,6 +37,7 @@
     "verify:theme": "tsx scripts/verify-theme.mts",
     "verify:settings": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-settings.mts",
     "verify:platform": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-platform.mts",
+    "verify:platform:sql": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-platform-sql.mts",
     "verify:attention": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-attention.mts",
     "verify:collections": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-collections.mts",
     "verify:activity": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-activity.mts",
