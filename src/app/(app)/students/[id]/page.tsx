@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { StatCard } from "../../primitives";
-import { CircleAlert, FileText, LineChart } from "lucide-react";
+import { DataTable, Row, StatCard, type Column } from "../../primitives";
+import { CircleAlert, FileText, GraduationCap, Heart, LineChart } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
@@ -8,17 +8,46 @@ import { OFFICE } from "@/lib/permissions";
 import { getStudent, getStudentFormOptions } from "@/lib/student-data";
 import { deleteStudent, withdrawStudent } from "@/lib/student-actions";
 import { formatCedis } from "@/lib/money";
-import {
-  Alert,
-  Card,
-  EmptyRow,
-  StatusBadge,
-  tableHeadClass,
-  thClass,
-} from "../../ui";
+import { Alert, Card, StatusBadge } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditStudentForm } from "../student-form";
 import { EnrolForm } from "./enrol-form";
+
+const COLUMNS_0: Column[] = [
+  { label: "" },
+  { label: "Name" },
+  { label: "Phone" },
+  { label: "Relationship" },
+  { label: "Receives" },
+  { label: "" },
+];
+
+const COLUMNS_1: Column[] = [
+  { label: "" },
+  { label: "Year" },
+  { label: "Class" },
+  { label: "Enrolment" },
+  { label: "" },
+];
+
+const COLUMNS_2: Column[] = [
+  { label: "" },
+  { label: "Invoice" },
+  { label: "Term" },
+  { label: "Total", numeric: true },
+  { label: "Paid", numeric: true },
+  { label: "Balance", numeric: true },
+  { label: "Status" },
+];
+
+const COLUMNS_3: Column[] = [
+  { label: "" },
+  { label: "Term" },
+  { label: "Average", numeric: true },
+  { label: "Position" },
+  { label: "Aggregate", numeric: true },
+  { label: "Status" },
+];
 
 export const metadata: Metadata = { title: "Student · School OS" };
 
@@ -90,7 +119,7 @@ export default async function StudentDetailPage({
           value={formatCedis(outstanding)}
           caption={owes ? "across all terms" : "fully paid"}
           icon={CircleAlert}
-          severity="blocking"
+          severity={Number(outstanding) > 0 ? "blocking" : "done"}
         />
         <StatCard
           label="Invoices"
@@ -110,21 +139,12 @@ export default async function StudentDetailPage({
 
       <Card title="Guardians">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Phone</th>
-                <th className={thClass}>Relationship</th>
-                <th className={thClass}>Receives</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {student.guardians.length === 0 ? (
-                <EmptyRow colSpan={4}>Nobody linked.</EmptyRow>
-              ) : (
-                student.guardians.map((link) => (
-                  <tr key={link.id}>
+          <DataTable
+            columns={COLUMNS_0}
+            empty={{ icon: Heart, title: "No guardian on file for this pupil.", action: undefined }}
+          >
+            {student.guardians.map((link) => (
+                  <Row key={link.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                       <Link
                         href={`/guardians/${link.guardian.id}`}
@@ -152,11 +172,10 @@ export default async function StudentDetailPage({
                         .filter(Boolean)
                         .join(", ") || "—"}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 
@@ -168,20 +187,12 @@ export default async function StudentDetailPage({
           yearName={year?.name ?? null}
         />
         <div className="overflow-x-auto border-t border-slate-100">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Year</th>
-                <th className={thClass}>Class</th>
-                <th className={thClass}>Enrolment</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {enrollments.length === 0 ? (
-                <EmptyRow colSpan={3}>Never enrolled.</EmptyRow>
-              ) : (
-                enrollments.map((enrollment) => (
-                  <tr key={enrollment.id}>
+          <DataTable
+            columns={COLUMNS_1}
+            empty={{ icon: GraduationCap, title: "No enrolment history yet.", action: undefined }}
+          >
+            {enrollments.map((enrollment) => (
+                  <Row key={enrollment.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                       {enrollment.academicYear.name}
                     </td>
@@ -197,35 +208,21 @@ export default async function StudentDetailPage({
                     <td className="whitespace-nowrap px-4 py-2 text-slate-600">
                       {enrollment.status.toLowerCase()}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 
       <Card title="Fees">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Invoice</th>
-                <th className={thClass}>Term</th>
-                <th className={thClass}>Total</th>
-                <th className={thClass}>Paid</th>
-                <th className={thClass}>Balance</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {invoices.length === 0 ? (
-                <EmptyRow colSpan={6}>
-                  No invoices raised for this student.
-                </EmptyRow>
-              ) : (
-                invoices.map((invoice) => (
-                  <tr key={invoice.id}>
+          <DataTable
+            columns={COLUMNS_2}
+            empty={{ icon: FileText, title: "No invoices for this pupil yet.", action: undefined }}
+          >
+            {invoices.map((invoice) => (
+                  <Row key={invoice.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-500">
                       <Link
                         href={`/invoices/${invoice.id}`}
@@ -256,32 +253,21 @@ export default async function StudentDetailPage({
                     <td className="whitespace-nowrap px-4 py-2">
                       <StatusBadge status={invoice.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 
       <Card title="Results">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Term</th>
-                <th className={thClass}>Average</th>
-                <th className={thClass}>Position</th>
-                <th className={thClass}>Aggregate</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {termResults.length === 0 ? (
-                <EmptyRow colSpan={5}>No term results computed yet.</EmptyRow>
-              ) : (
-                termResults.map((termResult) => (
-                  <tr key={termResult.id}>
+          <DataTable
+            columns={COLUMNS_3}
+            empty={{ icon: LineChart, title: "No published results for this pupil yet.", action: undefined }}
+          >
+            {termResults.map((termResult) => (
+                  <Row key={termResult.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                       <Link
                         href={`/results/${student.id}?term=${termResult.term.id}`}
@@ -306,11 +292,10 @@ export default async function StudentDetailPage({
                     <td className="whitespace-nowrap px-4 py-2">
                       <StatusBadge status={termResult.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 

@@ -102,7 +102,7 @@ export default async function PaymentsPage({
           label="Students owing"
           value={String(owing)}
           icon={CircleAlert}
-          severity="blocking"
+          severity={owing > 0 ? "blocking" : "done"}
         />
         <StatCard
           label="Students on roll"

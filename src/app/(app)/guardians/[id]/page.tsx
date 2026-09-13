@@ -1,15 +1,26 @@
 import type { Metadata } from "next";
+import { Users } from "lucide-react";
+import { DataTable, Row, type Column } from "../../primitives";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getGuardian } from "@/lib/guardian-data";
 import { deleteGuardian, unlinkStudent } from "@/lib/guardian-actions";
-import { Alert, Card, EmptyRow, tableHeadClass, thClass } from "../../ui";
+import { Alert, Card } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditGuardianForm } from "../guardian-form";
 import { LinkStudentForm } from "./link-form";
 import { GuardianLoginForm } from "./login-form";
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Student" },
+  { label: "Class" },
+  { label: "Relationship" },
+  { label: "Receives" },
+  { label: "" },
+];
 
 export const metadata: Metadata = { title: "Guardian · School OS" };
 
@@ -64,22 +75,12 @@ export default async function GuardianDetailPage({
 
       <Card title="Children">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Student</th>
-                <th className={thClass}>Class</th>
-                <th className={thClass}>Relationship</th>
-                <th className={thClass}>Receives</th>
-                <th className={thClass} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {guardian.students.length === 0 ? (
-                <EmptyRow colSpan={5}>No children linked yet.</EmptyRow>
-              ) : (
-                guardian.students.map((link) => (
-                  <tr key={link.id}>
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Users, title: "No children linked to this guardian yet.", action: undefined }}
+          >
+            {guardian.students.map((link) => (
+                  <Row key={link.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
                       <Link href={`/students/${link.student.id}`} className="hover:underline">
                         {link.student.lastName}, {link.student.firstName}
@@ -117,11 +118,10 @@ export default async function GuardianDetailPage({
                         </SubmitButton>
                       </form>
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 

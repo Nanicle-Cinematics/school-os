@@ -73,7 +73,7 @@ export default async function MessagesPage() {
           label="Failed"
           value={String(stats.failed)}
           icon={CircleAlert}
-          severity="blocking"
+          severity={stats.failed > 0 ? "blocking" : "done"}
         />
         <StatCard
           label="Spend"

@@ -163,7 +163,7 @@ export default async function DashboardPage() {
               caption={`${data.debtorCount} students owing`}
               hero
               icon={CircleAlert}
-              severity="blocking"
+              severity={data.outstanding > 0 ? "blocking" : "done"}
             />
           </>
         ) : (

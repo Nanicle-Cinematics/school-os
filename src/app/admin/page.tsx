@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { StatCard } from "../(app)/primitives";
+import { DataTable, Row, StatCard, type Column } from "../(app)/primitives";
 import { CircleAlert, CircleCheck, Home, TrendingUp } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/platform-auth";
 import Link from "next/link";
@@ -7,6 +7,17 @@ import { getPlatformOverview, getPlatformTotals } from "@/lib/platform-data";
 import { formatCedis } from "@/lib/money";
 import { logout } from "@/lib/auth-actions";
 import { NewSchoolForm } from "./school-form";
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "School" },
+  { label: "Proprietor" },
+  { label: "Plan" },
+  { label: "On roll", numeric: true },
+  { label: "Staff", numeric: true },
+  { label: "Logins", numeric: true },
+  { label: "Since" },
+];
 
 export const metadata: Metadata = { title: "Nanicle console" };
 
@@ -86,7 +97,7 @@ export default async function AdminPage() {
             value={String(needsAttention)}
             caption="Past due or suspended"
             icon={CircleAlert}
-            severity="blocking"
+            severity={needsAttention > 0 ? "blocking" : "done"}
           />
           <StatCard
             label="Monthly revenue"
@@ -185,34 +196,13 @@ export default async function AdminPage() {
           </div>
           <NewSchoolForm />
         </div>
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Home, title: "No schools provisioned yet.", action: undefined }}
+          >
+            {schools.map((school) => (
 
-        <div className="overflow-hidden rounded-card border border-hairline bg-surface">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
-                <tr>
-                  <th className="px-4 py-2.5 font-medium">School</th>
-                  <th className="px-4 py-2.5 font-medium">Proprietor</th>
-                  <th className="px-4 py-2.5 font-medium">Plan</th>
-                  <th className="px-4 py-2.5 font-medium">On roll</th>
-                  <th className="px-4 py-2.5 font-medium">Staff</th>
-                  <th className="px-4 py-2.5 font-medium">Logins</th>
-                  <th className="px-4 py-2.5 font-medium">Since</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {schools.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-10 text-center text-sm text-slate-500"
-                    >
-                      No schools yet.
-                    </td>
-                  </tr>
-                ) : (
-                  schools.map((school) => (
-                    <tr key={school.id} className="hover:bg-slate-50">
+                    <Row key={school.id}>
                       <td className="whitespace-nowrap px-4 py-2.5">
                         <Link
                           href={`/admin/${school.id}`}
@@ -267,13 +257,9 @@ export default async function AdminPage() {
                       <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
                         {dateFmt.format(school.createdAt)}
                       </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                    </Row>
+            ))}
+          </DataTable>
 
         <p className="text-xs text-slate-400">
           A newly provisioned school arrives with the GES curriculum — KG 1 to

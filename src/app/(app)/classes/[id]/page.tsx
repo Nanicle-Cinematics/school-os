@@ -1,14 +1,24 @@
 import type { Metadata } from "next";
+import { Users } from "lucide-react";
+import { DataTable, Row, type Column } from "../../primitives";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getClassGroup } from "@/lib/class-data";
 import { deleteClassGroup } from "@/lib/class-actions";
-import { Alert, Card, EmptyRow, tableHeadClass, thClass } from "../../ui";
+import { Alert, Card } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditClassForm } from "../class-form";
 import { AssignmentsForm } from "./assignments-form";
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "Admission no." },
+  { label: "Name" },
+  { label: "Gender" },
+  { label: "Enrolment" },
+];
 
 export const metadata: Metadata = { title: "Class · School OS" };
 
@@ -78,23 +88,12 @@ export default async function ClassDetailPage({
 
       <Card title={year ? `Roster · ${year.name}` : "Roster"}>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>Admission no.</th>
-                <th className={thClass}>Name</th>
-                <th className={thClass}>Gender</th>
-                <th className={thClass}>Enrolment</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {roster.length === 0 ? (
-                <EmptyRow colSpan={4}>
-                  Nobody is enrolled in this class for the current year.
-                </EmptyRow>
-              ) : (
-                roster.map((enrollment) => (
-                  <tr key={enrollment.id}>
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Users, title: "No pupils placed in this class yet.", action: undefined }}
+          >
+            {roster.map((enrollment) => (
+                  <Row key={enrollment.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-500">
                       {enrollment.student.admissionNo}
                     </td>
@@ -109,11 +108,10 @@ export default async function ClassDetailPage({
                     <td className="whitespace-nowrap px-4 py-2 text-slate-600">
                       {enrollment.status.toLowerCase()}
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
 

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { StatCard } from "../../primitives";
+import { DataTable, Row, StatCard, type Column } from "../../primitives";
 import { CircleAlert, Send, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,7 +7,16 @@ import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getCampaign } from "@/lib/message-data";
 import { formatCedis } from "@/lib/money";
-import { Card, StatusBadge, EmptyRow, thClass, tableHeadClass } from "../../ui";
+import { Card, StatusBadge } from "../../ui";
+
+const COLUMNS: Column[] = [
+  { label: "" },
+  { label: "To" },
+  { label: "Recipient" },
+  { label: "Message" },
+  { label: "Seg.", numeric: true },
+  { label: "Status" },
+];
 
 export const metadata: Metadata = { title: "Campaign · School OS" };
 
@@ -89,7 +98,7 @@ export default async function CampaignPage({
           label="Failed"
           value={String(campaign.failedCount)}
           icon={CircleAlert}
-          severity="blocking"
+          severity={campaign.failedCount > 0 ? "blocking" : "done"}
         />
         <StatCard
           label="Estimated cost"
@@ -102,22 +111,12 @@ export default async function CampaignPage({
 
       <Card title={`Delivery log (${campaign.messages.length})`}>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className={tableHeadClass}>
-              <tr>
-                <th className={thClass}>To</th>
-                <th className={thClass}>Recipient</th>
-                <th className={thClass}>Message</th>
-                <th className={`${thClass} text-right`}>Seg.</th>
-                <th className={thClass}>Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {campaign.messages.length === 0 ? (
-                <EmptyRow colSpan={5}>No messages recorded.</EmptyRow>
-              ) : (
-                campaign.messages.map((message) => (
-                  <tr key={message.id} className="hover:bg-slate-50">
+          <DataTable
+            columns={COLUMNS}
+            empty={{ icon: Send, title: "No recipients on this campaign.", action: undefined }}
+          >
+            {campaign.messages.map((message) => (
+                  <Row key={message.id}>
                     <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-600">
                       {message.toPhone}
                     </td>
@@ -140,11 +139,10 @@ export default async function CampaignPage({
                     <td className="whitespace-nowrap px-4 py-2">
                       <StatusBadge status={message.status} />
                     </td>
-                  </tr>
+                  </Row>
                 ))
-              )}
-            </tbody>
-          </table>
+              }
+          </DataTable>
         </div>
       </Card>
     </div>

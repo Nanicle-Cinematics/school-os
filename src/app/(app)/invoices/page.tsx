@@ -99,7 +99,7 @@ export default async function InvoicesPage({
           label="Outstanding"
           value={formatCedis(data.outstanding)}
           icon={CircleAlert}
-          severity="blocking"
+          severity={Number(data.outstanding) > 0 ? "blocking" : "done"}
         />
         <StatCard label="Invoices" value={String(data.count)} icon={FileText} />
       </div>
