@@ -19,7 +19,12 @@
   --color-slate-100: #eaefea;
   --color-slate-200: #e4eae5;
   --color-slate-300: #c8d2ca;
-  --color-slate-400: #8a9a92;
+  /* ⚠️ Darkened from #8a9a92, which measured 2.95:1 on a card — below AA for
+     text, and this is TEXT in ninety-five places: field hints, rail group
+     labels, timestamps, admission numbers. It reads as "the quiet one"
+     because of its weight and size, not because it was too faint to read.
+     4.58:1 now. See `npm run verify:contrast`. */
+  --color-slate-400: #667a71;
   --color-slate-500: #586b61;
   --color-slate-600: #48564e;
   --color-slate-700: #37423b;
@@ -337,7 +342,7 @@ html.dark {
   --color-slate-100: #eaefea;
   --color-slate-200: #e4eae5;
   --color-slate-300: #c8d2ca;
-  --color-slate-400: #8a9a92;
+  --color-slate-400: #667a71;
   --color-slate-500: #586b61;
   --color-slate-600: #48564e;
   --color-slate-700: #37423b;
@@ -400,7 +405,7 @@ html.dark {
     --color-slate-100: #eaefea;
     --color-slate-200: #e4eae5;
     --color-slate-300: #c8d2ca;
-    --color-slate-400: #8a9a92;
+    --color-slate-400: #667a71;
     --color-slate-500: #586b61;
     --color-slate-600: #48564e;
     --color-slate-700: #37423b;

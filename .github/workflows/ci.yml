@@ -159,6 +159,13 @@ jobs:
       - name: Design — one set of primitives, and colour that says one thing
         run: npm run verify:design
 
+      # WCAG AA on every pair a screen actually renders, in both themes. A
+      # palette can be coherent, tokenised, guarded against drift and still be
+      # unreadable — "it looks fine on my screen" is not a measurement, and this
+      # is read on a phone in a bright school office.
+      - name: Contrast — every pair meets AA, light and dark
+        run: npm run verify:contrast
+
       - name: Settings — no dead switches, and the arrears hold actually holds
         run: npm run verify:settings
 
