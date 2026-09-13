@@ -34,6 +34,7 @@ export function Stat({
   sub,
   tone = "default",
   trend,
+  hero = false,
 }: {
   label: string;
   value: string;
@@ -41,6 +42,12 @@ export function Stat({
   tone?: "default" | "positive" | "negative" | "attention";
   /** A period-on-period movement, shown as a chip beside the label. */
   trend?: { value: string; up: boolean };
+  /**
+   * The one figure on the screen that decides what happens next: wider, and
+   * printed larger. Used sparingly — a row where every tile is a hero is a row
+   * with no hero, which is what four identical tiles already were.
+   */
+  hero?: boolean;
 }) {
   const toneClass =
     tone === "positive"
@@ -51,7 +58,11 @@ export function Stat({
           ? "text-accent-600"
           : "text-slate-900";
   return (
-    <div className="rounded-card border border-hairline bg-surface p-4.5 shadow-card">
+    <div
+      className={`rounded-card border border-hairline bg-surface p-4.5 shadow-card ${
+        hero ? "col-span-2" : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10.5px] font-extrabold uppercase tracking-[0.11em] text-slate-400">
           {label}
@@ -66,7 +77,11 @@ export function Stat({
           </span>
         ) : null}
       </div>
-      <p className={`font-heading mt-2.5 text-[30px] leading-none tabular-nums ${toneClass}`}>
+      <p
+        className={`font-heading mt-2.5 leading-none tabular-nums ${
+          hero ? "text-[38px]" : "text-[30px]"
+        } ${toneClass}`}
+      >
         {value}
       </p>
       {sub ? <p className="mt-0.5 text-xs text-slate-500">{sub}</p> : null}
