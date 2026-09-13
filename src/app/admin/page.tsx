@@ -1,10 +1,22 @@
 import type { Metadata } from "next";
 import { Card, PageHeader } from "../(app)/ui";
-import { DataTable, Row, StatCard, type Column } from "../(app)/primitives";
-import { Banknote, CircleAlert, CircleCheck, Home, TrendingUp } from "lucide-react";
+import {
+  DataTable,
+  EmptyState,
+  ListRow,
+  Row,
+  StatCard,
+  type Column,
+} from "../(app)/primitives";
+import { Banknote, CircleAlert, CircleCheck, History, Home, TrendingUp } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/platform-auth";
 import Link from "next/link";
-import { getPlatformOverview, getPlatformTotals, getRevenue } from "@/lib/platform-data";
+import {
+  getPlatformActivity,
+  getPlatformOverview,
+  getPlatformTotals,
+  getRevenue,
+} from "@/lib/platform-data";
 import { formatCedis } from "@/lib/money";
 import { logout } from "@/lib/auth-actions";
 import { NewSchoolForm } from "./school-form";
@@ -41,6 +53,7 @@ export default async function AdminPage() {
   const schools = await getPlatformOverview();
   const totals = await getPlatformTotals();
   const revenue = await getRevenue();
+  const activity = await getPlatformActivity();
   // Bars are relative to the best month, so a quiet month reads as quiet
   // rather than as an empty chart.
   const best = Math.max(...revenue.series.map((m) => m.amount), 0);
@@ -177,6 +190,38 @@ export default async function AdminPage() {
                 : ""}
             </p>
           </div>
+        </Card>
+
+        {/* What the console itself has done, across every tenant.
+            Each of these was already audited into the SCHOOL's trail, where
+            the school can see it and the platform owner cannot — the console
+            never reads a tenant's log. This is the same record, from the side
+            that took the action. */}
+        <Card title="Recent console activity">
+          {activity.length === 0 ? (
+            <EmptyState
+              icon={History}
+              title="Nothing yet. Provisioning a school, changing a plan or recording a payment appears here."
+            />
+          ) : (
+            <ul>
+              {activity.map((event) => (
+                <ListRow
+                  key={event.id}
+                  title={event.title}
+                  subtitle={`${event.detail} · ${event.actor} · ${dateFmt.format(event.when)}`}
+                  severity="pending"
+                  icon={
+                    event.action === "school.subscription.paid"
+                      ? Banknote
+                      : event.action === "school.provision"
+                        ? Home
+                        : TrendingUp
+                  }
+                />
+              ))}
+            </ul>
+          )}
         </Card>
 
         {/* The morning's work: who owes now, and who owes this week. Overdue

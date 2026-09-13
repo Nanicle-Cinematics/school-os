@@ -216,6 +216,79 @@ export async function getRevenue(months = 6) {
   });
 }
 
+/**
+ * What the platform admin has DONE, across every tenant.
+ *
+ * The console could change a school's plan, suspend it and take its money, and
+ * then showed no record of any of it — each action was audited into the
+ * school's own trail, where the school can see it and the platform owner
+ * cannot, because the console never reads a tenant's log.
+ *
+ * ⚠️ Only the actions the CONSOLE takes. A school's own bursar recording a fee
+ * payment is that school's business and belongs on its own dashboard; mixing
+ * the two would make this the busiest and least useful screen in the product.
+ */
+const CONSOLE_ACTIONS = ["school.provision", "school.subscription", "school.subscription.paid"];
+
+export type PlatformEvent = {
+  id: string;
+  action: string;
+  title: string;
+  detail: string;
+  actor: string;
+  when: Date;
+};
+
+export async function getPlatformActivity(take = 12): Promise<PlatformEvent[]> {
+  return withBypass(async () => {
+    const rows = await prisma.auditLog.findMany({
+      where: { action: { in: CONSOLE_ACTIONS } },
+      orderBy: { createdAt: "desc" },
+      take,
+      select: {
+        id: true,
+        action: true,
+        after: true,
+        createdAt: true,
+        actor: { select: { name: true, email: true } },
+        school: { select: { name: true } },
+      },
+    });
+
+    return rows.map((row) => {
+      const after = (row.after ?? {}) as Record<string, unknown>;
+      const school = row.school?.name ?? "a school";
+      let title = "Changed a school";
+      let detail = school;
+
+      if (row.action === "school.provision") {
+        title = "Provisioned a school";
+        detail = `${school} · ${String(after.plan ?? "no plan").toLowerCase().replace(/_/g, " ")}`;
+      } else if (row.action === "school.subscription.paid") {
+        title = "Recorded a payment";
+        detail = after.amount ? `${school} · GH₵${after.amount}` : school;
+      } else if (row.action === "school.subscription") {
+        title = "Changed the subscription";
+        const plan = after.plan ? String(after.plan).toLowerCase().replace(/_/g, " ") : null;
+        const status = after.subscriptionStatus
+          ? String(after.subscriptionStatus).toLowerCase().replace(/_/g, " ")
+          : null;
+        detail = [school, plan, status].filter(Boolean).join(" · ");
+      }
+
+      return {
+        id: row.id,
+        action: row.action,
+        title,
+        detail,
+        // The email, not the name: on this screen the question is WHICH admin.
+        actor: row.actor?.email ?? row.actor?.name ?? "unknown",
+        when: row.createdAt,
+      };
+    });
+  });
+}
+
 /** One school, for the console's detail screen. */
 export async function getSchoolForPlatform(schoolId: string) {
   return withBypass(async () => {
