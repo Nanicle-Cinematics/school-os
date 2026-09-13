@@ -99,13 +99,13 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
     .sort((a, b) => b.length - a.length)[0];
 
   return (
-    <nav className="space-y-6">
+    <nav className="space-y-4">
       {sections.map((section) => (
         <div key={section.heading}>
-          <p className="mb-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.13em] text-slate-400">
+          <p className="mb-1 px-3 text-[10px] font-extrabold uppercase tracking-[0.13em] text-slate-400">
             {section.heading}
           </p>
-          <ul className="space-y-1">
+          <ul className="space-y-0.5">
             {section.items.map((item) => {
               const active = item.href === activeHref;
               return (
@@ -118,7 +118,7 @@ function NavLinks({ sections, onNavigate }: { sections: NavSection[]; onNavigate
                        with a marker beside it. It is the only fully rounded
                        thing in the rail, which is what makes it findable at a
                        glance without any colour of its own. */
-                    className={`flex items-center gap-3 rounded-full py-1.5 pl-1.5 pr-3 text-sm transition ${
+                    className={`flex items-center gap-3 rounded-full py-1 pl-1 pr-3 text-sm transition ${
                       active
                         ? "bg-surface font-bold text-slate-900 shadow-card"
                         : "font-medium text-slate-600 hover:bg-surface/60"
@@ -160,7 +160,7 @@ function TermCard({ term }: { term: RailTerm | null }) {
     );
   }
   return (
-    <div className="rounded-card bg-surface p-3.5 shadow-card">
+    <div className="rounded-card bg-surface px-3.5 py-3 shadow-card">
       <p className="text-[11px] font-bold text-accent-600">{term.label}</p>
       {term.closes ? (
         <p className="mt-0.5 text-[13px] font-bold text-slate-900">
@@ -187,7 +187,7 @@ function RailBody({
 }) {
   return (
     <>
-      <div className="mb-5 flex items-center gap-2.5 px-1.5">
+      <div className="mb-4 flex items-center gap-2.5 px-1.5">
         {/* The one saturated thing in the rail. With the panel now light, the
             school's own mark is what carries the brand that the dark green
             gradient used to — one small solid green square instead of a wall
@@ -202,11 +202,25 @@ function RailBody({
           {school.name}
         </span>
       </div>
+      {/**
+       * The term card scrolls WITH the links rather than being pinned to the
+       * floor of the rail.
+       *
+       * Pinned, it cost twice. A rail taller than its links left a stretch of
+       * empty panel between the last item and the card — the thing that looked
+       * broken — and on a laptop it also held ~90px hostage while the links
+       * themselves were the thing overflowing.
+       *
+       * It is not a loss, because the term is ALREADY permanent: the header
+       * carries "First Term · 2026/2027" on every screen. What the card adds is
+       * the closing date and the countdown, which are worth a glance, not a
+       * reserved corner.
+       */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <NavLinks sections={sections} onNavigate={onNavigate} />
-      </div>
-      <div className="mt-4">
-        <TermCard term={term} />
+        <div className="mt-3">
+          <TermCard term={term} />
+        </div>
       </div>
     </>
   );
@@ -225,7 +239,17 @@ export function Sidebar({
     /* Frosted, not filled. `bg-rail` carries its own alpha and inverts with the
        slate ramp, so this is pale glass by day and near-black glass by night
        without a single `dark:` class — the same bet the palette makes. */
-    <aside className="hidden w-[248px] shrink-0 flex-col border-r border-hairline bg-rail p-3 backdrop-blur-xl lg:flex print:lg:hidden">
+    /**
+     * ⚠️ `sticky top-0 h-dvh`, not a plain flex child.
+     *
+     * The rail is a child of `flex min-h-full`, so it stretched to the height of
+     * the DOCUMENT: on a long dashboard the links sat at the top, the term card
+     * was pushed to the bottom of the page, and the gap between them was however
+     * far you had to scroll. Both references pin a sidebar to the VIEWPORT and
+     * scroll only its own contents, which is also what makes the term card worth
+     * its permanent corner — it is no longer permanently out of sight.
+     */
+    <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col border-r border-hairline bg-rail p-3 backdrop-blur-xl lg:flex print:lg:hidden">
       <RailBody sections={sections} school={school} term={term} />
     </aside>
   );
