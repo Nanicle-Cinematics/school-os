@@ -1,0 +1,179 @@
+name: Backup
+
+# Nightly, and on any change to the backup machinery itself.
+#
+# Two things happen here, and only one of them is the backup:
+#
+#   1. A SELF-TEST on a freshly seeded database, which always holds rows. This
+#      is the part that can go red, and the part that proves the dump/restore
+#      code path works at all.
+#   2. The PRODUCTION dump, restored and compared the same way, then encrypted
+#      and kept as an artifact.
+#
+# The self-test exists because production is currently EMPTY. Comparing an empty
+# database against its empty restore passes whatever the machinery does — the
+# vacuous-guard failure this repo has now shipped four times. So the machinery is
+# proved every night against data that definitely exists, and production's own
+# comparison reports UNPROVEN rather than a tick while it has nothing in it.
+on:
+  schedule:
+    # 02:30 UTC — after the day's work in Accra (UTC+0, no DST) and before CI's
+    # 06:00 audit, so a failure is already visible by morning.
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+  # Changes to the backup itself get tested by the backup. A workflow file that
+  # is only ever exercised by its own schedule is one nobody finds out is broken
+  # until the night they need it.
+  pull_request:
+    paths:
+      - ".github/workflows/backup.yml"
+      - "scripts/prove-restore.sh"
+      - "scripts/table-counts.sql"
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Dump production, and prove a dump restores
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      SCRATCH: postgresql://postgres:postgres@localhost:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ⚠️ ubuntu-latest ships postgresql-client 16, and pg_dump REFUSES to dump
+      # a server newer than itself — Supabase is 17. Without this the job fails
+      # on the first dump with "server version mismatch", which reads like a
+      # broken connection string rather than a missing package.
+      - name: Postgres 17 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17 age
+          pg_dump --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      # ── 1. The self-test: a database that definitely has rows in it ────────
+      #
+      # Built the way CI builds one — from the migrations, then seeded — so the
+      # dump under test is of the real schema, not a toy table.
+      - name: Seed a database to dump
+        run: |
+          psql -q "$SCRATCH/postgres" -c 'create database selftest'
+          cat > .env <<'ENV'
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/selftest"
+          DIRECT_URL="postgresql://postgres:postgres@localhost:5432/selftest"
+          DB_RLS="off"
+          ALLOW_UNSCOPED_DB="1"
+          APP_URL="http://localhost:3000"
+          SESSION_SECRET="backup-not-a-real-secret"
+          ENV
+          npm run db:deploy
+          npm run db:seed
+
+      - name: Does a dump of it restore, row for row?
+        run: |
+          psql -q "$SCRATCH/postgres" -c 'create database selftest_restored'
+          scripts/prove-restore.sh \
+            "$SCRATCH/selftest" "$SCRATCH/selftest_restored" /tmp/selftest.dump
+
+      # ── 2. Production ─────────────────────────────────────────────────────
+      - name: Dump production, and restore it here
+        id: prod
+        env:
+          PROD_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: |
+          if [ -z "$PROD_URL" ]; then
+            echo "PROD_DIRECT_URL is not set — nothing to back up."
+            echo "Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          psql -q "$SCRATCH/postgres" -c 'create database prod_restored'
+          set +e
+          scripts/prove-restore.sh "$PROD_URL" "$SCRATCH/prod_restored" /tmp/production.dump
+          code=$?
+          set -e
+          # 3 is "production is empty, so the comparison proved nothing" — true
+          # today, and not a reason to fail the nightly. The dump above is still
+          # taken and kept. Anything else is a real failure.
+          if [ "$code" = "3" ]; then
+            echo "::warning::Production holds no rows — the dump was taken, but its restore proves nothing yet."
+          elif [ "$code" != "0" ]; then
+            exit "$code"
+          fi
+
+      # ⚠️ Encrypt BEFORE the artifact exists, and fail rather than skip.
+      #
+      # An unencrypted artifact is every pupil record, guardian phone number and
+      # fee balance in one downloadable file. A missing key must stop the backup,
+      # not quietly produce a plaintext one — the failure mode where the guard's
+      # absence looks identical to its success.
+      - name: Encrypt
+        env:
+          RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          if [ -z "$RECIPIENT" ]; then
+            echo "No BACKUP_AGE_RECIPIENT variable set, so this backup would be stored in the clear."
+            echo "Generate a key with: age-keygen -o backup-key.txt"
+            echo "Keep that file OFF this repo, and put its public line (age1…) in"
+            echo "Settings → Secrets and variables → Actions → Variables as BACKUP_AGE_RECIPIENT."
+            exit 1
+          fi
+          age -r "$RECIPIENT" -o /tmp/production.dump.age /tmp/production.dump
+          # Prove the ciphertext is well formed and addressed to a real key, by
+          # decrypting it with a throwaway identity added as a SECOND recipient.
+          # This cannot prove YOUR key works — a valid-but-wrong public key would
+          # still encrypt — so decrypt one backup by hand, once, and know.
+          age-keygen -o /tmp/throwaway.txt 2>/dev/null
+          throwaway=$(age-keygen -y /tmp/throwaway.txt)
+          age -r "$RECIPIENT" -r "$throwaway" -o /tmp/roundtrip.age /tmp/production.dump
+          age -d -i /tmp/throwaway.txt -o /tmp/roundtrip.dump /tmp/roundtrip.age
+          cmp /tmp/production.dump /tmp/roundtrip.dump
+          echo "encrypted: $(du -h /tmp/production.dump.age | cut -f1), round trip verified"
+          rm -f /tmp/production.dump /tmp/roundtrip.age /tmp/roundtrip.dump /tmp/throwaway.txt
+
+      - name: Keep it
+        uses: actions/upload-artifact@v4
+        with:
+          # Dated, because the first question asked of a backup list is "how old
+          # is the newest one" and a run id does not answer it.
+          name: school-os-prod-${{ steps.prod.outputs.date }}-${{ github.run_id }}
+          path: /tmp/production.dump.age
+          retention-days: 30
+          if-no-files-found: error
