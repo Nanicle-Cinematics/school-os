@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonClass } from "./button-style";
 import { SectionMark } from "./nav";
 
 export function PageHeader({
@@ -162,7 +163,7 @@ export function ButtonLink({
   return (
     <Link
       href={href}
-      className="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-bold text-white shadow-pill transition hover:bg-brand-700 active:scale-[0.98]"
+      className={buttonClass("primary")}
     >
       {children}
     </Link>

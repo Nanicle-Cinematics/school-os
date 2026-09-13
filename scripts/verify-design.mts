@@ -63,8 +63,14 @@ check(
   rawTables.length ? `${rawTables.length} files still hand-roll a <table>` : "no raw tables",
 );
 
-const pastedPrimary = hits(/className="[^"]*bg-brand-600[^"]*px-/, (path) =>
-  OWNS(path, "primitives.tsx"),
+/**
+ * ⚠️ Matches on the HOVER, not on the colour. `bg-brand-600` also dresses the
+ * little "Current" badges beside a term or a fee structure, and those are
+ * markers rather than buttons — flagging them trained the eye to skip this
+ * line, which is how a guard stops being read.
+ */
+const pastedPrimary = hits(/className="[^"]*bg-brand-600[^"]*hover:bg-brand-700[^"]*"/, (path) =>
+  OWNS(path, "primitives.tsx", "button-style.ts"),
 );
 check(
   "the primary button exists once",

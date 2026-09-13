@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buttonClass } from "../button-style";
 import { Banknote, CircleAlert, Users } from "lucide-react";
 import Link from "next/link";
 import { paymentSource } from "@/lib/payment-labels";
@@ -134,7 +135,7 @@ export default async function PaymentsPage({
         </select>
         <button
           type="submit"
-          className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+          className={buttonClass("secondary")}
         >
           Filter
         </button>

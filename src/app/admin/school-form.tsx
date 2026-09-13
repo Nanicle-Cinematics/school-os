@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { buttonClass } from "../(app)/button-style";
 import type { Plan } from "@prisma/client";
 import { createSchool, type PlatformState } from "@/lib/platform-actions";
 import { PLANS, TRIAL_DAYS } from "@/lib/subscription";
@@ -27,7 +28,7 @@ export function NewSchoolForm() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+        className={buttonClass("primary")}
       >
         Add a school
       </button>
@@ -127,7 +128,7 @@ function SubmitButton() {
   return (
     <button
       type="submit"
-      className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+      className={buttonClass("primary")}
     >
       Provision school
     </button>

@@ -1,4 +1,5 @@
 import React from "react";
+import { buttonClass, type ButtonSize, type ButtonVariant } from "./button-style";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { CircleAlert, Clock, CircleCheck, Info } from "lucide-react";
@@ -50,28 +51,6 @@ const SEVERITY: Record<Severity, { chip: string; ink: string; icon: LucideIcon }
  * buttons of equal weight and no main action. Filled means "this is the thing
  * to do here"; everything else — including a row of equal actions — is ghost.
  */
-const BASE =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-semibold transition disabled:opacity-55 disabled:pointer-events-none";
-
-const VARIANT = {
-  primary: "bg-brand-600 text-white shadow-pill hover:bg-brand-700 active:scale-[0.98]",
-  secondary:
-    "border border-hairline bg-surface text-slate-700 shadow-card hover:bg-slate-100 active:scale-[0.98]",
-  ghost: "border border-hairline bg-transparent text-slate-600 hover:bg-slate-100",
-  danger: "border border-hairline bg-danger-tint text-danger-ink hover:brightness-95",
-} as const;
-
-const SIZE = {
-  sm: "px-3 py-1.5 text-xs",
-  md: "px-4.5 py-2.5",
-} as const;
-
-export type ButtonVariant = keyof typeof VARIANT;
-
-function buttonClass(variant: ButtonVariant, size: keyof typeof SIZE, className?: string) {
-  return `${BASE} ${VARIANT[variant]} ${SIZE[size]} ${className ?? ""}`.trim();
-}
-
 export function Button({
   variant = "secondary",
   size = "md",
@@ -81,7 +60,7 @@ export function Button({
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
-  size?: keyof typeof SIZE;
+  size?: ButtonSize;
   icon?: LucideIcon;
 }) {
   return (
@@ -102,7 +81,7 @@ export function ButtonLink({
 }: {
   href: string;
   variant?: ButtonVariant;
-  size?: keyof typeof SIZE;
+  size?: ButtonSize;
   icon?: LucideIcon;
   className?: string;
   children: React.ReactNode;

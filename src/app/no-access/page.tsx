@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buttonClass } from "../(app)/button-style";
 import { logout } from "@/lib/auth-actions";
 
 export const metadata: Metadata = { title: "No access · School OS" };
@@ -15,7 +16,7 @@ export default function NoAccessPage() {
         <form action={logout} className="mt-5">
           <button
             type="submit"
-            className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
+            className={buttonClass("primary", "md", "w-full")}
           >
             Sign out
           </button>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buttonClass } from "../button-style";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
@@ -40,7 +41,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
         />
         <button
           type="submit"
-          className="shrink-0 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white shadow-[0_6px_16px_rgba(18,128,92,0.22)] transition hover:bg-brand-700"
+          className={buttonClass("primary", "md", "shrink-0")}
         >
           Search
         </button>

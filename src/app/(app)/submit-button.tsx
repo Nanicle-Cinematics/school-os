@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { buttonClass, type ButtonVariant } from "./button-style";
 
 export function SubmitButton({
   children,
@@ -11,7 +12,7 @@ export function SubmitButton({
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
-  variant?: "primary" | "secondary" | "danger";
+  variant?: ButtonVariant;
   className?: string;
   /** Lets one form drive two actions, e.g. "preview" alongside "send". */
   formAction?: (formData: FormData) => void | Promise<void>;
@@ -24,21 +25,15 @@ export function SubmitButton({
   const status = useFormStatus();
   const pending = status.pending && (!formAction || status.action === formAction);
 
-  const base =
-    "rounded-lg px-3 py-2 text-sm font-medium transition disabled:opacity-60 disabled:cursor-not-allowed";
-  const tone =
-    variant === "primary"
-      ? "bg-brand-600 text-white hover:bg-brand-700"
-      : variant === "danger"
-        ? "border border-red-200 bg-surface text-red-700 hover:bg-red-50"
-        : "border border-slate-200 bg-surface text-slate-700 hover:bg-slate-50";
-
+  /* One definition, shared with Button and ButtonLink — see button-style.ts.
+     This used to carry its own `base` and `tone`, so a submit button and the
+     link beside it in the same form had different heights and radii. */
   return (
     <button
       type="submit"
       formAction={formAction}
       disabled={pending}
-      className={`${base} ${tone} ${className}`}
+      className={buttonClass(variant, "md", className)}
     >
       {pending ? (pendingLabel ?? "Working…") : children}
     </button>

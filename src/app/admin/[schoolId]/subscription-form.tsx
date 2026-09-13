@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { buttonClass } from "../../(app)/button-style";
 import type { Plan, SubscriptionStatus } from "@prisma/client";
 import {
   updateSubscription,
@@ -161,7 +162,7 @@ export function SubscriptionForm({
 
       <button
         type="submit"
-        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700"
+        className={buttonClass("primary")}
       >
         Save subscription
       </button>
