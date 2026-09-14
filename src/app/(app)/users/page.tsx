@@ -124,8 +124,13 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
       ) : null}
 
       <p className="text-xs text-slate-400">
-        Parents and students are not listed — the enum has those roles, but there is no portal for
-        them yet, so a login would land on the staff dashboard.
+        Parent logins are not made here. Open{" "}
+        <Link href="/guardians" className="underline hover:text-slate-600">
+          Guardians
+        </Link>
+        , find the parent and give them a portal login — creating it from their own record is what
+        ties the login to their children. It then appears in this list like any other. Pupils have
+        no portal yet.
       </p>
     </div>
   );

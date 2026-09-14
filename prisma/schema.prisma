@@ -243,7 +243,6 @@ enum Role {
   HOUSE_MASTER
   NURSE
   PARENT
-  STUDENT
 }
 
 enum MemberStatus {
@@ -308,8 +307,6 @@ model Membership {
   staff      Staff?    @relation(fields: [staffId], references: [id], onDelete: SetNull)
   guardianId String?
   guardian   Guardian? @relation(fields: [guardianId], references: [id], onDelete: SetNull)
-  studentId  String?
-  student    Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   invitedAt  DateTime?
   acceptedAt DateTime?
@@ -659,7 +656,6 @@ model Student {
 
   guardians      StudentGuardian[]
   enrollments    Enrollment[]
-  memberships    Membership[]
   scores         Score[]
   subjectResults SubjectResult[]
   termResults    TermResult[]
