@@ -9,9 +9,16 @@ import { prisma } from "@/lib/prisma";
 /**
  * Roles a login can be given from this screen.
  *
- * PARENT and STUDENT are deliberately absent: the enum has them, but there is no
- * portal for them yet, so such a login would land on the staff dashboard. Add
- * them here the day that portal exists, not before.
+ * PARENT is deliberately absent, and it is the only role in the enum that is.
+ *
+ * A PARENT membership is worthless — and lands on /no-access — unless guardianId
+ * is set, and this screen never knows which guardian is meant. Parent logins are
+ * therefore created from the guardian's own record, which guarantees the link:
+ * see createGuardianLogin in guardian-actions.ts. The portal itself is live, so
+ * do not "fix" this by adding PARENT here.
+ *
+ * (STUDENT used to be absent too. It is gone from the enum entirely — it was
+ * scaffolding no code ever referenced. See the drop_student_role migration.)
  */
 export const ASSIGNABLE_ROLES: Role[] = [
   "OWNER",

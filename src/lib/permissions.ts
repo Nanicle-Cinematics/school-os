@@ -227,7 +227,6 @@ const ROLE_LABELS: Record<Role, string> = {
   HOUSE_MASTER: "House Master",
   NURSE: "Nurse",
   PARENT: "Parent",
-  STUDENT: "Student",
 };
 
 export function roleLabel(role: Role) {
