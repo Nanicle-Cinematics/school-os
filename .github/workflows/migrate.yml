@@ -40,6 +40,13 @@ on:
           # Running deploy first would try to CREATE TABLE over the live data and
           # fail.
           - baseline
+          # Re-apply row security. A new tenant table arrives with NONE, and
+          # until now nothing could give it any against production — db:rls ran
+          # only in CI, against a throwaway container that is dropped minutes
+          # later. That gap is why AssessmentTemplate and then SchoolAsset both
+          # reached production unprotected, the second for ten days. Idempotent,
+          # and safe to run after any deploy that added a table.
+          - rls
 
 jobs:
   migrate:
@@ -93,5 +100,21 @@ jobs:
               # applied migration fails loudly rather than doing damage.
               npx prisma migrate resolve --applied 0_init
               npx prisma migrate status
+              ;;
+            rls)
+              # apply-rls.mjs enumerates the tables from the DATABASE rather than
+              # from a list, so it cannot go stale — but nothing ever ran it
+              # against production, which is the half that was missing. It is
+              # idempotent: policies are dropped and recreated, the role is left
+              # alone if it exists.
+              #
+              # Then audit, read-only, and let it decide the exit code: applying
+              # and reporting success from the same step would hide a table the
+              # apply could not reach, which is the exact shape of the bug this
+              # is here to end.
+              node scripts/apply-rls.mjs
+              echo
+              echo "Applied. Now auditing production, read-only:"
+              npm run audit:rls
               ;;
           esac
