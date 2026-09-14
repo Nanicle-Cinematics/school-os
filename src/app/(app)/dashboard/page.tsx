@@ -208,8 +208,15 @@ export default async function DashboardPage() {
        * also the right order for the person reading it on one.
        */}
       {showMoney ? (
+        /* ⚠️ min-w-0 on the CHILDREN, not just the grid. A grid item's default
+           `min-width: auto` refuses to shrink below its content's min-content
+           width, so the fixed 44px columns in CollectionsChart made this column
+           436px wide inside a 358px track and pushed the whole PAGE sideways on
+           a 390px phone — the dashboard scrolled horizontally and mobile Chrome
+           zoomed the page out to fit. The chart keeps its fixed slots and
+           scrolls inside its own card instead. */
         <div className="grid items-start gap-4 lg:grid-cols-2">
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             {collections ? (
               <CollectionsChart
                 collections={collections}
@@ -270,7 +277,7 @@ export default async function DashboardPage() {
             </Card>
           </div>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <ActivityFeed items={activity} />
             <Card title="Largest balances">
               {data.topDebtors.length === 0 ? (

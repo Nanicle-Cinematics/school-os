@@ -27,6 +27,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { bestHrefMatch, sectionFor } from "@/lib/permissions";
 import type { NavHue, NavIcon, NavSection } from "@/lib/permissions";
 
@@ -361,35 +362,61 @@ export function MobileNav({
 }) {
   const [open, setOpen] = useState(false);
 
+  /**
+   * ⚠️ The drawer is PORTALLED to <body>, and it has to be.
+   *
+   * This button lives in the app header, which is `backdrop-blur-xl` because
+   * `--color-chrome` is only 80% opaque. An element with a backdrop-filter
+   * becomes the containing block for every `position: fixed` DESCENDANT — the
+   * same rule `filter` and `transform` have — so rendering the drawer here made
+   * `fixed inset-0` mean "the 64px header strip" rather than "the viewport".
+   *
+   * It did not fail loudly. The drawer opened, all twenty links were in the
+   * DOM, and the panel was laid out 276px wide and 63px tall behind the page:
+   * to anyone holding a phone, the menu button simply did nothing. Portalling
+   * to <body> puts it back outside every filtered ancestor.
+   *
+   * So: do not move this back inside the header to tidy it up, and do not wrap
+   * the header or the drawer in anything carrying filter, transform, perspective
+   * or will-change. There is a check for this in verify:mobile-nav.
+   */
+  const drawer = (
+    <div className="fixed inset-0 z-50 flex">
+      <button
+        type="button"
+        aria-label="Close menu"
+        onClick={() => setOpen(false)}
+        className="absolute inset-0 bg-slate-900/25 backdrop-blur-sm"
+      />
+      <div className="relative flex w-[276px] flex-col overflow-y-auto border-r border-hairline bg-rail p-3 backdrop-blur-xl">
+        <RailBody
+          sections={sections}
+          school={school}
+          term={term}
+          onNavigate={() => setOpen(false)}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="lg:hidden">
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Open menu"
+        aria-expanded={open}
         className="rounded-control border border-hairline bg-surface p-2 text-slate-600 shadow-card"
       >
-<Menu className="h-[18px] w-[18px]" aria-hidden="true" />
+        <Menu className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-50 flex">
-          <button
-            type="button"
-            aria-label="Close menu"
-            onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-slate-900/25 backdrop-blur-sm"
-          />
-          <div className="relative flex w-[276px] flex-col border-r border-hairline bg-rail p-3 backdrop-blur-xl">
-            <RailBody
-              sections={sections}
-              school={school}
-              term={term}
-              onNavigate={() => setOpen(false)}
-            />
-          </div>
-        </div>
-      ) : null}
+      {/*
+        No "have we mounted yet" flag is needed, and adding one costs a render:
+        `open` starts false and only a click can set it, so the server never
+        reaches createPortal and `document` always exists by the time it does.
+      */}
+      {open ? createPortal(drawer, document.body) : null}
     </div>
   );
 }
