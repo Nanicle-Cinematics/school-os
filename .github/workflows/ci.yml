@@ -281,6 +281,18 @@ jobs:
       # it creates everything. It PRINTED and asserted nothing until 2026-09-10,
       # and so reported 27 healthy-looking screens while every one of them was a
       # redirect to /account/password.
+      # Headless Chrome, because this is the one failure the other guards cannot
+      # see: they ask the DOM what exists, and the phone menu existed all along —
+      # 276x63 behind the page, because a backdrop-filter ancestor was capturing
+      # its `position: fixed`. Four of this script's own checks passed while it
+      # was broken. Layout has to be measured, not queried.
+      - name: Phone — the menu opens, and the page does not scroll sideways
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:mobile-nav
+
       - name: Onboarding — every screen a day-one school opens
         env:
           DB_RLS: "on"

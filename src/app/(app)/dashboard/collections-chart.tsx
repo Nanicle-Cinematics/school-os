@@ -123,7 +123,16 @@ export function CollectionsChart({
             parent with a definite height, and inside a flex row with `items-end`
             the columns size to their content — so the first version of this chart
             rendered labels with no bars at all. */}
-        <div className="flex items-end gap-1.5" style={{ height: `${PLOT + 16}px` }}>
+        {/* overflow-x-auto, because the columns below are deliberately a fixed
+            44px and a term is 15 weeks: past about eight of them the row is
+            wider than a 390px phone. Scrolling it HERE keeps that decision and
+            keeps the page itself from scrolling sideways, which is what it did
+            before — the whole dashboard shifted under the thumb, and mobile
+            Chrome zoomed the page out to fit. Pair with min-w-0 on the grid
+            column in page.tsx; without that the grid item never shrinks and this
+            never gets the chance to scroll. */}
+        <div className="-mx-4 overflow-x-auto px-4">
+          <div className="flex items-end gap-1.5" style={{ height: `${PLOT + 16}px` }}>
           {weeks.map((week) => {
             const label = week.isCurrent || (week.amount === best && best > 0);
             const height = week.amount > 0 ? Math.max(4, Math.round(week.share * PLOT)) : 2;
@@ -173,6 +182,7 @@ export function CollectionsChart({
               <div className="h-[2px] w-full rounded-full bg-slate-100" />
             </div>
           ))}
+          </div>
         </div>
 
         <div className="mt-2 flex gap-1.5">
