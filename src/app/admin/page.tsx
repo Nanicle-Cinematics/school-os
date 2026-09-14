@@ -41,7 +41,6 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 
 const PLAN_TONE: Record<string, string> = {
   TRIAL: "bg-warning-tint text-warning-ink",
-  STANDARD: "bg-success-tint text-success-ink",
   INSTITUTION_PLUS: "bg-brand-600 text-white",
 };
 

@@ -30,7 +30,6 @@ datasource db {
 // SCHOOL_PLUS) was a placeholder nobody had priced.
 enum Plan {
   TRIAL
-  STANDARD
   INSTITUTION_PLUS
 }
 

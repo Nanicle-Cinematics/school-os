@@ -67,7 +67,7 @@ console.log("\nMonthly billing");
 const day = (n: number) => new Date(Date.now() + n * DAY);
 const monthly = (paidUntil: Date | null) =>
   subscriptionState({
-    plan: "STANDARD",
+    plan: "INSTITUTION_PLUS",
     subscriptionStatus: "ACTIVE",
     trialEndsAt: null,
     paidUntil,
@@ -257,20 +257,20 @@ check(
   unguarded.length ? `missing in: ${unguarded.join(", ")}` : `${creators.length} file(s), all guarded`,
 );
 
-const capped = { plan: "STANDARD" as const, studentCap: 150 };
-check("a school under its cap may admit", capacityMessage(capacity(capped, 149), 1, "Standard") === null);
+const capped = { plan: "INSTITUTION_PLUS" as const, studentCap: 150 };
+check("a school under its cap may admit", capacityMessage(capacity(capped, 149), 1, "Institution Plus") === null);
 check(
   "a school AT its cap may not",
-  (capacityMessage(capacity(capped, 150), 1, "Standard") ?? "").includes("at its limit"),
+  (capacityMessage(capacity(capped, 150), 1, "Institution Plus") ?? "").includes("at its limit"),
 );
 check(
   "an import that would cross the cap is refused whole, with the arithmetic",
-  (capacityMessage(capacity(capped, 100), 80, "Standard") ?? "").includes("180"),
-  capacityMessage(capacity(capped, 100), 80, "Standard") ?? "",
+  (capacityMessage(capacity(capped, 100), 80, "Institution Plus") ?? "").includes("180"),
+  capacityMessage(capacity(capped, 100), 80, "Institution Plus") ?? "",
 );
 check(
   "and says nothing was written",
-  (capacityMessage(capacity(capped, 100), 80, "Standard") ?? "").includes("Nothing has been imported"),
+  (capacityMessage(capacity(capped, 100), 80, "Institution Plus") ?? "").includes("Nothing has been imported"),
 );
 check(
   "a school ALREADY over its cap keeps its pupils — only new admissions refuse",
@@ -279,7 +279,7 @@ check(
 );
 check(
   "an explicit cap beats the plan default",
-  pupilCap({ plan: "STANDARD", studentCap: 400 }) === 400,
+  pupilCap({ plan: "INSTITUTION_PLUS", studentCap: 400 }) === 400,
 );
 check(
   "no plan carries a cap of its own — a limit is a decision about one school",
@@ -291,9 +291,16 @@ check(
   `${TRIAL_DAYS} days, uncapped`,
 );
 check(
-  "the two paid plans are priced",
-  PLANS.STANDARD.monthlyPrice === 500 && PLANS.INSTITUTION_PLUS.monthlyPrice === 800,
-  `Standard GH₵${PLANS.STANDARD.monthlyPrice}, Institution Plus GH₵${PLANS.INSTITUTION_PLUS.monthlyPrice}`,
+  "the one paid plan is priced",
+  PLANS.INSTITUTION_PLUS.monthlyPrice === 800,
+  `Institution Plus GH₵${PLANS.INSTITUTION_PLUS.monthlyPrice} a month`,
+);
+check(
+  // Guards the thing that was actually wrong: two plans that differed only in
+  // price. If a second paid plan is ever added, it has to DO something.
+  "there is exactly one paid plan, and a free trial",
+  Object.keys(PLANS).length === 2 && PLANS.TRIAL.monthlyPrice === 0,
+  Object.keys(PLANS).join(", "),
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);
