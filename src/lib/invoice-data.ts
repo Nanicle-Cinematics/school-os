@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import type { InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { PLAN_SELECT, keepingToPlan } from "@/lib/report-access";
 import { AGE_BUCKETS, ageFilterWhere, statusFilterWhere, type AgeBucket } from "@/lib/invoice-engine";
 
 export type InvoiceFilters = {
@@ -86,6 +87,40 @@ export async function getInvoiceList(filters: InvoiceFilters) {
  * Sequential, not Promise.all — connection_limit pins this low enough that a
  * five-way fan-out queues rather than parallelises, and the tail times out.
  */
+/**
+ * Bills whose families have an arrangement they are keeping to.
+ *
+ * ⚠️ Returned as a SET to subtract, rather than folded into the ageing query.
+ * Whether a family is on track is a comparison between a schedule and a running
+ * total, which SQL here cannot express — and pretending otherwise by filtering
+ * on "has a plan" would excuse every family that agreed one and then stopped
+ * paying, which is the opposite of what a school needs.
+ *
+ * So the ageing counts everyone, this names who is covered, and the screen
+ * reports both. A plan is not a way to disappear from the report.
+ */
+export async function invoicesOnKeptPlans(termId?: string) {
+  const withPlans = await prisma.invoice.findMany({
+    where: {
+      ...(termId ? { termId } : {}),
+      balance: { gt: 0 },
+      status: { not: "CANCELLED" },
+      paymentPlan: { is: { cancelledAt: null } },
+    },
+    select: { id: true, amountPaid: true, balance: true, ...PLAN_SELECT },
+  });
+
+  const kept = new Set<string>();
+  let covered = 0;
+  for (const invoice of withPlans) {
+    if (keepingToPlan(invoice)) {
+      kept.add(invoice.id);
+      covered += Number(invoice.balance);
+    }
+  }
+  return { kept, covered, total: withPlans.length };
+}
+
 export async function getDebtorAgeing(termId?: string) {
   const now = new Date();
   const rows: { bucket: AgeBucket; count: number; total: number }[] = [];
@@ -129,6 +164,7 @@ export async function getInvoice(id: string) {
         include: { payment: true },
         orderBy: { createdAt: "asc" },
       },
+      paymentPlan: { include: { instalments: { orderBy: { sequence: "asc" } } } },
     },
   });
 }

@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { money } from "@/lib/money";
+import { planStanding } from "@/lib/plan-engine";
 
 /**
  * Whether a report card may go home, given what the family owes.
@@ -29,6 +30,12 @@ import { money } from "@/lib/money";
  *
  * And who a hold applies to, which is the part worth being careful about:
  *
+ *   - A family KEEPING TO AN AGREED PLAN is not held, even though the balance
+ *     is positive. The school agreed the money would arrive later; withholding
+ *     a card from a parent who is doing exactly what was agreed is the school
+ *     going back on its own arrangement, and it is how a school loses a family
+ *     it had already kept. Falling BEHIND the plan removes the exemption — the
+ *     arrangement is the protection, not the existence of one.
  *   - PARENTS are held. That is the entire point of the setting.
  *   - STAFF are not. The office has to be able to open the card to tell the
  *     parent what is owed and what they are collecting once it is paid, and a
@@ -76,13 +83,49 @@ export async function reportHold(
 
   const invoice = await prisma.invoice.findFirst({
     where: { studentId, termId, status: { in: [...BILLED] } },
-    select: { invoiceNo: true, balance: true },
+    select: { invoiceNo: true, balance: true, amountPaid: true, ...PLAN_SELECT },
   });
 
   if (!invoice || money(invoice.balance).lte(0)) {
     return null;
   }
+  if (keepingToPlan(invoice)) {
+    return null;
+  }
   return { balance: money(invoice.balance), invoiceNo: invoice.invoiceNo };
+}
+
+/** What a hold decision needs in order to see the arrangement. */
+export const PLAN_SELECT = {
+  paymentPlan: {
+    select: {
+      cancelledAt: true,
+      instalments: { select: { sequence: true, dueDate: true, amount: true } },
+    },
+  },
+} as const;
+
+type WithPlan = {
+  amountPaid: Prisma.Decimal;
+  paymentPlan: {
+    cancelledAt: Date | null;
+    instalments: { sequence: number; dueDate: Date; amount: Prisma.Decimal }[];
+  } | null;
+};
+
+/**
+ * Is this bill covered by an arrangement the family is keeping to?
+ *
+ * A cancelled plan protects nobody, and a plan with no instalments is not an
+ * arrangement — both fall through to the ordinary arrears rule rather than
+ * silently exempting a debt.
+ */
+export function keepingToPlan(invoice: WithPlan, now = new Date()): boolean {
+  const plan = invoice.paymentPlan;
+  if (!plan || plan.cancelledAt || plan.instalments.length === 0) {
+    return false;
+  }
+  return planStanding(plan.instalments, invoice.amountPaid, now).onTrack;
 }
 
 /**
@@ -102,10 +145,15 @@ export async function reportHoldsForClass(
 
   const invoices = await prisma.invoice.findMany({
     where: { termId, studentId: { in: studentIds }, status: { in: [...BILLED] } },
-    select: { studentId: true, invoiceNo: true, balance: true },
+    select: { studentId: true, invoiceNo: true, balance: true, amountPaid: true, ...PLAN_SELECT },
   });
 
-  return index(invoices, (invoice) => invoice.studentId);
+  // Still one query: the plan and its instalments come back with the invoice,
+  // so a forty-child print run does not become forty plan lookups.
+  return index(
+    invoices.filter((invoice) => !keepingToPlan(invoice)),
+    (invoice) => invoice.studentId,
+  );
 }
 
 /**
@@ -125,10 +173,16 @@ export async function reportHoldsForTerms(
 
   const invoices = await prisma.invoice.findMany({
     where: { studentId, termId: { in: termIds }, status: { in: [...BILLED] } },
-    select: { termId: true, invoiceNo: true, balance: true },
+    select: { termId: true, invoiceNo: true, balance: true, amountPaid: true, ...PLAN_SELECT },
   });
 
-  return index(invoices, (invoice) => invoice.termId);
+  // The parent's own list obeys the arrangement too — this is the reader a
+  // family actually looks at, so leaving it out would have the portal hiding a
+  // card the office can see is free to go home.
+  return index(
+    invoices.filter((invoice) => !keepingToPlan(invoice)),
+    (invoice) => invoice.termId,
+  );
 }
 
 /** Keep only the invoices actually in arrears, keyed by whatever the caller asked. */

@@ -83,6 +83,14 @@ export default async function PaymentsPage({
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader title="Payments" subtitle={`${data.count} recorded`} />
 
+      {/* Reconciliation lives one click from the payments list, because it is
+          the same person's job on the same afternoon. */}
+      <div className="flex justify-end print:hidden">
+        <Link href="/payments/reconcile" className="text-sm text-slate-500 hover:text-slate-900">
+          Reconcile a statement →
+        </Link>
+      </div>
+
       {receipt ? (
         <Alert tone="success">
           Payment recorded. Receipt number{" "}
