@@ -25,17 +25,29 @@ import { PLANS, TRIAL_DAYS } from "@/lib/subscription";
 import dashboardShot from "../../public/product-dashboard.png";
 
 /**
- * ⚠️ CHANGE THIS. It is a personal address on a public page.
+ * How a school reaches a person. Two ways, deliberately.
  *
- * Left as the owner's own inbox because a trial request that reaches nobody is
- * worse than an unpolished one, and this is the address that certainly works
- * today. Swap it for a Nanicle one — and add a phone or WhatsApp number, which
- * for a Ghanaian school proprietor is likelier to convert than any form.
+ * The phone is not a nicety here: a Ghanaian school proprietor is far likelier
+ * to WhatsApp a number than to fill in anything, and an email-only page quietly
+ * loses the people most ready to buy.
+ *
+ * ⚠️ Still a personal inbox and a personal number. Swap both for Nanicle ones
+ * before this page is advertised anywhere — an address on a public page is an
+ * address that gets scraped.
  */
-const CONTACT = "degraftnanaaboagye@gmail.com";
+const CONTACT = {
+  email: "degraftnanaaboagye@gmail.com",
+  /** E.164 for the links; `phoneShown` is the same number for human eyes. */
+  phone: "+233503635922",
+  phoneShown: "+233 50 363 5922",
+};
 
 const SUBJECT = encodeURIComponent("School OS — trial for my school");
-const mailto = `mailto:${CONTACT}?subject=${SUBJECT}`;
+const mailto = `mailto:${CONTACT.email}?subject=${SUBJECT}`;
+/** wa.me wants the number with no plus and no spaces. */
+const whatsapp = `https://wa.me/${CONTACT.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+  "Hello, I would like a trial of School OS for my school.",
+)}`;
 
 /** What a school gets on the first day, in the order a head teacher cares. */
 const FEATURES = [
@@ -128,7 +140,11 @@ export function Marketing() {
             </ButtonLink>
           </div>
           <p className="mt-4 text-sm text-slate-500">
-            {TRIAL_DAYS} days free. No card, no setup fee.
+            {TRIAL_DAYS} days free. No card, no setup fee. Or call or WhatsApp{" "}
+            <a href={`tel:${CONTACT.phone}`} className="font-semibold text-brand-ink hover:text-brand-700">
+              {CONTACT.phoneShown}
+            </a>
+            .
           </p>
 
           {/* The product, not a drawing of it. A school office decides in about
@@ -213,9 +229,12 @@ export function Marketing() {
               roll size — a school of 900 pays what a school of 90 pays, because the work the
               software does is the same.
             </p>
-            <div className="mt-7">
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
               <ButtonLink href={mailto} variant="primary">
                 Ask for a free trial
+              </ButtonLink>
+              <ButtonLink href={whatsapp} variant="secondary" icon={MessageSquare}>
+                WhatsApp us
               </ButtonLink>
             </div>
             <p className="mt-4 text-sm text-slate-500">
@@ -228,9 +247,17 @@ export function Marketing() {
       <footer className="border-t border-hairline bg-surface">
         <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-8 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span>Nanicle Enterprise Solutions</span>
-          <a href={mailto} className="font-semibold text-brand-ink hover:text-brand-700">
-            {CONTACT}
-          </a>
+          <span className="flex flex-wrap gap-x-5 gap-y-1">
+            <a href={mailto} className="font-semibold text-brand-ink hover:text-brand-700">
+              {CONTACT.email}
+            </a>
+            <a
+              href={`tel:${CONTACT.phone}`}
+              className="font-semibold text-brand-ink hover:text-brand-700"
+            >
+              {CONTACT.phoneShown}
+            </a>
+          </span>
         </div>
       </footer>
     </div>
