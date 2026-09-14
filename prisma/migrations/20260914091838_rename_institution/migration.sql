@@ -1,0 +1,13 @@
+-- "Institution Plus" becomes "Institution". With nothing beneath it, "Plus"
+-- implied a cheaper tier that does not exist.
+--
+-- ⚠️ Hand-written, and deliberately NOT what `prisma migrate diff` generates.
+-- Prisma's version builds a new type and casts across with
+-- ("plan"::text::"Plan_new"), which throws `invalid input value for enum` on
+-- every row still reading INSTITUTION_PLUS — that is, on every paying school.
+-- The cast is the same trap the STANDARD removal hit one migration ago.
+--
+-- RENAME VALUE is a single catalog change: the rows are not rewritten, not
+-- re-cast and not read, so they carry across whatever they hold. The column
+-- keeps its default, and there is no window where the type is missing.
+ALTER TYPE "Plan" RENAME VALUE 'INSTITUTION_PLUS' TO 'INSTITUTION';

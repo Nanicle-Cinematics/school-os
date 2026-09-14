@@ -215,6 +215,11 @@ export const TRIAL_DAYS = 7;
  * A price difference that buys nothing is not a tier, it is a thing to explain
  * on a sales call. Removed 2026-09-14, before any school was ever charged.
  *
+ * Renamed from "Institution Plus" the same day, for the reason that followed:
+ * with nothing beneath it, "Plus" implies a cheaper tier that does not exist,
+ * and the first question it invites on a sales call is about the plan the
+ * school cannot buy.
+ *
  * `monthlyFee` on the school remains editable in the console, so what a school
  * actually pays is still a conversation — which is what the two plans were
  * really standing in for.
@@ -224,7 +229,7 @@ export const PLANS: Record<
   { label: string; studentCap: number | null; monthlyPrice: number | null }
 > = {
   TRIAL: { label: "Trial", studentCap: null, monthlyPrice: 0 },
-  INSTITUTION_PLUS: { label: "Institution Plus", studentCap: null, monthlyPrice: 800 },
+  INSTITUTION: { label: "Institution", studentCap: null, monthlyPrice: 800 },
 };
 
 /**
