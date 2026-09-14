@@ -60,7 +60,11 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <form action={formAction} className="rounded-card border border-hairline bg-surface p-4 lg:p-5">
+    <form
+      action={formAction}
+      encType="multipart/form-data"
+      className="rounded-card border border-hairline bg-surface p-4 lg:p-5"
+    >
       <h2 className="text-sm font-semibold text-slate-900">Record a payment</h2>
       <p className="mt-0.5 text-sm text-slate-500">
         The amount clears the oldest unpaid invoice first, so arrears settle before this term.
@@ -172,6 +176,17 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
       <div className="mt-3">
         <Field label="Note (optional)">
           <input type="text" name="note" className={inputClass} />
+        </Field>
+
+        {/* The bank slip or momo screenshot. Optional — cash across the counter
+            has no slip — but it is what makes a payment reconcilable later. */}
+        <Field label="Bank slip" hint="Photo or PDF. Optional.">
+          <input
+            type="file"
+            name="slip"
+            accept="image/png,image/jpeg,image/webp,image/heic,application/pdf"
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+          />
         </Field>
       </div>
 

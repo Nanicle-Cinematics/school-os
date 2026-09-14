@@ -1,0 +1,12 @@
+-- Spending at or above this needs a second signature before it counts as paid.
+--
+-- Nullable with no default on purpose. NULL means "this school has not asked
+-- for approvals", which is the right thing for an existing school: switching
+-- every one of them into a workflow they did not choose would leave their
+-- bursar's next expense sitting unapproved, and the cash book quietly short.
+-- A one-stream basic school where the proprietor IS the bursar should not be
+-- made to approve its own chalk.
+--
+-- ADDING, so this migrates BEFORE the merge: old code ignores a column it has
+-- never heard of, new code cannot run without it.
+ALTER TABLE "SchoolSettings" ADD COLUMN "expenseApprovalThreshold" DECIMAL(12,2);

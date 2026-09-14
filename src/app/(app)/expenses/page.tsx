@@ -3,12 +3,12 @@ import { buttonClass } from "../button-style";
 import { Banknote, Layers, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { FINANCE } from "@/lib/permissions";
+import { FINANCE, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getExpenseList, getTermCashPosition } from "@/lib/expense-data";
 import { getCurrentTerm } from "@/lib/fee-data";
-import { cancelExpense } from "@/lib/expense-actions";
+import { approveExpense, cancelExpense } from "@/lib/expense-actions";
 import { formatCedis } from "@/lib/money";
-import { PageHeader, Card, filterClass } from "../ui";
+import { PageHeader, Card, Alert, filterClass } from "../ui";
 import { DataTable, Row, StatCard, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { ExpenseForm } from "./expense-form";
@@ -34,7 +34,7 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 export default async function ExpensesPage({
   searchParams,
 }: PageProps<"/expenses">) {
-  await requireRole(FINANCE);
+  const auth = await requireRole(FINANCE);
   const params = await searchParams;
 
   const currentTerm = await getCurrentTerm();
@@ -48,6 +48,25 @@ export default async function ExpensesPage({
 
   const data = await getExpenseList({ termId, categoryId, q });
   const cash = termId ? await getTermCashPosition(termId) : null;
+  const mayApprove = canAccess(auth.roles, LEADERSHIP);
+
+  const NOTICES: Record<string, { tone: "error" | "success"; text: string }> = {
+    own: {
+      tone: "error",
+      text: "You recorded that voucher, so you cannot also approve it — a second signature that can be your own is not a second signature. Ask another head or the proprietor.",
+    },
+    "not-pending": {
+      tone: "error",
+      text: "That expense is not waiting for approval — someone has already signed it off, or it was cancelled.",
+    },
+    missing: { tone: "error", text: "That expense no longer exists." },
+  };
+  const notice =
+    typeof params.error === "string"
+      ? NOTICES[params.error]
+      : params.approved === "1"
+        ? { tone: "success" as const, text: "Approved. It now counts in the cash book." }
+        : undefined;
 
   const maxCategory = Math.max(
     1,
@@ -71,6 +90,72 @@ export default async function ExpensesPage({
           />
         }
       />
+
+      {notice ? <Alert tone={notice.tone}>{notice.text}</Alert> : null}
+
+      {/* Held for a second signature. Above the figures deliberately: this is
+          money already out of the drawer that the cash book is NOT counting, so
+          a proprietor who scrolls past it is reading a net position that is
+          missing something. Everyone in finance sees the queue; only leadership
+          gets the button. */}
+      {data.pending.length > 0 ? (
+        <Card
+          title={`${data.pending.length} expense${data.pending.length === 1 ? "" : "s"} awaiting approval`}
+        >
+          <ul className="divide-y divide-slate-100">
+            {data.pending.map((expense) => (
+              <li key={expense.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {expense.description}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {[
+                      expense.voucherNo,
+                      expense.category?.name,
+                      expense.payee,
+                      expense.recordedBy ? `recorded by ${expense.recordedBy.name}` : null,
+                      dateFmt.format(expense.spentAt),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  {/* An approver signing without seeing the paper is a rubber
+                      stamp, so the receipt sits next to the button rather than
+                      one click away on another screen. */}
+                  {expense.receiptUrl ? (
+                    <a
+                      href={expense.receiptUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium text-brand-ink hover:underline"
+                    >
+                      View receipt
+                    </a>
+                  ) : (
+                    <span className="text-xs text-slate-400">no receipt attached</span>
+                  )}
+                  <span className="font-semibold tabular-nums text-slate-900">
+                    {formatCedis(expense.amount)}
+                  </span>
+                  {mayApprove ? (
+                    <form action={approveExpense}>
+                      <input type="hidden" name="expenseId" value={expense.id} />
+                      <SubmitButton pendingLabel="Approving…" variant="secondary">
+                        Approve
+                      </SubmitButton>
+                    </form>
+                  ) : (
+                    <span className="text-xs text-slate-400">needs a head or proprietor</span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
@@ -169,7 +254,19 @@ export default async function ExpensesPage({
                 {data.expenses.map((expense) => (
                   <Row key={expense.id}>
                     <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
-                      {expense.voucherNo}
+                      {expense.receiptUrl ? (
+                        <a
+                          href={expense.receiptUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:underline"
+                          title="View the attached receipt"
+                        >
+                          {expense.voucherNo} 📎
+                        </a>
+                      ) : (
+                        expense.voucherNo
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
                       {dateFmt.format(expense.spentAt)}

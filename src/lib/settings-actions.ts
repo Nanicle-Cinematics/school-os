@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { SmsProvider } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
+import { parseAmount } from "@/lib/money";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
@@ -158,9 +159,23 @@ export async function saveFeesPolicy(
     return { error: "Keep the note under 200 characters — it prints as one line." };
   }
 
+  /**
+   * Blank means "we do not want approvals", which is NOT the same as zero.
+   * Zero would hold every voucher in the school, chalk included, and the first
+   * bursar to meet that would stop using the cash book. parseAmount refuses
+   * zero and negatives already, so the only way to say "off" is to empty the
+   * box — and that has to reach the column as NULL rather than as 0.
+   */
+  const thresholdRaw = String(formData.get("expenseApprovalThreshold") ?? "").trim();
+  const expenseApprovalThreshold = thresholdRaw ? parseAmount(thresholdRaw) : null;
+  if (thresholdRaw && !expenseApprovalThreshold) {
+    return { error: "The approval threshold must be an amount greater than zero, or empty for none." };
+  }
+
   await upsertSettings(auth.schoolId, {
     invoiceDueDays: Math.trunc(invoiceDueDays),
     blockReportOnArrears: formData.get("blockReportOnArrears") === "on",
+    expenseApprovalThreshold,
     // Empty means "print nothing", not "an empty box".
     paymentInstructions: paymentInstructions || null,
     invoiceNote: invoiceNote || null,
@@ -168,6 +183,7 @@ export async function saveFeesPolicy(
 
   revalidatePath("/settings");
   revalidatePath("/invoices");
+  revalidatePath("/expenses");
   return { ok: "Fees policy saved." };
 }
 

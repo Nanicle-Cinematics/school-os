@@ -291,6 +291,7 @@ export function FeesForm({
   values: {
     invoiceDueDays: number;
     blockReportOnArrears: boolean;
+    expenseApprovalThreshold: string;
     paymentInstructions: string;
     invoiceNote: string;
   };
@@ -320,6 +321,22 @@ export function FeesForm({
           />
           Withhold report cards from students in arrears
         </label>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field
+          label="Spending that needs approval"
+          hint="A voucher at or above this is held until a head or the proprietor signs it, and does not count in the cash book until then. Leave empty for no approvals."
+        >
+          <input
+            type="text"
+            inputMode="decimal"
+            name="expenseApprovalThreshold"
+            defaultValue={values.expenseApprovalThreshold}
+            placeholder="e.g. 500 — or leave empty"
+            className={inputClass}
+          />
+        </Field>
       </div>
 
       <div className="mt-3 grid gap-3">

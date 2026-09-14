@@ -149,6 +149,66 @@ export function daysOverdue(invoice: Dateable, now = new Date()): number | null 
  * which is a lookup that matches nothing and reads on screen as "nobody is
  * late". Same rule as `isOverdue`, expressed for Postgres.
  */
+/**
+ * How long a debt has been owed, in buckets.
+ *
+ * "Who owes" is not the question a bursar chasing fees is asking — a parent a
+ * week late and one who has not paid since last term are the same row under a
+ * `balance > 0` filter, and they need different phone calls. The buckets are
+ * the 30/60/90 convention every Ghanaian accountant already reads off a bank
+ * statement, so the screen needs no explaining.
+ *
+ * CURRENT covers both "not due yet" and "no due date set" — a bill with no
+ * deadline is not late, it is unscheduled, and treating it as 90 days overdue
+ * because it is old would have the office chasing parents who were never told
+ * when to pay.
+ */
+export const AGE_BUCKETS = ["CURRENT", "D1_30", "D31_60", "D61_90", "D90_PLUS"] as const;
+export type AgeBucket = (typeof AGE_BUCKETS)[number];
+
+export const AGE_LABEL: Record<AgeBucket, string> = {
+  CURRENT: "Not yet due",
+  D1_30: "1–30 days",
+  D31_60: "31–60 days",
+  D61_90: "61–90 days",
+  D90_PLUS: "Over 90 days",
+};
+
+export function ageBucket(invoice: Dateable, now = new Date()): AgeBucket {
+  const days = daysOverdue(invoice, now);
+  if (days === null) return "CURRENT";
+  if (days <= 30) return "D1_30";
+  if (days <= 60) return "D31_60";
+  if (days <= 90) return "D61_90";
+  return "D90_PLUS";
+}
+
+/**
+ * The same buckets as a `where`, so a filter and a total cannot drift.
+ *
+ * Every one carries `balance > 0` and excludes CANCELLED: an ageing report is
+ * about money still owed, and a settled invoice that was once late is not a
+ * debt. Derived from the due date at read time for the same reason OVERDUE is —
+ * nothing runs when a day passes.
+ */
+export function ageFilterWhere(bucket: AgeBucket | undefined, now = new Date()) {
+  if (!bucket) return {};
+  const owed = { balance: { gt: 0 }, status: { not: "CANCELLED" as const } };
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
+  switch (bucket) {
+    case "CURRENT":
+      return { ...owed, OR: [{ dueDate: null }, { dueDate: { gte: now } }] };
+    case "D1_30":
+      return { ...owed, dueDate: { lt: now, gte: daysAgo(30) } };
+    case "D31_60":
+      return { ...owed, dueDate: { lt: daysAgo(30), gte: daysAgo(60) } };
+    case "D61_90":
+      return { ...owed, dueDate: { lt: daysAgo(60), gte: daysAgo(90) } };
+    case "D90_PLUS":
+      return { ...owed, dueDate: { lt: daysAgo(90) } };
+  }
+}
+
 export function statusFilterWhere(
   status: InvoiceStatus | "DEBTORS" | undefined,
   now = new Date(),

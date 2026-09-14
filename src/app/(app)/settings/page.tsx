@@ -283,6 +283,10 @@ export default async function SettingsPage() {
           values={{
             invoiceDueDays: settings?.invoiceDueDays ?? 14,
             blockReportOnArrears: settings?.blockReportOnArrears ?? false,
+            // Empty string, not "0": the box being empty is how a school says
+            // it does not want approvals, and 0 would read as "approve
+            // everything".
+            expenseApprovalThreshold: settings?.expenseApprovalThreshold?.toString() ?? "",
             paymentInstructions: settings?.paymentInstructions ?? "",
             invoiceNote: settings?.invoiceNote ?? "",
           }}

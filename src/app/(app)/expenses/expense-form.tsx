@@ -35,7 +35,13 @@ export function ExpenseForm({
   }
 
   return (
-    <form action={formAction} className="w-full rounded-card border border-hairline bg-surface p-4 lg:p-5">
+    <form
+      action={formAction}
+      // multipart, or the file never leaves the browser and the attachment
+      // silently does not happen.
+      encType="multipart/form-data"
+      className="w-full rounded-card border border-hairline bg-surface p-4 lg:p-5"
+    >
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-slate-900">Record expense</h2>
         <button
@@ -95,6 +101,18 @@ export function ExpenseForm({
 
         <Field label="Reference">
           <input type="text" name="reference" className={inputClass} />
+        </Field>
+
+        {/* The photograph of the paper. Optional, because a bursar without a
+            camera to hand must still be able to record the spend — but this is
+            the column the schema has always had and nothing ever wrote. */}
+        <Field label="Receipt" hint="Photo or PDF of the receipt. Optional.">
+          <input
+            type="file"
+            name="receipt"
+            accept="image/png,image/jpeg,image/webp,image/heic,application/pdf"
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+          />
         </Field>
 
         <Field label="Term" hint="Keeps income and expenditure comparable per term.">

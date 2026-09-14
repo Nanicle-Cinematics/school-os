@@ -38,9 +38,13 @@ export async function getDashboard(schoolId: string) {
       })
     : null;
 
+  // PAID only, matching the cash book. DRAFT is spending held for a second
+  // signature; showing it here would put money in the dashboard's expenditure
+  // figure that the school has not agreed to, and the two screens would then
+  // disagree about the same term.
   const expenseTotal = term
     ? await prisma.expense.aggregate({
-        where: { schoolId, termId: term.id, status: { not: "CANCELLED" } },
+        where: { schoolId, termId: term.id, status: "PAID" },
         _sum: { amount: true },
       })
     : null;

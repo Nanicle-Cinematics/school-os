@@ -138,6 +138,7 @@ model School {
   messages         Message[]
 
   @@index([plan, subscriptionStatus])
+  fileAttachments     FileAttachment[]
 }
 
 /// A school's crest, logo or the head's signature, stored as bytes.
@@ -148,6 +149,28 @@ model School {
 /// load. School keeps only the pointer (`crestUrl`, `headSignatureUrl`), which
 /// costs nothing to carry and tells a report card whether to render one at all
 /// without a second query.
+/// A photographed bank slip or expense receipt.
+///
+/// Separate from SchoolAsset because that table is keyed @@unique([schoolId,
+/// kind]) — one crest per school — and these are one per voucher, unbounded.
+/// Same storage decision though: bytes in a row, served by a route, because
+/// there is no object store configured and a school's whole term of receipts is
+/// a few megabytes.
+model FileAttachment {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  mimeType String
+  bytes    Bytes
+  byteSize Int
+
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+
+  @@index([schoolId])
+}
+
 model SchoolAsset {
   id       String @id @default(cuid())
   schoolId String
@@ -195,6 +218,12 @@ model SchoolSettings {
   // Fees policy
   blockReportOnArrears Boolean @default(false)
   invoiceDueDays       Int     @default(14)
+
+  /// Spending at or above this needs a second signature before it counts as
+  /// paid. Null means the school has not asked for approvals, which is the
+  /// right default: a one-stream basic school where the proprietor IS the
+  /// bursar should not be made to approve its own chalk.
+  expenseApprovalThreshold Decimal? @db.Decimal(12, 2)
   // Free text printed on every bill: momo number, bank account, who to pay and
   // where. Deliberately not modelled as fields — schools use momo, a bank, the
   // bursar's window or all three, and the arrangement changes without warning.
