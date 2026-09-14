@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { ServiceWorker } from "./service-worker";
 
 /**
  * Plus Jakarta Sans carries the app — it has the weight range the headings need
@@ -30,8 +31,51 @@ const display = Newsreader({
 });
 
 export const metadata: Metadata = {
+  applicationName: "School OS",
   title: "School OS",
   description: "School management for Ghanaian schools — by Nanicle Enterprise Solutions.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "School OS",
+    statusBarStyle: "default",
+  },
+  // An admission number, a receipt number and a class code are all digit runs
+  // that iOS Safari turns into "call" links on a phone. The portal is read on a
+  // phone by definition, so this is not cosmetic.
+  formatDetection: { telephone: false },
+  icons: {
+    icon: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+/**
+ * ⚠️ themeColor follows the PAGE, not the brand, and it has to answer to both
+ * themes.
+ *
+ * It paints the browser and status bar around the app. The manifest's own
+ * theme_color is the brand green, which is right for the splash screen and the
+ * task switcher, where the green icon is the thing being identified — but the
+ * top of every screen in here is the white surface, or near-black in the dark
+ * theme. A single green value would hang a green band above a white header,
+ * and the black theme exists precisely so a head teacher can open the app at
+ * night without being flashed.
+ *
+ * viewportFit: "cover" because the portal is read on phones with notches.
+ */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0e0d" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 /**
@@ -76,7 +120,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }
