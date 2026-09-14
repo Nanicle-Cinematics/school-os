@@ -459,6 +459,14 @@ const ACTIVITY: Record<
     title: (a) => `Expense of ${money(a.amount)} recorded`,
     detail: "Cash book",
   },
+  "expense.approve": {
+    kind: "money",
+    // Named as an approval rather than "an expense was updated": the whole
+    // point of the hold is that somebody signed, and a feed that does not say
+    // so loses the only record of who did.
+    title: (a) => `Expense of ${money(a.amount)} approved`,
+    detail: "Cash book",
+  },
   "expense.cancel": { kind: "money", title: () => "An expense was cancelled", detail: "Cash book" },
   "invoice.cancel": { kind: "money", title: () => "An invoice was cancelled", detail: "Fees" },
   "guardian.login.create": {
