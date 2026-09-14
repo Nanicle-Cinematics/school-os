@@ -12,25 +12,28 @@
  * requireMyChild guard the database; they cannot guard a cache we filled
  * ourselves. So navigations always go to the network.
  *
- * What is cached is what carries no one's data and never changes under a URL:
- * the hashed build output and the app icons. That is what makes the installed
- * app open fast; it is not what makes it work offline, and it does not pretend
- * to. An offline launch shows the browser's offline page, which is honest —
- * nothing in this app renders without the database anyway.
+ * What is cached is ONLY /_next/static/ — the hashed build output. That is what
+ * makes the installed app open fast; it is not what makes it work offline, and
+ * it does not pretend to. An offline launch shows the browser's offline page,
+ * which is honest — nothing in this app renders without the database anyway.
+ *
+ * ⚠️ Nothing at an UNHASHED url is cached, and the manifest is why.
+ *
+ * The first version of this file cached /manifest.webmanifest and the icons
+ * too. They are static and tiny, so it looked free. It is not: a hashed asset
+ * gets a new filename whenever its bytes change, so a cache-first hit can never
+ * be stale, while the manifest keeps one url for ever. Adding the install
+ * screenshots proved it — Chrome went on reporting a manifest with no
+ * screenshots, reading the copy this worker had cached before they existed, and
+ * it would have stayed wrong for every already-installed user until the cache
+ * name changed. Content-addressed urls only.
  */
-const CACHE = "school-os-v1";
-const PRECACHE = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "school-os-v2";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting())
-      // A precache miss must not block activation, or one renamed asset leaves
-      // every visitor on the previous worker for ever.
-      .catch(() => self.skipWaiting()),
-  );
+  // Nothing to precache: everything cacheable is hashed, so it is fetched on
+  // first use and never needs invalidating.
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {
@@ -49,13 +52,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Navigations, server actions and API routes are left to the network —
-  // untouched, uncached. See the note at the top.
-  const cacheable =
-    url.pathname.startsWith("/_next/static/") ||
-    url.pathname.startsWith("/icons/") ||
-    url.pathname === "/manifest.webmanifest";
-  if (!cacheable) return;
+  // Navigations, server actions, API routes, the manifest and the icons are all
+  // left to the network — untouched, uncached. See the notes at the top: the
+  // first for why pages are not cached, the second for why unhashed urls are
+  // not either.
+  if (!url.pathname.startsWith("/_next/static/")) return;
 
   event.respondWith(
     caches.match(request).then(
