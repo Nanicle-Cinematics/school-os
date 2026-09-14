@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { FINANCE } from "@/lib/permissions";
-import { tenantTransaction } from "@/lib/prisma";
+import { FINANCE, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { prisma, tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import { writeAudit } from "@/lib/audit";
+import { readAttachment, storeAttachment } from "@/lib/attachments";
 
 export type ExpenseState = { error?: string; ok?: string };
 
@@ -34,7 +36,46 @@ export async function recordExpense(
     return { error: "Enter a valid amount greater than zero." };
   }
 
+  /**
+   * Does this one need a second signature?
+   *
+   * Three things have to be true, and the third is the one that keeps the rule
+   * humane: the school has SET a threshold (null means it never asked for
+   * approvals), the amount reaches it, and the person recording it is not
+   * already an approver. A proprietor who is also the bursar would otherwise be
+   * made to approve their own chalk, which is a workflow nobody follows for
+   * long — and a control everyone routes around is worse than none, because it
+   * looks like one on the screen.
+   */
+  const settings = await prisma.schoolSettings.findUnique({
+    where: { schoolId: auth.schoolId },
+    select: { expenseApprovalThreshold: true },
+  });
+  const threshold = settings?.expenseApprovalThreshold ?? null;
+  const needsApproval =
+    threshold !== null &&
+    amount.gte(threshold) &&
+    !canAccess(auth.roles, LEADERSHIP);
+
+  /**
+   * The receipt photo, read BEFORE the transaction opens.
+   *
+   * A 4 MB upload parsed inside the transaction holds the single pooled
+   * connection open for the whole read, and on this link that is the difference
+   * between a voucher and a P2028. "No file" is not an error — attaching one is
+   * optional, and a bursar with no camera to hand must still be able to record
+   * the spend.
+   */
+  const upload = await readAttachment(formData.get("receipt"));
+  if (!upload.ok && upload.error !== "No file") {
+    return { error: upload.error };
+  }
+
   const voucherNo = await tenantTransaction(auth.schoolId, async (tx) => {
+    const receiptUrl = upload.ok
+      ? await storeAttachment(tx, auth.schoolId, auth.userId, upload)
+      : null;
+
     const voucher = await nextNumber(
       tx,
       auth.schoolId,
@@ -53,7 +94,11 @@ export async function recordExpense(
         payee: payee || null,
         method: method as "CASH",
         reference: reference || null,
-        status: "PAID",
+        receiptUrl,
+        // DRAFT is "spent, awaiting sign-off" — deliberately NOT counted in the
+        // cash book until approved, so the net position never shows money the
+        // school has not agreed to.
+        status: needsApproval ? "DRAFT" : "PAID",
         spentAt: spentAtRaw ? new Date(spentAtRaw) : new Date(),
         recordedByUserId: auth.userId,
       },
@@ -65,7 +110,13 @@ export async function recordExpense(
       action: "expense.record",
       entity: "Expense",
       entityId: expense.id,
-      after: { voucherNo: voucher, amount: amount.toString(), description, payee },
+      after: {
+        voucherNo: voucher,
+        amount: amount.toString(),
+        description,
+        payee,
+        awaitingApproval: needsApproval,
+      },
     });
 
     return voucher;
@@ -73,7 +124,66 @@ export async function recordExpense(
 
   revalidatePath("/expenses");
   revalidatePath("/dashboard");
-  return { ok: `Recorded ${description} — voucher ${voucherNo}.` };
+  return {
+    ok: needsApproval
+      ? `Recorded ${description} — voucher ${voucherNo}. It needs approval before it counts.`
+      : `Recorded ${description} — voucher ${voucherNo}.`,
+  };
+}
+
+/**
+ * Sign off an expense that was held for approval.
+ *
+ * LEADERSHIP only, and it refuses the recorder's own voucher even when they
+ * hold the role: a second signature that can be your own is not a second
+ * signature. A proprietor who records their own spending never triggers the
+ * hold in the first place (see needsApproval above), so this only ever bites
+ * the case it should.
+ */
+export async function approveExpense(formData: FormData): Promise<void> {
+  const auth = await requireRole(LEADERSHIP);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const id = String(formData.get("expenseId") ?? "");
+  if (!id) {
+    redirect("/expenses?error=missing");
+  }
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    const expense = await tx.expense.findUnique({
+      where: { id },
+      select: { id: true, status: true, voucherNo: true, amount: true, recordedByUserId: true },
+    });
+    if (!expense) {
+      redirect("/expenses?error=missing");
+    }
+    if (expense.status !== "DRAFT") {
+      // Already approved, or cancelled. Approving twice would stamp a new
+      // signature over the original and lose who actually signed.
+      redirect("/expenses?error=not-pending");
+    }
+    if (expense.recordedByUserId === auth.userId) {
+      redirect("/expenses?error=own");
+    }
+
+    await tx.expense.update({
+      where: { id },
+      data: { status: "PAID", approvedByUserId: auth.userId, approvedAt: new Date() },
+    });
+
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "expense.approve",
+      entity: "Expense",
+      entityId: id,
+      after: { voucherNo: expense.voucherNo, amount: expense.amount.toString() },
+    });
+  });
+
+  revalidatePath("/expenses");
+  revalidatePath("/dashboard");
+  redirect("/expenses?approved=1");
 }
 
 export async function cancelExpense(formData: FormData): Promise<void> {

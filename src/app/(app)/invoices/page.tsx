@@ -5,10 +5,16 @@ import Link from "next/link";
 import type { InvoiceStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
-import { getInvoiceList, getInvoiceFilterOptions } from "@/lib/invoice-data";
+import { getInvoiceList, getInvoiceFilterOptions, getDebtorAgeing } from "@/lib/invoice-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { formatCedis } from "@/lib/money";
-import { displayStatus, daysOverdue } from "@/lib/invoice-engine";
+import {
+  AGE_BUCKETS,
+  AGE_LABEL,
+  displayStatus,
+  daysOverdue,
+  type AgeBucket,
+} from "@/lib/invoice-engine";
 import { PageHeader, Card, StatusBadge, filterClass } from "../ui";
 import { DataTable, Row, StatCard, type Column } from "../primitives";
 import { GenerateForm } from "./generate-form";
@@ -49,6 +55,10 @@ export default async function InvoicesPage({
   const classGroupId =
     typeof params.class === "string" ? params.class : undefined;
   const q = typeof params.q === "string" ? params.q.trim() : undefined;
+  const age =
+    typeof params.age === "string" && (AGE_BUCKETS as readonly string[]).includes(params.age)
+      ? (params.age as AgeBucket)
+      : undefined;
 
   const [{ terms, classGroups }, data] = await Promise.all([
     getInvoiceFilterOptions(),
@@ -56,9 +66,13 @@ export default async function InvoicesPage({
       termId,
       classGroupId,
       status: status as InvoiceStatus | "DEBTORS" | undefined,
+      age,
       q,
     }),
   ]);
+
+  const ageing = await getDebtorAgeing(termId);
+  const owed = ageing.reduce((sum, row) => sum + row.total, 0);
 
   const collectionRate =
     Number(data.billed) > 0
@@ -105,6 +119,59 @@ export default async function InvoicesPage({
       </div>
 
       <GenerateForm terms={terms} currentTermId={currentTerm?.id} />
+
+      {/* ⚠️ Ageing, not just "who owes".
+          A `balance > 0` list treats a parent a week late and one who has not
+          paid since last term as the same row, and they need different phone
+          calls. Each bucket is a link into the same list, so the figure and the
+          names behind it come from one rule (ageFilterWhere) and cannot drift. */}
+      {owed > 0 ? (
+        <Card title="How long fees have been owed">
+          <div className="grid grid-cols-2 divide-y divide-slate-100 sm:grid-cols-5 sm:divide-y-0 sm:divide-x">
+            {ageing.map((row) => {
+              const href = `/invoices?${new URLSearchParams({
+                ...(termId ? { term: termId } : {}),
+                ...(classGroupId ? { class: classGroupId } : {}),
+                age: row.bucket,
+              }).toString()}`;
+              const active = age === row.bucket;
+              // Only the oldest bucket is tinted. Colour has to mean one thing,
+              // and here it means "these are the calls to make first".
+              const urgent = row.bucket === "D90_PLUS" && row.total > 0;
+              return (
+                <Link
+                  key={row.bucket}
+                  href={href}
+                  className={`px-4 py-3 transition hover:bg-slate-50 ${
+                    active ? "bg-slate-50 ring-1 ring-inset ring-brand-600" : ""
+                  }`}
+                >
+                  <p className="text-xs text-slate-500">{AGE_LABEL[row.bucket]}</p>
+                  <p
+                    className={`mt-0.5 font-heading text-lg tabular-nums ${
+                      urgent ? "text-danger-ink" : "text-slate-900"
+                    }`}
+                  >
+                    {formatCedis(row.total)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {row.count} invoice{row.count === 1 ? "" : "s"}
+                  </p>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
+
+      {age ? (
+        <p className="text-sm text-slate-500">
+          Showing {AGE_LABEL[age].toLowerCase()} ·{" "}
+          <Link href="/invoices" className="underline hover:text-slate-900">
+            clear
+          </Link>
+        </p>
+      ) : null}
 
       <form className="flex flex-wrap items-end gap-2 rounded-card border border-hairline bg-surface p-3">
         <select

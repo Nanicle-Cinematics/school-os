@@ -36,7 +36,17 @@ const OWNS = (path: string, ...owners: string[]) => owners.some((o) => path.ends
 const hits = (re: RegExp, allow: (path: string) => boolean = () => false) =>
   files.filter((f) => !allow(f.path) && re.test(f.text)).map((f) => f.path.replace("src/app/", ""));
 
-const DOCUMENTS = ["results/report-card.tsx", "invoices/invoice-bill.tsx"];
+const DOCUMENTS = [
+  "results/report-card.tsx",
+  "invoices/invoice-bill.tsx",
+  // Added deliberately, as the note below asks. A payment receipt is the same
+  // animal as the bill: .paper, its own masthead, its own print rules, and it
+  // is handed across a counter, signed and stamped. "PAYMENT RECEIPT" is the
+  // heading a Ghanaian receipt carries, and the carbon book it replaces shouts
+  // it too — this is the convention on the document, not somebody reaching for
+  // `uppercase` to make a caption look like a caption.
+  "payments/payment-receipt.tsx",
+];
 
 console.log("Colour says one thing at a time");
 
@@ -86,9 +96,9 @@ console.log("\nOne set of primitives, not thirty copies");
  * worse. Each exception is named with its reason, so the next person can judge
  * whether a new one belongs here or is somebody avoiding the work.
  *
- *   DOCUMENTS      a report card and a fee bill are printed layouts with their
- *                  own masthead, their own dark header band and their own print
- *                  rules. They are not chrome.
+ *   DOCUMENTS      a report card, a fee bill and a payment receipt are printed
+ *                  layouts with their own masthead, their own dark header band
+ *                  and their own print rules. They are not chrome.
  *   MARK ENTRY     the sheet and the score grid are input grids: grouped column
  *                  headers, per-column totals, locked states, a checkbox in
  *                  every cell. DataTable renders rows of read-only cells.
@@ -176,9 +186,10 @@ check("headers and cells agree", misaligned === 0, misaligned === 0 ? "every tab
 console.log("\nSentence case, and one icon set");
 
 /**
- * ⚠️ Two named exceptions, and they are DOCUMENTS.
+ * ⚠️ Three named exceptions, and they are DOCUMENTS.
  *
- * A report card and a fee bill are printed and handed to a parent. Their
+ * A report card, a fee bill and a payment receipt are printed and handed to a
+ * parent. Their
  * column headers are capitalised because that is the convention on a Ghanaian
  * terminal report, not because somebody reached for `uppercase` to make a
  * caption look like a caption — and changing the look of a document a school

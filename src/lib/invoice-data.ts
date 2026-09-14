@@ -3,12 +3,13 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import type { InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { statusFilterWhere } from "@/lib/invoice-engine";
+import { AGE_BUCKETS, ageFilterWhere, statusFilterWhere, type AgeBucket } from "@/lib/invoice-engine";
 
 export type InvoiceFilters = {
   termId?: string;
   classGroupId?: string;
   status?: InvoiceStatus | "DEBTORS";
+  age?: AgeBucket;
   q?: string;
 };
 
@@ -19,6 +20,9 @@ export async function getInvoiceList(filters: InvoiceFilters) {
     // tested without a database. OVERDUE is a QUESTION about dates and balance,
     // never a stored value to look up — see isOverdue().
     ...statusFilterWhere(filters.status),
+    // Ageing narrows the same list rather than replacing it, so "debtors in
+    // Class 5 owing over 90 days" is one query and not a special case.
+    ...ageFilterWhere(filters.age),
     ...(filters.classGroupId ? { student: { currentClassGroupId: filters.classGroupId } } : {}),
     ...(filters.q
       ? {
@@ -71,6 +75,35 @@ export async function getInvoiceList(filters: InvoiceFilters) {
  * the class print run cannot drift apart — the same reason report cards have
  * REPORT_CARD_INCLUDE.
  */
+/**
+ * The ageing summary — how much is owed, and for how long.
+ *
+ * One grouped query per bucket rather than reading every debtor into memory and
+ * bucketing in JS: a school with 900 pupils has 900 invoices a term, and the
+ * office opens this screen constantly. The buckets come from ageFilterWhere, so
+ * the totals here and the list a bursar clicks through to cannot disagree.
+ *
+ * Sequential, not Promise.all — connection_limit pins this low enough that a
+ * five-way fan-out queues rather than parallelises, and the tail times out.
+ */
+export async function getDebtorAgeing(termId?: string) {
+  const now = new Date();
+  const rows: { bucket: AgeBucket; count: number; total: number }[] = [];
+  for (const bucket of AGE_BUCKETS) {
+    const result = await prisma.invoice.aggregate({
+      where: { ...(termId ? { termId } : {}), ...ageFilterWhere(bucket, now) },
+      _sum: { balance: true },
+      _count: true,
+    });
+    rows.push({
+      bucket,
+      count: result._count,
+      total: Number(result._sum.balance ?? 0),
+    });
+  }
+  return rows;
+}
+
 export const BILL_INCLUDE = {
   items: { include: { feeCategory: true } },
   term: { include: { academicYear: true } },

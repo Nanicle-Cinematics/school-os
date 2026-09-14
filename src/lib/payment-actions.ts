@@ -11,6 +11,7 @@ import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import { allocateFifo, recalcInvoice } from "@/lib/invoice-engine";
 import { writeAudit } from "@/lib/audit";
+import { readAttachment, storeAttachment } from "@/lib/attachments";
 import { queueTransactionalSms } from "@/lib/transactional-sms";
 import { TRANSACTIONAL } from "@/lib/message-defaults";
 import { normalisePhone } from "@/lib/sms";
@@ -42,10 +43,24 @@ export async function recordPayment(
     return { error: "Mobile money payments need the transaction reference." };
   }
 
+  /**
+   * The bank slip or momo screenshot, read BEFORE the transaction opens — a
+   * 4 MB parse inside it would hold the single pooled connection for the whole
+   * read. Optional: cash across the counter has no slip to photograph.
+   */
+  const upload = await readAttachment(formData.get("slip"));
+  if (!upload.ok && upload.error !== "No file") {
+    return { error: upload.error };
+  }
+
   let receiptNo = "";
 
   try {
     receiptNo = await tenantTransaction(auth.schoolId, async (tx) => {
+      const bankSlipUrl = upload.ok
+        ? await storeAttachment(tx, auth.schoolId, auth.userId, upload)
+        : null;
+
       const student = await tx.student.findUnique({
         where: { id: studentId },
         include: {
@@ -78,6 +93,7 @@ export async function recordPayment(
           amount,
           method: method as "CASH",
           momoNetwork: method === "MOBILE_MONEY" && momoNetwork ? (momoNetwork as "MTN") : null,
+          bankSlipUrl,
           reference: reference || null,
           note: note || null,
           status: "CONFIRMED",

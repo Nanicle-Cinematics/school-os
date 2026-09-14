@@ -161,7 +161,16 @@ export default async function PaymentsPage({
             {data.payments.map((payment) => (
               <Row key={payment.id}>
                 <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-900">
-                  {payment.receiptNo}
+                  {/* The receipt number IS the link to the receipt. It was
+                      printed here as plain text while there was no document to
+                      open — the number existed, the paper did not. */}
+                  <Link
+                    href={`/payments/receipt?one=${payment.id}`}
+                    className="hover:underline"
+                    title="Print this receipt"
+                  >
+                    {payment.receiptNo}
+                  </Link>
                 </td>
                 <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
                   {dateFmt.format(payment.paidAt)}
@@ -184,6 +193,17 @@ export default async function PaymentsPage({
                     : payment.allocations
                         .map((a) => a.invoice.invoiceNo)
                         .join(", ")}
+                  {payment.bankSlipUrl ? (
+                    <a
+                      href={payment.bankSlipUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ml-2 hover:underline"
+                      title="View the attached slip"
+                    >
+                      📎
+                    </a>
+                  ) : null}
                 </td>
                 <td className="whitespace-nowrap px-4 py-2.5 text-right font-medium tabular-nums text-slate-900">
                   {formatCedis(payment.amount)}

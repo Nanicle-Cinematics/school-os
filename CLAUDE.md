@@ -1022,6 +1022,92 @@ demo proprietor, and **disconnects Prisma before opening the browser**: with
 screenshots as Next's "a server error occurred", which looks exactly like a
 styling bug and is not one.
 
+## On a phone
+
+⚠️ **`backdrop-filter` makes an element the containing block for every
+`position: fixed` DESCENDANT** — the same rule `filter`, `transform`,
+`perspective`, `contain` and `will-change` have. The header is
+`backdrop-blur-xl` because `--color-chrome` is 80% opaque, and the phone menu
+was rendered inside it, so `fixed inset-0` resolved to the 64px header strip
+rather than the viewport.
+
+Nothing threw. The button worked, React set the state, and all twenty links were
+in the DOM — laid out 276px wide and **63px tall, behind the page**. To a head
+teacher holding a phone, the menu button simply did nothing, for as long as the
+app has had a menu. The drawer is now portalled to `<body>`, which is the only
+place outside every filtered ancestor; do not move it back inside the header to
+tidy it up, and do not wrap either in anything carrying those properties.
+
+It needs no "have we mounted" flag: `open` starts false and only a click can set
+it, so the server never reaches `createPortal` and `document` always exists by
+the time it does.
+
+⚠️ **A grid or flex item will not shrink below its content.** `min-width: auto`
+is the default, so a child whose min-content width exceeds its track pushes the
+whole PAGE sideways rather than clipping. `CollectionsChart` uses fixed 44px
+columns on purpose (see that section), and nine weeks of them made the dashboard
+436px wide inside a 390px phone. Chrome's mobile emulation quietly zooms out to
+fit; **a real iPhone does not — it lets the page slide under the thumb.** The fix is
+`min-w-0` on the grid children AND `overflow-x-auto` on the fixed-width row, and
+they do different jobs: min-w-0 lets the column shrink to its track, and the
+scroll gives the fixed 44px slots somewhere to go — `Card` is
+`overflow-hidden`, so without it the later weeks are simply clipped away with no
+way to reach them.
+
+**`npm run verify:mobile-nav` is what stops both returning**, and it is in CI. It
+measures and hit-tests rather than querying, which is the whole point: every
+other guard in this repo asks the DOM what EXISTS, and the menu existed — run
+against the broken drawer, **four of this script's own six checks at the time
+still passed**, and only the two that measured geometry and hit-tested a link
+failed. It also asserts the viewport it actually GOT, not the one
+it asked for: the overflow made the emulator report 453px, which is still under
+`lg`, so the rail still collapsed and every check still passed at a width no
+parent holds.
+
+## Installable
+
+The app is a PWA — `public/manifest.webmanifest`, an icon set, and a service
+worker registered at idle in production only. `start_url` is **`/login`**, which
+is the trick worth keeping: it already calls `redirectIfAuthenticated`, so one
+entry point lands a proprietor on `/dashboard`, a class teacher on
+`/assessments/sheet` and a parent on `/portal`, and the manifest needs to know
+nothing about roles.
+
+Icons and install screenshots are GENERATED (`scripts/make-icons.mjs`,
+`scripts/make-screenshots.mjs`) rather than pasted in, so the mark cannot drift
+from the `#12805c` rounded square the login page draws. `maskable.svg` is a
+separate drawing, not a resize: Android crops a maskable icon to the launcher's
+shape, so it bleeds to the edges with no radius of its own.
+
+⚠️ **The screenshot script REFUSES to run against a database holding any school
+but the demo**, and refuses a platform admin for the staff shot. Those images are
+public — served to anyone who sees the install prompt — so shooting a real school
+would publish its pupils, fees and marks, and the manifest has no idea whose
+faces are in its screenshots. The admin rule is the same lesson `marketing.tsx`
+learnt: their header carries a "Nanicle console" button no customer will ever
+see.
+
+⚠️ **The service worker caches `/_next/static/` and NOTHING else.** Two separate
+reasons, and both were learnt the hard way:
+
+- **No page navigations.** Every screen is a signed-in, tenant-scoped read — a
+  report card, an invoice, a family's balance. Caching that HTML writes one
+  person's data to the device in a store that outlives their session, and on the
+  shared phone a Ghanaian family actually uses, the next person could be served
+  it after the cookie is gone. RLS and `requireMyChild` guard the database;
+  neither can guard a cache we filled ourselves.
+- **Nothing at an unhashed url.** The first version cached the manifest and the
+  icons too — static and tiny, so it looked free. A hashed asset gets a new
+  filename when its bytes change and so can never be stale; `/manifest.webmanifest`
+  keeps one url for ever. Adding the install screenshots proved it: Chrome went
+  on reporting a manifest with no screenshots, reading the copy the worker had
+  cached before they existed, and it would have stayed wrong for every installed
+  user until `CACHE` changed.
+
+So it does not work offline, and does not pretend to — nothing here renders
+without the database anyway, and an offline launch gets the browser's offline
+page rather than a stale report card.
+
 ## "Needs your attention"
 
 The dashboard's first card is four computed rules, each a sentence and the link
@@ -1081,6 +1167,13 @@ definite height, and inside a flex row with `items-end` the columns size to thei
 content — so the first version rendered week labels with no bars at all, and it
 looked like missing data rather than broken layout.
 
+⚠️ **The columns are a fixed 44px, and that is what made the dashboard wider
+than a phone.** The fixed slot is deliberate — stretching two weeks across a
+full-width card left a bar stranded in 500px of nothing — but nine of them is
+436px, and a grid item will not shrink below its content. The row therefore
+carries its own `overflow-x-auto` and the grid column carries `min-w-0`. Keep
+both if you touch either; see "On a phone".
+
 ## Live activity
 
 The dashboard's activity feed is a READER over `AuditLog`, which every money and
@@ -1129,6 +1222,8 @@ npm run verify:parent    # a parent sees their own children and NOT another fami
                          # password diverts to /account/password
 npm run verify:reset     # forgotten-password: wrong, spent, expired and guessed
                          # codes are all refused; staff and strangers get nothing
+npm run verify:mobile-nav # the phone menu opens and covers the screen, and no
+                         # page scrolls sideways — needs a server and Chrome
 ```
 
 `verify:actions` is the only one that goes over HTTP, because the guards it

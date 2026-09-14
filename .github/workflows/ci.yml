@@ -200,6 +200,14 @@ jobs:
       - name: Invoicing — fee-structure matching and why a student was skipped
         run: npm run verify:invoicing
 
+      # Ageing boundaries, the amount in words on a receipt, and the hold that
+      # keeps unapproved spending out of the cash book. The approval check
+      # WRITES a DRAFT expense and removes it — its first version asserted the
+      # exclusion against a database with no drafts in it and passed with
+      # "0.00 held", which is a check that cannot fail.
+      - name: Finance — receipts, ageing and the approval hold
+        run: npm run verify:finance
+
       # A table with a schoolId has NO row security until `npm run db:rls` is
       # re-run, and nothing runs it for you. That is how AssessmentTemplate
       # (2026-08-28) and then SchoolAsset (2026-09-07) both reached production

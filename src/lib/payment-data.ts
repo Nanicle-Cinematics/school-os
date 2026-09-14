@@ -97,3 +97,72 @@ export async function getStudentAccount(studentId: string) {
     },
   });
 }
+
+export const RECEIPT_INCLUDE = {
+  student: {
+    select: {
+      firstName: true,
+      lastName: true,
+      admissionNo: true,
+      currentClassGroup: { select: { name: true, level: { select: { name: true } } } },
+      guardians: {
+        where: { receivesBills: true },
+        include: { guardian: { select: { firstName: true, lastName: true, phone: true } } },
+      },
+    },
+  },
+  guardian: { select: { firstName: true, lastName: true, phone: true } },
+  recordedBy: { select: { name: true } },
+  allocations: {
+    include: {
+      invoice: {
+        select: {
+          invoiceNo: true,
+          balance: true,
+          term: { select: { name: true, academicYear: { select: { name: true } } } },
+        },
+      },
+    },
+  },
+} satisfies Prisma.PaymentInclude;
+
+export type ReceiptPayment = Prisma.PaymentGetPayload<{ include: typeof RECEIPT_INCLUDE }>;
+
+/**
+ * One payment, with everything a receipt has to show.
+ *
+ * The outstanding figure is read back from the invoices this payment touched
+ * rather than recomputed, because `recalcInvoice` has already settled them —
+ * and a receipt quoting a balance the ledger disagrees with is worse than one
+ * quoting none.
+ */
+export async function getReceipt(id: string) {
+  return prisma.payment.findUnique({ where: { id }, include: RECEIPT_INCLUDE });
+}
+
+/**
+ * Every payment of a term, for the office that prints a day's or a term's
+ * receipts in one run rather than one at a time.
+ *
+ * Reversed payments are excluded: that money was given back, and a receipt for
+ * it is a claim the school would have to honour twice.
+ */
+export async function getReceiptsForTerm(termId: string, opts: { day?: Date } = {}) {
+  const day = opts.day;
+  return prisma.payment.findMany({
+    where: {
+      status: { not: "REVERSED" },
+      allocations: { some: { invoice: { termId } } },
+      ...(day
+        ? {
+            paidAt: {
+              gte: new Date(day.getFullYear(), day.getMonth(), day.getDate()),
+              lt: new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1),
+            },
+          }
+        : {}),
+    },
+    include: RECEIPT_INCLUDE,
+    orderBy: { paidAt: "asc" },
+  });
+}

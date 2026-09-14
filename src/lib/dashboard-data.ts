@@ -38,9 +38,13 @@ export async function getDashboard(schoolId: string) {
       })
     : null;
 
+  // PAID only, matching the cash book. DRAFT is spending held for a second
+  // signature; showing it here would put money in the dashboard's expenditure
+  // figure that the school has not agreed to, and the two screens would then
+  // disagree about the same term.
   const expenseTotal = term
     ? await prisma.expense.aggregate({
-        where: { schoolId, termId: term.id, status: { not: "CANCELLED" } },
+        where: { schoolId, termId: term.id, status: "PAID" },
         _sum: { amount: true },
       })
     : null;
@@ -453,6 +457,14 @@ const ACTIVITY: Record<
   "expense.record": {
     kind: "money",
     title: (a) => `Expense of ${money(a.amount)} recorded`,
+    detail: "Cash book",
+  },
+  "expense.approve": {
+    kind: "money",
+    // Named as an approval rather than "an expense was updated": the whole
+    // point of the hold is that somebody signed, and a feed that does not say
+    // so loses the only record of who did.
+    title: (a) => `Expense of ${money(a.amount)} approved`,
     detail: "Cash book",
   },
   "expense.cancel": { kind: "money", title: () => "An expense was cancelled", detail: "Cash book" },
