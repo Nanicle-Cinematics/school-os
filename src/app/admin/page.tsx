@@ -41,7 +41,7 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 
 const PLAN_TONE: Record<string, string> = {
   TRIAL: "bg-warning-tint text-warning-ink",
-  INSTITUTION_PLUS: "bg-brand-600 text-white",
+  INSTITUTION: "bg-brand-600 text-white",
 };
 
 /* The console had its OWN Stat — a second one, with its own tones and its own labels, so the platform screens drifted from the school screens by

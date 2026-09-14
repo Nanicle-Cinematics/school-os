@@ -18,7 +18,7 @@ import {
 
 export type PlatformState = { error?: string; ok?: string };
 
-const PLANS: Plan[] = ["TRIAL", "INSTITUTION_PLUS"];
+const PLANS: Plan[] = ["TRIAL", "INSTITUTION"];
 
 export async function createSchool(
   _prev: PlatformState,

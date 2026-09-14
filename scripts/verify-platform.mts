@@ -67,7 +67,7 @@ console.log("\nMonthly billing");
 const day = (n: number) => new Date(Date.now() + n * DAY);
 const monthly = (paidUntil: Date | null) =>
   subscriptionState({
-    plan: "INSTITUTION_PLUS",
+    plan: "INSTITUTION",
     subscriptionStatus: "ACTIVE",
     trialEndsAt: null,
     paidUntil,
@@ -257,20 +257,20 @@ check(
   unguarded.length ? `missing in: ${unguarded.join(", ")}` : `${creators.length} file(s), all guarded`,
 );
 
-const capped = { plan: "INSTITUTION_PLUS" as const, studentCap: 150 };
-check("a school under its cap may admit", capacityMessage(capacity(capped, 149), 1, "Institution Plus") === null);
+const capped = { plan: "INSTITUTION" as const, studentCap: 150 };
+check("a school under its cap may admit", capacityMessage(capacity(capped, 149), 1, "Institution") === null);
 check(
   "a school AT its cap may not",
-  (capacityMessage(capacity(capped, 150), 1, "Institution Plus") ?? "").includes("at its limit"),
+  (capacityMessage(capacity(capped, 150), 1, "Institution") ?? "").includes("at its limit"),
 );
 check(
   "an import that would cross the cap is refused whole, with the arithmetic",
-  (capacityMessage(capacity(capped, 100), 80, "Institution Plus") ?? "").includes("180"),
-  capacityMessage(capacity(capped, 100), 80, "Institution Plus") ?? "",
+  (capacityMessage(capacity(capped, 100), 80, "Institution") ?? "").includes("180"),
+  capacityMessage(capacity(capped, 100), 80, "Institution") ?? "",
 );
 check(
   "and says nothing was written",
-  (capacityMessage(capacity(capped, 100), 80, "Institution Plus") ?? "").includes("Nothing has been imported"),
+  (capacityMessage(capacity(capped, 100), 80, "Institution") ?? "").includes("Nothing has been imported"),
 );
 check(
   "a school ALREADY over its cap keeps its pupils — only new admissions refuse",
@@ -279,7 +279,7 @@ check(
 );
 check(
   "an explicit cap beats the plan default",
-  pupilCap({ plan: "INSTITUTION_PLUS", studentCap: 400 }) === 400,
+  pupilCap({ plan: "INSTITUTION", studentCap: 400 }) === 400,
 );
 check(
   "no plan carries a cap of its own — a limit is a decision about one school",
@@ -292,8 +292,8 @@ check(
 );
 check(
   "the one paid plan is priced",
-  PLANS.INSTITUTION_PLUS.monthlyPrice === 800,
-  `Institution Plus GH₵${PLANS.INSTITUTION_PLUS.monthlyPrice} a month`,
+  PLANS.INSTITUTION.monthlyPrice === 800,
+  `Institution GH₵${PLANS.INSTITUTION.monthlyPrice} a month`,
 );
 check(
   // Guards the thing that was actually wrong: two plans that differed only in
@@ -301,6 +301,51 @@ check(
   "there is exactly one paid plan, and a free trial",
   Object.keys(PLANS).length === 2 && PLANS.TRIAL.monthlyPrice === 0,
   Object.keys(PLANS).join(", "),
+);
+
+/**
+ * ⚠️ Nobody writes the plan's name out by hand.
+ *
+ * Renaming "Institution Plus" to "Institution" touched the enum, the schema,
+ * the seed, the console and this file — and still shipped the OLD name on the
+ * landing page, because the pricing card had the string typed into it rather
+ * than read from PLANS. A grep for the identifier found nothing; only loading
+ * the page did.
+ *
+ * Checked for PAID plans only: "Trial" is an ordinary English word that appears
+ * in prose ("7 days free", "ask for a free trial"), and a rule with false
+ * positives is a rule people learn to skip.
+ */
+const paidLabels = (Object.values(PLANS) as { label: string; monthlyPrice: number | null }[])
+  .filter((p) => (p.monthlyPrice ?? 0) > 0)
+  .map((p) => p.label);
+
+/**
+ * ⚠️ Its OWN walker, because `walk` above only returns `.ts`.
+ *
+ * Reusing it made this check pass with "Institution" typed straight back into
+ * marketing.tsx — the guard could not see the one file kind that had the bug,
+ * and a guard that cannot fail is worse than none. Forced red before it was
+ * believed.
+ */
+const screens = (dir: string): string[] =>
+  readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    return statSync(full).isDirectory() ? screens(full) : /\.tsx?$/.test(full) ? [full] : [];
+  });
+
+const hardcoded: string[] = [];
+for (const file of screens("src")) {
+  if (file.endsWith("subscription.ts")) continue;
+  const text = readFileSync(file, "utf8");
+  for (const label of paidLabels) {
+    if (text.includes(label)) hardcoded.push(`${file} (${label})`);
+  }
+}
+check(
+  "no screen types a plan's name out by hand",
+  hardcoded.length === 0,
+  hardcoded.length ? hardcoded.join(", ") : `${paidLabels.join(", ")} — read from PLANS everywhere`,
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

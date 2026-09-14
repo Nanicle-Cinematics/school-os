@@ -186,7 +186,7 @@ async function main() {
       gpsAddress: "GD-123-4567",
       accreditationNo: "GES/GAR/AD/0091",
       headName: "Mr. Emmanuel Ofori",
-      plan: "INSTITUTION_PLUS",
+      plan: "INSTITUTION",
       subscriptionStatus: "TRIALING",
       trialEndsAt: d("2026-10-01"),
       settings: {

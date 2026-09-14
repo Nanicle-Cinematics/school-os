@@ -97,7 +97,7 @@ const FEATURES = [
 ];
 
 export function Marketing() {
-  const price = PLANS.INSTITUTION_PLUS.monthlyPrice;
+  const plan = PLANS.INSTITUTION;
 
   return (
     <div className="min-h-full bg-slate-50">
@@ -219,9 +219,9 @@ export function Marketing() {
 
         <section id="pricing" className="mx-auto max-w-5xl px-5 py-20">
           <div className="mx-auto max-w-md rounded-panel border border-hairline bg-surface p-8 text-center shadow-raised">
-            <p className="text-sm font-semibold text-accent-700">Institution Plus</p>
+            <p className="text-sm font-semibold text-accent-700">{plan.label}</p>
             <p className="mt-3 font-heading text-5xl text-slate-900">
-              GH&#8373;{price}
+              GH&#8373;{plan.monthlyPrice}
             </p>
             <p className="mt-1 text-sm text-slate-500">a month, for the whole school</p>
             <p className="mt-6 text-sm leading-relaxed text-slate-600">
