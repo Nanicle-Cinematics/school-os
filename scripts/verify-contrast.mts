@@ -130,6 +130,13 @@ PAIRS.push(
   { ink: "--color-slate-500", on: "--color-slate-100", where: "muted badge on a tint" },
   { ink: "--color-slate-500", on: "--color-hue-finance-band", where: "table header on a band" },
   { ink: "--color-slate-500", on: "--color-hue-people-band", where: "table header on a band" },
+  // The landing page, which is the one screen read by people who have never
+  // seen the product and will not persevere with it.
+  { ink: "--color-accent-700", on: "--color-slate-50", where: "landing eyebrow on the page" },
+  { ink: "--color-accent-700", on: "--color-surface", where: "landing eyebrow on a card" },
+  { ink: "--color-brand-ink", on: "--color-brand-50", where: "landing feature icon", graphic: true },
+  { ink: "--color-slate-600", on: "--color-slate-50", where: "landing body on the page" },
+  { ink: "--color-slate-900", on: "--color-slate-50", where: "landing headline on the page" },
 );
 
 let failed = 0;
