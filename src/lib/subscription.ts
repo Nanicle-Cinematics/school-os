@@ -204,12 +204,26 @@ export const TRIAL_DAYS = 7;
  * middle of that is the worst possible moment to meet one. It is limited by TIME
  * instead — seven days — which `trialEndsAt` already enforces.
  */
+/**
+ * ONE paid plan, deliberately.
+ *
+ * There were two — Standard at GH₵500 and Institution Plus at GH₵800 — and they
+ * were identical: same features, same (absent) pupil cap, same everything. The
+ * `plan` field was read in five places, all of them a label, a price or a badge
+ * colour. A school paying GH₵800 got a school paying GH₵500, plus GH₵300.
+ *
+ * A price difference that buys nothing is not a tier, it is a thing to explain
+ * on a sales call. Removed 2026-09-14, before any school was ever charged.
+ *
+ * `monthlyFee` on the school remains editable in the console, so what a school
+ * actually pays is still a conversation — which is what the two plans were
+ * really standing in for.
+ */
 export const PLANS: Record<
   Plan,
   { label: string; studentCap: number | null; monthlyPrice: number | null }
 > = {
   TRIAL: { label: "Trial", studentCap: null, monthlyPrice: 0 },
-  STANDARD: { label: "Standard", studentCap: null, monthlyPrice: 500 },
   INSTITUTION_PLUS: { label: "Institution Plus", studentCap: null, monthlyPrice: 800 },
 };
 
