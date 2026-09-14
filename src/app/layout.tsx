@@ -56,7 +56,23 @@ try {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${display.variable} h-full antialiased`}>
+    /**
+     * ⚠️ `suppressHydrationWarning` belongs on THIS element and nowhere else.
+     *
+     * THEME_SCRIPT below adds `dark` to <html> before React ever runs, which is
+     * the point of it — so the class the server rendered and the class the
+     * client finds are different BY DESIGN. React reported that as a hydration
+     * mismatch on every page in dark mode ("this won't be patched up"), which
+     * is noise that trains people to ignore the one that matters.
+     *
+     * It suppresses the warning for this element's own attributes only, not for
+     * its children, so a real mismatch anywhere inside still shouts.
+     */
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${sans.variable} ${display.variable} h-full antialiased`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

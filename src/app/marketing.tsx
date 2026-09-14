@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   BookOpenCheck,
@@ -11,6 +12,17 @@ import {
 } from "lucide-react";
 import { ButtonLink } from "./(app)/primitives";
 import { PLANS, TRIAL_DAYS } from "@/lib/subscription";
+/**
+ * The real dashboard, captured from the demo school.
+ *
+ * ⚠️ It is a CAPTURE, so it goes stale the moment the screen changes. Retake it
+ * from a signed-in session rather than editing it, and check two things the
+ * first version got wrong: the demo proprietor is a platform admin on dev, so
+ * the header carried a "Nanicle console" button no customer will ever see; and
+ * the activity feed was six "rows exported" entries left over from testing the
+ * export. Both are true of the product only for me.
+ */
+import dashboardShot from "../../public/product-dashboard.png";
 
 /**
  * ⚠️ CHANGE THIS. It is a personal address on a public page.
@@ -118,6 +130,26 @@ export function Marketing() {
           <p className="mt-4 text-sm text-slate-500">
             {TRIAL_DAYS} days free. No card, no setup fee.
           </p>
+
+          {/* The product, not a drawing of it. A school office decides in about
+              four seconds whether software looks like something they could sit
+              a secretary in front of, and no paragraph does that work. */}
+          {/* ⚠️ On a phone the whole dashboard is a grey smudge — 1440px of
+              screen squeezed into 414 makes every figure illegible, and an
+              illegible screenshot is 400KB that says nothing. So small screens
+              get the top-left CORNER at a readable scale and the rest clipped,
+              which is the part that carries the meaning: the school, the roll,
+              and the money. Full width from `sm` up. */}
+          <div className="mt-14 overflow-hidden rounded-panel border border-hairline bg-surface shadow-raised">
+            <Image
+              src={dashboardShot}
+              alt="The School OS dashboard: 44 pupils on roll, fees collected against fees billed, families owing, and the report cards still waiting to be published."
+              placeholder="blur"
+              priority
+              sizes="(max-width: 640px) 240vw, (max-width: 1024px) 100vw, 1024px"
+              className="w-[240%] max-w-none sm:w-full"
+            />
+          </div>
         </section>
 
         <section className="mx-auto max-w-5xl px-5 pb-20">
