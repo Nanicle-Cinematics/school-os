@@ -14,7 +14,7 @@
  */
 import { parseCsv, TEMPLATE_HEADERS } from "@/lib/import-data";
 import { DATASETS, DATASET_NAMES, dataset, exportFilename, toCsv } from "@/lib/export-data";
-import { canAccess, FINANCE, LEADERSHIP, OFFICE } from "@/lib/permissions";
+import { canAccess, FINANCE, OFFICE } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { runWithTenantContext, withBypass } from "@/lib/tenant-context";
 
@@ -134,8 +134,23 @@ check(
     !canAccess(["ADMIN"], DATASETS.invoices.roles),
 );
 check(
-  "results are leadership only",
-  DATASETS.results.roles === LEADERSHIP && !canAccess(["ADMIN"], DATASETS.results.roles),
+  "results stay off the registrar's desk",
+  !canAccess(["ADMIN"], DATASETS.results.roles) &&
+    !canAccess(["TEACHER"], DATASETS.results.roles) &&
+    !canAccess(["ACCOUNTANT"], DATASETS.results.roles),
+);
+/**
+ * ⚠️ Asserted by WHO, not by which constant.
+ *
+ * This read `DATASETS.results.roles === LEADERSHIP`, an identity check on the
+ * array itself, so widening the set to leadership-plus-IT failed it even though
+ * the property it was protecting — a registrar, a teacher and a bursar cannot
+ * export the marks — still held. Naming the roles says what is actually meant
+ * and survives the next set being renamed.
+ */
+check(
+  "and an IT admin may take them, as a leadership-level academic role",
+  canAccess(["IT_ADMIN"], DATASETS.results.roles),
 );
 check(
   "the OWNER can take everything",
