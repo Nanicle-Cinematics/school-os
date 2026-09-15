@@ -389,6 +389,10 @@ enum Role {
   LIBRARIAN
   HOUSE_MASTER
   NURSE
+  /// Manages ACCESS, not what access permits. See ACCOUNT_SUPPORT in
+  /// permissions.ts: an IT admin unlocks and resets accounts; leadership
+  /// decides what those accounts may do.
+  IT_ADMIN
   PARENT
 }
 

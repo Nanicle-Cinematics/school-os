@@ -7,6 +7,24 @@ export const FINANCE: Role[] = [...LEADERSHIP, "ACCOUNTANT"];
 export const OFFICE: Role[] = [...LEADERSHIP, "ADMIN"];
 
 /**
+ * Who may restore access to an account — reset a forgotten password, suspend a
+ * login, lift a suspension.
+ *
+ * ⚠️ This is deliberately NOT the same set as who may GRANT access.
+ *
+ * An IT admin's job is the helpdesk one: a teacher is locked out on a Monday
+ * morning and someone has to let them back in. That should not require handing
+ * over the roll, every family's phone number and the bulk SMS screen, which is
+ * what giving them OFFICE would have meant.
+ *
+ * And the separation runs the other way too. An account-creating role that can
+ * choose the new account's roles can mint itself an ACCOUNTANT and walk into
+ * the money — so creating logins, changing roles and removing access all stay
+ * on OFFICE. IT restores access; leadership decides what access permits.
+ */
+export const ACCOUNT_SUPPORT: Role[] = [...OFFICE, "IT_ADMIN"];
+
+/**
  * The end-of-term report card entry screens, and the only place a teacher goes.
  *
  * A class teacher signs in to do one job: enter the term's marks for the
@@ -118,7 +136,7 @@ export const NAV: NavSection[] = [
     hue: "school",
     items: [
       { href: "/messages", label: "Messages", icon: "messages", roles: OFFICE },
-      { href: "/users", label: "Users", icon: "users", roles: OFFICE },
+      { href: "/users", label: "Users", icon: "users", roles: ACCOUNT_SUPPORT },
       { href: "/export", label: "Export", icon: "export", roles: OFFICE },
       { href: "/settings", label: "Settings", icon: "settings", roles: [...LEADERSHIP, "ADMIN"] },
     ],
@@ -156,6 +174,16 @@ export function isTeacherOnly(roles: Role[]) {
  * staff in practice — but a proprietor whose own child attends the school would
  * hold both, and must keep the whole app, so this is `every` rather than `some`.
  */
+/**
+ * Someone whose only role is IT_ADMIN — as opposed to a head who also happens
+ * to hold it, who keeps the whole app. Same shape as isTeacherOnly, and for the
+ * same reason: the narrowing is about a login that does ONE job, not about the
+ * role appearing anywhere in the list.
+ */
+export function isItAdminOnly(roles: Role[]) {
+  return roles.length > 0 && roles.every((role) => role === "IT_ADMIN");
+}
+
 export function isParentOnly(roles: Role[]) {
   return roles.length > 0 && roles.every((role) => role === "PARENT");
 }
@@ -171,6 +199,9 @@ export function isParentOnly(roles: Role[]) {
 export function landingFor(roles: Role[]) {
   if (isParentOnly(roles)) return "/portal";
   if (isTeacherOnly(roles)) return "/assessments/sheet";
+  // NOT /dashboard: it leads with what the school collected and what is
+  // outstanding, which is the one thing this role is kept away from.
+  if (isItAdminOnly(roles)) return "/users";
   return "/dashboard";
 }
 
@@ -226,6 +257,7 @@ const ROLE_LABELS: Record<Role, string> = {
   LIBRARIAN: "Librarian",
   HOUSE_MASTER: "House Master",
   NURSE: "Nurse",
+  IT_ADMIN: "IT Admin",
   PARENT: "Parent",
 };
 

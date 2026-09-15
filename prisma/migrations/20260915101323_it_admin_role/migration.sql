@@ -1,0 +1,21 @@
+-- An IT admin: manages ACCESS, not what access permits.
+--
+-- The school had no role for the person who resets a forgotten password and
+-- unlocks an account. Doing it meant handing someone OFFICE, which is the whole
+-- roll, every family's contact details and the messaging screen — a helpdesk
+-- job paid for with a disclosure.
+--
+-- ⚠️ ADD VALUE, not the type-recreate dance. Removing a value needs the rebuild
+-- (see drop_student_role); ADDING one is a single catalog entry — no rows are
+-- rewritten, re-cast or read. Postgres 12+ permits it inside a transaction so
+-- long as the new value is not USED in the same transaction, which this does
+-- not do: nothing is granted the role here.
+--
+-- The value lands at the END of the Postgres type whatever position it holds in
+-- schema.prisma, because ADD VALUE appends. Order carries no meaning here —
+-- roleLabel is a map and every guard is a set — but CI asserts the migrations
+-- produce the schema they claim, so the drift check is what confirms Prisma
+-- agrees.
+--
+-- ADDING, so this migrates BEFORE the merge.
+ALTER TYPE "Role" ADD VALUE 'IT_ADMIN';
