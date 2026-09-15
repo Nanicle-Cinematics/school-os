@@ -10,6 +10,7 @@ import { formatCedis } from "@/lib/money";
 import { Card } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { InvoiceBill } from "../invoice-bill";
+import { PlanCard } from "./plan-card";
 
 export const metadata: Metadata = { title: "Invoice · School OS" };
 
@@ -33,6 +34,23 @@ export default async function InvoiceDetailPage({ params }: PageProps<"/invoices
   if (!school) {
     notFound();
   }
+
+  const plan = invoice.paymentPlan
+    ? {
+        id: invoice.paymentPlan.id,
+        note: invoice.paymentPlan.note,
+        cancelledAt: invoice.paymentPlan.cancelledAt,
+        // Decimals and Dates are serialised for the client component; the engine
+        // takes them as strings on purpose rather than making every call site
+        // cast. See plan-engine.
+        instalments: invoice.paymentPlan.instalments.map((i) => ({
+          id: i.id,
+          sequence: i.sequence,
+          dueDate: i.dueDate,
+          amount: i.amount.toString(),
+        })),
+      }
+    : null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -84,6 +102,16 @@ export default async function InvoiceDetailPage({ params }: PageProps<"/invoices
             ))}
           </ul>
         )}
+      </Card>
+
+      <Card title={plan && !plan.cancelledAt ? "Payment plan" : "Spread this bill"}>
+        <PlanCard
+          invoiceId={invoice.id}
+          balance={Number(invoice.balance)}
+          amountPaid={invoice.amountPaid.toString()}
+          plan={plan}
+          today={new Date().toISOString().slice(0, 10)}
+        />
       </Card>
     </div>
   );

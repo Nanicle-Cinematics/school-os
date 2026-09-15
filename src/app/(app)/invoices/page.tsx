@@ -5,7 +5,12 @@ import Link from "next/link";
 import type { InvoiceStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
-import { getInvoiceList, getInvoiceFilterOptions, getDebtorAgeing } from "@/lib/invoice-data";
+import {
+  getInvoiceList,
+  getInvoiceFilterOptions,
+  getDebtorAgeing,
+  invoicesOnKeptPlans,
+} from "@/lib/invoice-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { formatCedis } from "@/lib/money";
 import {
@@ -73,6 +78,7 @@ export default async function InvoicesPage({
 
   const ageing = await getDebtorAgeing(termId);
   const owed = ageing.reduce((sum, row) => sum + row.total, 0);
+  const plans = await invoicesOnKeptPlans(termId);
 
   const collectionRate =
     Number(data.billed) > 0
@@ -162,6 +168,23 @@ export default async function InvoicesPage({
             })}
           </div>
         </Card>
+      ) : null}
+
+      {/* Named under the buckets rather than subtracted from them. A plan is
+          not a way to disappear from the ageing report — the money is still
+          owed and still late — but a bursar picking up the phone needs to know
+          which of these families the school already agreed a date with. */}
+      {plans.kept.size > 0 ? (
+        <p className="text-sm text-slate-500">
+          {plans.kept.size} of these {plans.kept.size === 1 ? "bill is" : "bills are"} on an agreed
+          plan and up to date — {formatCedis(plans.covered)}. Chase the rest first.
+          {plans.total > plans.kept.size ? (
+            <span className="text-danger-ink">
+              {" "}
+              {plans.total - plans.kept.size} more had a plan and have fallen behind it.
+            </span>
+          ) : null}
+        </p>
       ) : null}
 
       {age ? (

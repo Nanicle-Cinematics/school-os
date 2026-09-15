@@ -5,6 +5,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth";
 import { FINANCE, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getExpenseList, getTermCashPosition } from "@/lib/expense-data";
+import { getBudgetVsActual, budgetTotals } from "@/lib/budget-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { approveExpense, cancelExpense } from "@/lib/expense-actions";
 import { formatCedis } from "@/lib/money";
@@ -12,6 +13,7 @@ import { PageHeader, Card, Alert, filterClass } from "../ui";
 import { DataTable, Row, StatCard, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { ExpenseForm } from "./expense-form";
+import { BudgetPanel } from "./budget-panel";
 
 export const metadata: Metadata = { title: "Expenses · School OS" };
 
@@ -49,6 +51,8 @@ export default async function ExpensesPage({
   const data = await getExpenseList({ termId, categoryId, q });
   const cash = termId ? await getTermCashPosition(termId) : null;
   const mayApprove = canAccess(auth.roles, LEADERSHIP);
+  const budget = termId ? await getBudgetVsActual(termId) : null;
+  const budgetSummary = budget ? budgetTotals(budget) : null;
 
   const NOTICES: Record<string, { tone: "error" | "success"; text: string }> = {
     own: {
@@ -154,6 +158,31 @@ export default async function ExpensesPage({
               </li>
             ))}
           </ul>
+        </Card>
+      ) : null}
+
+      {budget && termId ? (
+        <Card title="Budget against actual">
+          {/* The sentence a proprietor wants before the rows: what was planned,
+              what is gone, and whether anything is past its line. Unbudgeted
+              spending is named separately rather than folded in — "nobody
+              decided" is a different problem from "somebody exceeded". */}
+          <p className="border-b border-hairline px-4 py-2.5 text-sm text-slate-500">
+            {budgetSummary && budgetSummary.budgeted > 0
+              ? [
+                  `${formatCedis(budgetSummary.actual)} spent of ${formatCedis(budgetSummary.budgeted)} budgeted`,
+                  budgetSummary.over.length > 0
+                    ? `${budgetSummary.over.length} heading${budgetSummary.over.length === 1 ? "" : "s"} over`
+                    : null,
+                  budgetSummary.unbudgeted.length > 0
+                    ? `${budgetSummary.unbudgeted.length} unbudgeted`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "No budget set for this term yet — put a figure beside a heading to start one."}
+          </p>
+          <BudgetPanel rows={budget} termId={termId} mayEdit={mayApprove} />
         </Card>
       ) : null}
 

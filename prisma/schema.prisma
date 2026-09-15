@@ -139,6 +139,10 @@ model School {
 
   @@index([plan, subscriptionStatus])
   fileAttachments     FileAttachment[]
+  budgets             Budget[]
+  paymentPlans        PaymentPlan[]
+  planInstalments     PaymentPlanInstalment[]
+  statementLines      StatementLine[]
 }
 
 /// A school's crest, logo or the head's signature, stored as bytes.
@@ -169,6 +173,120 @@ model FileAttachment {
   createdAt        DateTime @default(now())
 
   @@index([schoolId])
+}
+
+/// What a school INTENDS to spend on a heading this term, against which the
+/// cash book is the actual.
+///
+/// Per term, not per year: a Ghanaian school's money arrives in the first weeks
+/// of each term and is spent within it, so a yearly figure would be compared
+/// against a third of a year for two thirds of the time and read as a surplus
+/// that is not there.
+///
+/// One row per (term, category). A heading with no row simply has no budget,
+/// which is different from a budget of zero — and the screen says so, because
+/// "unbudgeted" and "overspent by everything" are not the same sentence.
+model Budget {
+  id         String          @id @default(cuid())
+  schoolId   String
+  school     School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term            @relation(fields: [termId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  amount Decimal @db.Decimal(12, 2)
+  note   String?
+
+  setByUserId String?
+  setBy       User?   @relation("BudgetSetBy", fields: [setByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([termId, categoryId])
+  @@index([schoolId])
+}
+
+/// An agreed arrangement to pay one bill in tranches.
+///
+/// Attached to the INVOICE rather than the student: a bill is already per
+/// student per term, which is the unit a school actually negotiates over, and
+/// an arrangement that outlived the term it was agreed for would quietly excuse
+/// arrears nobody discussed.
+///
+/// ⚠️ A plan does not change what is owed. `Invoice.balance` is untouched and
+/// remains the truth; a plan only says WHEN the school agreed it would arrive,
+/// which is what stops a parent who is keeping to an arrangement being chased
+/// as a debtor and having their child's report card withheld.
+model PaymentPlan {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  invoiceId String  @unique
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  note        String?
+  cancelledAt DateTime?
+
+  agreedByUserId String?
+  agreedBy       User?   @relation("PlanAgreedBy", fields: [agreedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  instalments PaymentPlanInstalment[]
+
+  @@index([schoolId])
+}
+
+/// One tranche of a plan: how much, by when.
+///
+/// Deliberately carries no paid/unpaid column. Which tranches are covered is
+/// derived from the invoice's own amountPaid at read time — a stored flag would
+/// be a second opinion about the same money, and this codebase has already
+/// learnt what happens when a status rots beside the ledger that moved on.
+model PaymentPlanInstalment {
+  id     String      @id @default(cuid())
+  schoolId String
+  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  planId String
+  plan   PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  sequence Int
+  dueDate  DateTime
+  amount   Decimal  @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([planId, sequence])
+  @@index([schoolId])
+}
+
+/// A line read off a bank or mobile-money statement during reconciliation.
+///
+/// Kept rather than matched-and-forgotten, because the useful half of a
+/// reconciliation is the lines that did NOT match: money in the account that
+/// the book has no record of. Those are the ones a bursar has to explain.
+model StatementLine {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  paidAt    DateTime
+  amount    Decimal  @db.Decimal(12, 2)
+  reference String?
+  narration String?
+
+  /// The payment this line was matched to, if any. Null is the finding.
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  importedByUserId String?
+  importedAt       DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([schoolId, paidAt])
 }
 
 model SchoolAsset {
@@ -318,6 +436,8 @@ model User {
   approvedExpenses  Expense[]         @relation("ExpenseApprovedBy")
 
   @@index([schoolId])
+  budgetsSet   Budget[]      @relation("BudgetSetBy")
+  plansAgreed  PaymentPlan[] @relation("PlanAgreedBy")
 }
 
 // One login can hold several roles in a school (Head who also teaches), and a
@@ -480,6 +600,7 @@ model Term {
 
   @@unique([academicYearId, sequence])
   @@index([schoolId])
+  budgets        Budget[]
 }
 
 // A rung on the ladder: "Basic 5", "JHS 2", "SHS 1".
@@ -1226,6 +1347,7 @@ model Invoice {
   @@unique([studentId, termId])
   @@index([schoolId, status])
   @@index([schoolId, termId])
+  paymentPlan PaymentPlan?
 }
 
 model InvoiceItem {
@@ -1365,6 +1487,7 @@ model Payment {
   @@unique([schoolId, receiptNo])
   @@index([schoolId, paidAt])
   @@index([schoolId, studentId])
+  statementLine StatementLine?
 }
 
 // A payment can settle several invoices (this term plus arrears).
@@ -1410,6 +1533,7 @@ model ExpenseCategory {
 
   @@unique([schoolId, code])
   @@index([schoolId])
+  budgets  Budget[]
 }
 
 enum ExpenseStatus {

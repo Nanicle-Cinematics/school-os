@@ -459,6 +459,28 @@ const ACTIVITY: Record<
     title: (a) => `Expense of ${money(a.amount)} recorded`,
     detail: "Cash book",
   },
+  "budget.set": {
+    kind: "money",
+    title: (a) => `Budget set for ${text(a.category) ?? "a heading"} — ${money(a.amount)}`,
+    detail: "Cash book",
+  },
+  "budget.clear": {
+    kind: "money",
+    title: (a) => `Budget removed from ${text(a.category) ?? "a heading"}`,
+    detail: "Cash book",
+  },
+  "plan.create": {
+    kind: "money",
+    // Named as an agreement, because that is what a parent was told it was.
+    title: (a) => `Payment plan agreed — ${count(a.count)} instalments on ${text(a.invoiceNo) ?? "a bill"}`,
+    detail: "Fees",
+  },
+  "plan.cancel": { kind: "money", title: () => "A payment plan was ended", detail: "Fees" },
+  "statement.reconcile": {
+    kind: "money",
+    title: (a) => `Statement reconciled — ${count(a.matched)} of ${count(a.lines)} lines matched`,
+    detail: "Fees",
+  },
   "expense.approve": {
     kind: "money",
     // Named as an approval rather than "an expense was updated": the whole
