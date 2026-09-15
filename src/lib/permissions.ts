@@ -3,43 +3,40 @@ import type { Role } from "@prisma/client";
 // Coarse role groupings. Membership rows hold the roles; these constants keep
 // "who may see this" in one place instead of scattered across pages.
 export const LEADERSHIP: Role[] = ["OWNER", "HEAD", "ASSISTANT_HEAD"];
+
+/**
+ * ⚠️ IT_ADMIN is absent here, and that absence is the whole boundary.
+ *
+ * The role runs the school's systems and is kept out of its money. Everything
+ * else it may reach is expressed by ADDING it to a set; the money is expressed
+ * by leaving it out of this one, so a new finance screen guarded by FINANCE is
+ * private by default rather than by somebody remembering.
+ */
 export const FINANCE: Role[] = [...LEADERSHIP, "ACCOUNTANT"];
-export const OFFICE: Role[] = [...LEADERSHIP, "ADMIN"];
+
+/** The school's day-to-day running: people, classes, messages, the setup. */
+export const OFFICE: Role[] = [...LEADERSHIP, "ADMIN", "IT_ADMIN"];
 
 /**
- * Who may restore access to an account — reset a forgotten password, suspend a
- * login, lift a suspension.
+ * Assessments, results and the report-card machinery.
  *
- * ⚠️ This is deliberately NOT the same set as who may GRANT access.
- *
- * An IT admin's job is the helpdesk one: a teacher is locked out on a Monday
- * morning and someone has to let them back in. That should not require handing
- * over the roll, every family's phone number and the bulk SMS screen, which is
- * what giving them OFFICE would have meant.
- *
- * And the separation runs the other way too. An account-creating role that can
- * choose the new account's roles can mint itself an ACCOUNTANT and walk into
- * the money — so creating logins, changing roles and removing access all stay
- * on OFFICE. IT restores access; leadership decides what access permits.
+ * Leadership plus IT — not OFFICE, because a registrar has never had these and
+ * this is not the change that gives them to them.
  */
-export const ACCOUNT_SUPPORT: Role[] = [...OFFICE, "IT_ADMIN"];
+export const ACADEMIC: Role[] = [...LEADERSHIP, "IT_ADMIN"];
 
 /**
- * Who may set the school up technically — the SMS gateway, the crest and the
- * head's signature.
+ * Who may hand out access: create a login, change its roles, remove it.
  *
- * Split from OFFICE because /settings used to be one page holding the wiring
- * AND the policy: the fees due-days, the arrears hold, the expense approval
- * threshold. Handing an IT admin that page to let them configure a gateway
- * would have handed them a finance control, so the page is now sections with
- * different answers to "who may open this".
- *
- * ⚠️ The line is wiring versus decision, and it runs through SMS itself. WHICH
- * gateway and WHAT sender ID are technical and live here. WHETHER the school
- * texts parents at all, and whether a receipt or a published result triggers
- * one, is the proprietor spending money on messages — that stays on OFFICE.
+ * ⚠️ IT_ADMIN is deliberately NOT here, and it is the reason the finance
+ * boundary above means anything. An account-creating role that also picks the
+ * new account's roles can grant itself ACCOUNTANT and walk into the money — so
+ * the one door IT does not get is the one that opens all the others. It keeps
+ * the helpdesk half: suspending, restoring and resetting passwords.
  */
-export const TECHNICAL: Role[] = [...OFFICE, "IT_ADMIN"];
+export const ROLE_ADMIN: Role[] = [...LEADERSHIP, "ADMIN"];
+
+
 
 /**
  * The end-of-term report card entry screens, and the only place a teacher goes.
@@ -55,7 +52,7 @@ export const TECHNICAL: Role[] = [...OFFICE, "IT_ADMIN"];
  * screens, and a head with the TEACHER role also keeps the rest of the app —
  * see `isTeacherOnly`.
  */
-export const MARKING: Role[] = [...LEADERSHIP, "TEACHER"];
+export const MARKING: Role[] = [...LEADERSHIP, "TEACHER", "IT_ADMIN"];
 
 export type NavItem = {
   href: string;
@@ -132,8 +129,8 @@ export const NAV: NavSection[] = [
       { href: "/classes", label: "Classes", icon: "classes", roles: OFFICE },
       { href: "/subjects", label: "Subjects", icon: "subjects", roles: OFFICE },
       { href: "/assessments/sheet", label: "Mark sheet", icon: "sheet", roles: MARKING },
-      { href: "/assessments", label: "Assessments", icon: "assessments", roles: LEADERSHIP },
-      { href: "/results", label: "Results", icon: "results", roles: LEADERSHIP },
+      { href: "/assessments", label: "Assessments", icon: "assessments", roles: ACADEMIC },
+      { href: "/results", label: "Results", icon: "results", roles: ACADEMIC },
       { href: "/results/remarks", label: "Conduct & remarks", icon: "remarks", roles: MARKING },
       { href: "/promotions", label: "Promotions", icon: "promotions", roles: OFFICE },
     ],
@@ -153,9 +150,9 @@ export const NAV: NavSection[] = [
     hue: "school",
     items: [
       { href: "/messages", label: "Messages", icon: "messages", roles: OFFICE },
-      { href: "/users", label: "Users", icon: "users", roles: ACCOUNT_SUPPORT },
+      { href: "/users", label: "Users", icon: "users", roles: OFFICE },
       { href: "/export", label: "Export", icon: "export", roles: OFFICE },
-      { href: "/settings", label: "Settings", icon: "settings", roles: TECHNICAL },
+      { href: "/settings", label: "Settings", icon: "settings", roles: OFFICE },
     ],
   },
 ];
@@ -191,16 +188,6 @@ export function isTeacherOnly(roles: Role[]) {
  * staff in practice — but a proprietor whose own child attends the school would
  * hold both, and must keep the whole app, so this is `every` rather than `some`.
  */
-/**
- * Someone whose only role is IT_ADMIN — as opposed to a head who also happens
- * to hold it, who keeps the whole app. Same shape as isTeacherOnly, and for the
- * same reason: the narrowing is about a login that does ONE job, not about the
- * role appearing anywhere in the list.
- */
-export function isItAdminOnly(roles: Role[]) {
-  return roles.length > 0 && roles.every((role) => role === "IT_ADMIN");
-}
-
 export function isParentOnly(roles: Role[]) {
   return roles.length > 0 && roles.every((role) => role === "PARENT");
 }
@@ -216,9 +203,6 @@ export function isParentOnly(roles: Role[]) {
 export function landingFor(roles: Role[]) {
   if (isParentOnly(roles)) return "/portal";
   if (isTeacherOnly(roles)) return "/assessments/sheet";
-  // NOT /dashboard: it leads with what the school collected and what is
-  // outstanding, which is the one thing this role is kept away from.
-  if (isItAdminOnly(roles)) return "/users";
   return "/dashboard";
 }
 

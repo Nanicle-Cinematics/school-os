@@ -3,7 +3,7 @@ import { ClipboardCheck } from "lucide-react";
 import { buttonClass } from "../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP } from "@/lib/permissions";
+import { ACADEMIC } from "@/lib/permissions";
 import { getTeachingScope, getAssessmentList, getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { PageHeader, Card, StatusBadge, filterClass } from "../ui";
@@ -33,7 +33,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default async function AssessmentsPage({ searchParams }: PageProps<"/assessments">) {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(ACADEMIC);
   const params = await searchParams;
 
   const [scope, terms, currentTerm] = await Promise.all([

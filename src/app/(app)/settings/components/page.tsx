@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP } from "@/lib/permissions";
+import { ACADEMIC } from "@/lib/permissions";
 import { getAssessmentTemplates } from "@/lib/sheet-data";
 import { prisma } from "@/lib/prisma";
 import { Card } from "../../ui";
@@ -10,7 +10,7 @@ import { ComponentSection } from "./component-forms";
 export const metadata: Metadata = { title: "Assessment components · School OS" };
 
 export default async function ComponentsPage() {
-  await requireRole(LEADERSHIP);
+  await requireRole(ACADEMIC);
   const templates = await getAssessmentTemplates();
   const settings = await prisma.schoolSettings.findFirst({
     select: { classScoreWeight: true, examScoreWeight: true },

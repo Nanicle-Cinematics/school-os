@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { FINANCE, LEADERSHIP, OFFICE } from "@/lib/permissions";
+import { FINANCE, OFFICE, ACADEMIC } from "@/lib/permissions";
 import { TEMPLATE_HEADERS } from "@/lib/import-data";
 import { paymentSource } from "@/lib/payment-labels";
 
@@ -382,7 +382,7 @@ export const DATASETS = {
     label: "Results",
     description:
       "One row per student per subject for the term — scores, grade and position.",
-    roles: LEADERSHIP,
+    roles: ACADEMIC,
     needsTerm: true,
     headers: [
       "admission_no",

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole, requireAuth } from "@/lib/auth";
-import { LEADERSHIP, canAccess } from "@/lib/permissions";
+import { ACADEMIC, canAccess } from "@/lib/permissions";
 import { getReportCard } from "@/lib/results-data";
 import { saveRemarks } from "@/lib/results-actions";
 import { reportHold } from "@/lib/report-access";
@@ -17,7 +17,7 @@ export default async function ReportCardPage({
   params,
   searchParams,
 }: PageProps<"/results/[studentId]">) {
-  await requireRole(LEADERSHIP);
+  await requireRole(ACADEMIC);
   const auth = await requireAuth();
   const { studentId } = await params;
   const query = await searchParams;
@@ -33,7 +33,7 @@ export default async function ReportCardPage({
   }
 
   const { termResult, subjectResults, settings } = data;
-  const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  const isLeadership = canAccess(auth.roles, ACADEMIC);
   // Staff are shown the card whatever the family owes — the office needs it to
   // have the conversation — but they are told what the parent is seeing.
   const hold = await reportHold(studentId, termId, settings);

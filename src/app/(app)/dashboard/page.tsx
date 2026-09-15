@@ -17,7 +17,6 @@ import {
   canAccess,
   isTeacherOnly,
   isParentOnly,
-  isItAdminOnly,
   landingFor,
   FINANCE,
 } from "@/lib/permissions";
@@ -78,11 +77,7 @@ export default async function DashboardPage() {
   // home is elsewhere has to be named explicitly — and a parent was not, so the
   // portal's first release rendered the school's attention list, collections and
   // activity feed to any guardian who typed the URL. Caught by verify:parent.
-  // ⚠️ The cost named above is why IT_ADMIN is here. It holds no listed role
-  // either, so without this line an IT admin typing /dashboard would get the
-  // attention list, the collections chart and the activity feed — the exact
-  // shape of the leak the portal's first release shipped.
-  if (isTeacherOnly(auth.roles) || isParentOnly(auth.roles) || isItAdminOnly(auth.roles)) {
+  if (isTeacherOnly(auth.roles) || isParentOnly(auth.roles)) {
     redirect(landingFor(auth.roles));
   }
   const data = await getDashboard(auth.schoolId);
@@ -110,7 +105,10 @@ export default async function DashboardPage() {
     data.term
       ? { id: data.term.id, academicYearId: data.term.academicYearId }
       : null,
-    { outstanding: data.outstanding, debtorCount: data.debtorCount },
+    // Only a finance role is told what is owed. Without this the attention card
+    // reported the outstanding total to everyone the money tiles were hidden
+    // from.
+    showMoney ? { outstanding: data.outstanding, debtorCount: data.debtorCount } : null,
   );
 
   const firstName = auth.name.split(" ")[0];

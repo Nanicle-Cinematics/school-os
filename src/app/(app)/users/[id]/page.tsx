@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { ACCOUNT_SUPPORT, LEADERSHIP, OFFICE, canAccess, roleLabel } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE, ROLE_ADMIN, canAccess, roleLabel } from "@/lib/permissions";
 import { ASSIGNABLE_ROLES, PRIVILEGED_ROLES, getUserAccount } from "@/lib/user-data";
 import { removeUserAccess, setAccountSuspended } from "@/lib/user-actions";
 import { Card } from "../../ui";
@@ -20,10 +20,10 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 });
 
 export default async function UserDetailPage({ params }: PageProps<"/users/[id]">) {
-  const auth = await requireRole(ACCOUNT_SUPPORT);
+  const auth = await requireRole(OFFICE);
   // Suspend and reset are the helpdesk half and stay; removing access and
   // changing roles are grants, and belong to OFFICE.
-  const mayGrant = canAccess(auth.roles, OFFICE);
+  const mayGrant = canAccess(auth.roles, ROLE_ADMIN);
   const { id } = await params;
   const account = await getUserAccount(auth.schoolId, id);
 

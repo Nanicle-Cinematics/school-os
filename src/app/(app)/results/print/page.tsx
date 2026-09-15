@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth, requireRole } from "@/lib/auth";
-import { LEADERSHIP } from "@/lib/permissions";
+import { ACADEMIC } from "@/lib/permissions";
 import { getClassReportCards } from "@/lib/results-data";
 import { reportHoldsForClass } from "@/lib/report-access";
 import { formatCedis } from "@/lib/money";
@@ -17,7 +17,7 @@ const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", TH
 export default async function PrintReportCardsPage({
   searchParams,
 }: PageProps<"/results/print">) {
-  await requireRole(LEADERSHIP);
+  await requireRole(ACADEMIC);
   const auth = await requireAuth();
   const query = await searchParams;
 

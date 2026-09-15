@@ -5,7 +5,7 @@ import type { SmsProvider } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { parseAmount } from "@/lib/money";
 import { setTenantContext } from "@/lib/tenant-context";
-import { OFFICE, TECHNICAL } from "@/lib/permissions";
+import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
@@ -190,15 +190,15 @@ export async function saveFeesPolicy(
 /**
  * The gateway wiring: which provider, which sender ID.
  *
- * TECHNICAL, so an IT admin can set it up without also being handed the fees
+ * OFFICE, so an IT admin can set it up without also being handed the fees
  * policy. Deliberately does NOT touch smsEnabled or the notify gates — see
- * saveSmsPolicy, and the note on TECHNICAL for why the line falls here.
+ * saveSmsPolicy, and the note on OFFICE for why the line falls here.
  */
 export async function saveSmsGateway(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
-  const auth = await requireRole(TECHNICAL);
+  const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });
 
   const providerRaw = String(formData.get("smsProvider") ?? "");
@@ -250,7 +250,7 @@ export async function saveSmsGateway(
 /**
  * Whether the school texts parents at all, and what triggers one.
  *
- * OFFICE, not TECHNICAL: every message costs the school money, so turning
+ * OFFICE, not OFFICE: every message costs the school money, so turning
  * sending on is the proprietor's decision and not the helpdesk's.
  */
 export async function saveSmsPolicy(
@@ -352,11 +352,11 @@ export async function sendTestSms(
   _prev: TestSmsState,
   formData: FormData,
 ): Promise<TestSmsState> {
-  // TECHNICAL: proving the wiring is the job of whoever did the wiring.
+  // OFFICE: proving the wiring is the job of whoever did the wiring.
   // It is ungated by smsEnabled on purpose, so the gateway can be checked
   // BEFORE any parent hears from the school — and it costs one message,
   // which is why it is not open to everyone.
-  const auth = await requireRole(TECHNICAL);
+  const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });
 
   const phone = normalisePhone(String(formData.get("testPhone") ?? ""));
