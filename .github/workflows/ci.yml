@@ -131,6 +131,13 @@ jobs:
 
       # A security flow, so every assertion is a refusal: a wrong code, a spent
       # one, an expired one, a sixth guess, a staff number, a stranger's number.
+      # The two ways an account is created must store a phone number in the same
+      # shape. They did not, for months: a staff member had to type theirs in the
+      # exact format the office used, and got the wrong-password message when
+      # they did not.
+      - name: Logins — a phone number resolves however it is typed
+        run: npm run verify:logins
+
       - name: Password reset — codes, expiry and guessing
         run: npm run verify:reset
 

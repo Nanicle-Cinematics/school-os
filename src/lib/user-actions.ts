@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma, type Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
-import { setTenantContext } from "@/lib/tenant-context";
+import { setTenantContext, withBypass } from "@/lib/tenant-context";
 import { ACCOUNT_SUPPORT, OFFICE, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { hashPassword, temporaryPassword } from "@/lib/password";
@@ -44,7 +44,23 @@ export async function createUserAccount(
   if (!email && !phone) {
     return { error: "An email address or a phone number is needed to sign in." };
   }
-  if (phone && !normalisePhone(phone)) {
+  /**
+   * ⚠️ Store the NORMALISED number, not what was typed.
+   *
+   * This validated with normalisePhone and then saved the raw string, so the
+   * stored value was whatever shape the office happened to use. Sign-in tries
+   * the typed identifier and its normalised form — which rescues a stored
+   * normalised number from any input, and cannot rescue a stored raw one. The
+   * effect was that a staff member had to type their number in exactly the
+   * format the office typed it: "024 412 3456" in the box here meant
+   * "0244123456" at the login screen was REFUSED, with the same message as a
+   * wrong password and no way to guess why.
+   *
+   * createGuardianLogin and the bulk portal invite both already stored the
+   * normalised form, which is why parents never hit this and staff did.
+   */
+  const phoneNormalised = phone ? normalisePhone(phone) : null;
+  if (phone && !phoneNormalised) {
     return { error: "That phone number is not a Ghanaian mobile number, e.g. 0244123456." };
   }
 
@@ -61,19 +77,75 @@ export async function createUserAccount(
   const password = temporaryPassword();
   const passwordHash = await hashPassword(password);
 
+  /**
+   * ⚠️ An ORPHANED login is adopted, not refused.
+   *
+   * "Remove access" deletes the memberships and keeps the User row on purpose —
+   * it may hold access to another school, and it is named as the actor on
+   * payments and audit rows here. But User.email and User.phone are GLOBALLY
+   * unique, so that surviving row goes on holding the person's number while
+   * /users cannot show it: that page lists memberships, and this row has none.
+   *
+   * The result was a dead end with no way out of the product. An office that
+   * created a login, missed the one-time password, removed the account and tried
+   * again was told "that phone number is already used by another login" — about
+   * an account nothing in the app could display, for a member of staff the same
+   * screen was simultaneously listing as unable to sign in.
+   *
+   * So: a row with the same identifier and NO membership anywhere is the same
+   * person being re-admitted, and is reused. A row with a membership — at this
+   * school or any other — is somebody else's account and is still refused,
+   * because adopting it would reset a stranger's password.
+   */
+  const sameIdentifier = await withBypass(() =>
+    prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [...(email ? [{ email }] : []), ...(phoneNormalised ? [{ phone: phoneNormalised }] : [])],
+      },
+      select: {
+        id: true,
+        isPlatformAdmin: true,
+        _count: { select: { memberships: true } },
+      },
+    }),
+  );
+
+  if (sameIdentifier && (sameIdentifier._count.memberships > 0 || sameIdentifier.isPlatformAdmin)) {
+    return {
+      error:
+        "That email address or phone number already belongs to another login. Use a different one, or remove that account first.",
+    };
+  }
+
   try {
     await tenantTransaction(auth.schoolId, async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          name: `${staff.firstName} ${staff.lastName}`,
-          email: email || null,
-          phone: phone || null,
-          passwordHash,
-          // Temporary: the layouts divert this login to /account/password.
-          mustChangePassword: true,
-          schoolId: auth.schoolId,
-        },
-      });
+      const user = sameIdentifier
+        ? await tx.user.update({
+            where: { id: sameIdentifier.id },
+            // Re-admitting: a fresh temporary password, and the flag that forces
+            // it to be changed. The old hash must not survive — whoever saw it
+            // last was not necessarily this person.
+            data: {
+              name: `${staff.firstName} ${staff.lastName}`,
+              email: email || null,
+              phone: phoneNormalised,
+              passwordHash,
+              mustChangePassword: true,
+              schoolId: auth.schoolId,
+            },
+          })
+        : await tx.user.create({
+            data: {
+              name: `${staff.firstName} ${staff.lastName}`,
+              email: email || null,
+              phone: phoneNormalised,
+              passwordHash,
+              // Temporary: the layouts divert this login to /account/password.
+              mustChangePassword: true,
+              schoolId: auth.schoolId,
+            },
+          });
 
       await tx.membership.createMany({
         data: roles.map((role) => ({
@@ -92,12 +164,15 @@ export async function createUserAccount(
         action: "user.create",
         entity: "User",
         entityId: user.id,
-        after: { staffId, roles, email: email || null, phone: phone || null },
+        after: { staffId, roles, email: email || null, phone: phoneNormalised },
       });
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return { error: "That email address or phone number is already used by another login." };
+      return {
+        error:
+          "That email address or phone number is already used by another login. If that person's access was removed, try again — a login with no roles left is reused.",
+      };
     }
     throw error;
   }
