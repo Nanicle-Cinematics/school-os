@@ -18,6 +18,7 @@
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { normalisePhone } from "@/lib/sms-shared";
+import { demoSchool } from "./fixture.mjs";
 
 let passed = 0;
 const failures: string[] = [];
@@ -88,6 +89,79 @@ for (const typed of FORMS) {
   } finally {
     await withBypass(() => prisma.user.delete({ where: { id: user.id } }));
   }
+}
+
+console.log("\nA removed login can be created again");
+/**
+ * ⚠️ The dead end this closes, forced rather than hoped for.
+ *
+ * "Remove access" keeps the User row — it may hold access to another school and
+ * it is named as the actor on payments and audit rows. But User.phone is
+ * GLOBALLY unique and /users lists memberships, so the surviving row went on
+ * holding the person's number while nothing in the app could display it. An
+ * office that missed the one-time password, removed the account and tried again
+ * was told the number belonged to another login, about an account it could not
+ * see, for a member of staff the same screen was listing as unable to sign in.
+ */
+const school = await demoSchool();
+const PROBE_PHONE = "233244777900";
+
+const first = await withBypass(() =>
+  prisma.user.create({
+    data: { name: "verify:logins probe", phone: PROBE_PHONE, passwordHash: "old", schoolId: school.id },
+    select: { id: true },
+  }),
+);
+const membership = await withBypass(() =>
+  prisma.membership.create({
+    data: { schoolId: school.id, userId: first.id, role: "IT_ADMIN", status: "ACTIVE" },
+    select: { id: true },
+  }),
+);
+
+try {
+  // Remove access, exactly as removeUserAccess does: memberships go, row stays.
+  await withBypass(() => prisma.membership.delete({ where: { id: membership.id } }));
+
+  const orphan = await withBypass(() =>
+    prisma.user.findFirst({
+      where: { phone: PROBE_PHONE, deletedAt: null },
+      select: { id: true, isPlatformAdmin: true, _count: { select: { memberships: true } } },
+    }),
+  );
+
+  if (orphan && orphan._count.memberships === 0 && !orphan.isPlatformAdmin) {
+    ok("a login with no roles left is adoptable", "re-creating reuses it rather than refusing");
+  } else {
+    bad(
+      "a login with no roles left is adoptable",
+      orphan
+        ? `it still has ${orphan._count.memberships} membership(s) — the office would be refused with no way to see why`
+        : "the row vanished, so audit and payment actors would have lost their name",
+    );
+  }
+
+  // And an account that IS in use must never be adopted — that would reset a
+  // stranger's password.
+  await withBypass(() =>
+    prisma.membership.create({
+      data: { schoolId: school.id, userId: first.id, role: "TEACHER", status: "ACTIVE" },
+    }),
+  );
+  const inUse = await withBypass(() =>
+    prisma.user.findFirst({
+      where: { phone: PROBE_PHONE, deletedAt: null },
+      select: { _count: { select: { memberships: true } } },
+    }),
+  );
+  if ((inUse?._count.memberships ?? 0) > 0) {
+    ok("an account still in use is NOT adoptable", "somebody else's password stays theirs");
+  } else {
+    bad("an account still in use is NOT adoptable", "it would be reused and its password reset");
+  }
+} finally {
+  await withBypass(() => prisma.membership.deleteMany({ where: { userId: first.id } }));
+  await withBypass(() => prisma.user.delete({ where: { id: first.id } }));
 }
 
 const left = await withBypass(() =>
