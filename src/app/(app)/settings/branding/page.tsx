@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP } from "@/lib/permissions";
+import { TECHNICAL } from "@/lib/permissions";
 import { setTenantContext } from "@/lib/tenant-context";
 import { prisma } from "@/lib/prisma";
 import { Card } from "../../ui";
@@ -10,7 +10,7 @@ import { AssetForm, type AssetSlot } from "./branding-forms";
 export const metadata: Metadata = { title: "Crest and signature · School OS" };
 
 export default async function BrandingPage() {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(TECHNICAL);
   setTenantContext({ schoolId: auth.schoolId });
 
   const school = await prisma.school.findUnique({

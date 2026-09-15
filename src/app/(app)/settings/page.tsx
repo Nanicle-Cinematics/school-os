@@ -4,13 +4,14 @@ import { DataTable, Row, type Column } from "../primitives";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { OFFICE } from "@/lib/permissions";
+import { OFFICE, TECHNICAL, canAccess } from "@/lib/permissions";
 import { getSettings, getYearUsage } from "@/lib/settings-data";
 import { setCurrentTerm } from "@/lib/settings-actions";
 import { deleteAcademicYear } from "@/lib/term-actions";
 import { Alert, Card, PageHeader } from "../ui";
 import { SubmitButton } from "../submit-button";
-import { AcademicForm, FeesForm, ProfileForm, SmsForm } from "./settings-forms";
+import { AcademicForm, FeesForm, ProfileForm, SmsPolicyForm } from "./settings-forms";
+import { TechnicalSettings } from "./technical-settings";
 
 const COLUMNS: Column[] = [
   { label: "Year" },
@@ -35,7 +36,23 @@ const TERM_LABEL: Record<string, string> = {
 };
 
 export default async function SettingsPage() {
-  const auth = await requireRole(OFFICE);
+  const auth = await requireRole(TECHNICAL);
+
+  /**
+   * ⚠️ An IT admin gets a DIFFERENT Settings page, returned before the rest of
+   * this function loads anything.
+   *
+   * Not a conditional wrapped around the office sections lower down: that would
+   * still run getYearUsage and the grading scales for someone who may see
+   * neither, and the first person to add a card here would have to remember
+   * which side of the fence it belongs on. A separate return makes the answer
+   * to "what does this role see" one short block rather than a reading of the
+   * whole file.
+   */
+  if (!canAccess(auth.roles, OFFICE)) {
+    return <TechnicalSettings schoolId={auth.schoolId} />;
+  }
+
   const { school, settings, gradingScales, years } = await getSettings(auth.schoolId);
 
   if (!school) {
@@ -293,12 +310,18 @@ export default async function SettingsPage() {
         />
       </Card>
 
-      <Card title="SMS">
-        <SmsForm
+      <Card
+        title="Messaging"
+        action={
+          <Link href="/settings/sms" className="text-sm text-slate-500 hover:text-slate-900">
+            Gateway →
+          </Link>
+        }
+      >
+        <SmsPolicyForm
           values={{
             smsEnabled: settings?.smsEnabled ?? false,
             smsProvider: settings?.smsProvider ?? null,
-            smsSenderId: settings?.smsSenderId ?? null,
             notifyOnPayment: settings?.notifyOnPayment ?? true,
             notifyOnResultPublish: settings?.notifyOnResultPublish ?? true,
           }}

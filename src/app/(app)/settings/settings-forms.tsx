@@ -5,7 +5,8 @@ import {
   saveAcademicPolicy,
   saveFeesPolicy,
   saveSchoolProfile,
-  saveSmsSettings,
+  saveSmsGateway,
+  saveSmsPolicy,
   sendTestSms,
   type SettingsState,
   type TestSmsState,
@@ -374,22 +375,23 @@ export function FeesForm({
   );
 }
 
-export function SmsForm({
+/**
+ * The gateway wiring — provider and sender ID, plus the test send.
+ *
+ * Split from the policy form because the two have different audiences: this one
+ * is TECHNICAL (an IT admin sets it up), and whether the school texts anyone is
+ * the proprietor's decision. See TECHNICAL in permissions.ts.
+ */
+export function SmsGatewayForm({
   values,
 }: {
-  values: {
-    smsEnabled: boolean;
-    smsProvider: string | null;
-    smsSenderId: string | null;
-    notifyOnPayment: boolean;
-    notifyOnResultPublish: boolean;
-  };
+  values: { smsProvider: string | null; smsSenderId: string | null; smsEnabled: boolean };
 }) {
-  const [state, formAction] = useActionState<SettingsState, FormData>(saveSmsSettings, {});
+  const [state, formAction] = useActionState<SettingsState, FormData>(saveSmsGateway, {});
 
   return (
     <form action={formAction} className="p-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Provider">
           <select
             name="smsProvider"
@@ -412,19 +414,63 @@ export function SmsForm({
             className={inputClass}
           />
         </Field>
-
-        <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            name="smsEnabled"
-            defaultChecked={values.smsEnabled}
-            className="h-4 w-4"
-          />
-          Sending is on
-        </label>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-700">
+      <p className="mt-3 text-xs text-slate-500">
+        {values.smsEnabled
+          ? "Sending is ON. Changing the provider changes where every message goes."
+          : "Sending is off. A head or the proprietor turns it on under Settings, once this is tested."}
+      </p>
+
+      <Feedback state={state} />
+
+      <div className="mt-4">
+        <SubmitButton pendingLabel="Saving…">Save gateway</SubmitButton>
+      </div>
+
+      <TestSms />
+    </form>
+  );
+}
+
+/**
+ * Whether the school texts parents, and what triggers a text.
+ *
+ * Every message costs money, so this stays with the office even though the
+ * wiring beside it does not.
+ */
+export function SmsPolicyForm({
+  values,
+}: {
+  values: {
+    smsEnabled: boolean;
+    smsProvider: string | null;
+    notifyOnPayment: boolean;
+    notifyOnResultPublish: boolean;
+  };
+}) {
+  const [state, formAction] = useActionState<SettingsState, FormData>(saveSmsPolicy, {});
+
+  return (
+    <form action={formAction} className="p-4">
+      {!values.smsProvider ? (
+        <p className="mb-3 text-sm text-warning-ink">
+          No gateway is configured yet, so nothing would be delivered. Set the provider under
+          Settings → SMS gateway first.
+        </p>
+      ) : null}
+
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          name="smsEnabled"
+          defaultChecked={values.smsEnabled}
+          className="h-4 w-4"
+        />
+        Sending is on
+      </label>
+
+      <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-700">
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -448,10 +494,8 @@ export function SmsForm({
       <Feedback state={state} />
 
       <div className="mt-4">
-        <SubmitButton pendingLabel="Saving…">Save SMS settings</SubmitButton>
+        <SubmitButton pendingLabel="Saving…">Save messaging policy</SubmitButton>
       </div>
-
-      <TestSms />
     </form>
   );
 }

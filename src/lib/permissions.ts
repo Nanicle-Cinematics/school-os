@@ -25,6 +25,23 @@ export const OFFICE: Role[] = [...LEADERSHIP, "ADMIN"];
 export const ACCOUNT_SUPPORT: Role[] = [...OFFICE, "IT_ADMIN"];
 
 /**
+ * Who may set the school up technically — the SMS gateway, the crest and the
+ * head's signature.
+ *
+ * Split from OFFICE because /settings used to be one page holding the wiring
+ * AND the policy: the fees due-days, the arrears hold, the expense approval
+ * threshold. Handing an IT admin that page to let them configure a gateway
+ * would have handed them a finance control, so the page is now sections with
+ * different answers to "who may open this".
+ *
+ * ⚠️ The line is wiring versus decision, and it runs through SMS itself. WHICH
+ * gateway and WHAT sender ID are technical and live here. WHETHER the school
+ * texts parents at all, and whether a receipt or a published result triggers
+ * one, is the proprietor spending money on messages — that stays on OFFICE.
+ */
+export const TECHNICAL: Role[] = [...OFFICE, "IT_ADMIN"];
+
+/**
  * The end-of-term report card entry screens, and the only place a teacher goes.
  *
  * A class teacher signs in to do one job: enter the term's marks for the
@@ -138,7 +155,7 @@ export const NAV: NavSection[] = [
       { href: "/messages", label: "Messages", icon: "messages", roles: OFFICE },
       { href: "/users", label: "Users", icon: "users", roles: ACCOUNT_SUPPORT },
       { href: "/export", label: "Export", icon: "export", roles: OFFICE },
-      { href: "/settings", label: "Settings", icon: "settings", roles: [...LEADERSHIP, "ADMIN"] },
+      { href: "/settings", label: "Settings", icon: "settings", roles: TECHNICAL },
     ],
   },
 ];
