@@ -44,7 +44,23 @@ export async function createUserAccount(
   if (!email && !phone) {
     return { error: "An email address or a phone number is needed to sign in." };
   }
-  if (phone && !normalisePhone(phone)) {
+  /**
+   * ⚠️ Store the NORMALISED number, not what was typed.
+   *
+   * This validated with normalisePhone and then saved the raw string, so the
+   * stored value was whatever shape the office happened to use. Sign-in tries
+   * the typed identifier and its normalised form — which rescues a stored
+   * normalised number from any input, and cannot rescue a stored raw one. The
+   * effect was that a staff member had to type their number in exactly the
+   * format the office typed it: "024 412 3456" in the box here meant
+   * "0244123456" at the login screen was REFUSED, with the same message as a
+   * wrong password and no way to guess why.
+   *
+   * createGuardianLogin and the bulk portal invite both already stored the
+   * normalised form, which is why parents never hit this and staff did.
+   */
+  const phoneNormalised = phone ? normalisePhone(phone) : null;
+  if (phone && !phoneNormalised) {
     return { error: "That phone number is not a Ghanaian mobile number, e.g. 0244123456." };
   }
 
@@ -67,7 +83,7 @@ export async function createUserAccount(
         data: {
           name: `${staff.firstName} ${staff.lastName}`,
           email: email || null,
-          phone: phone || null,
+          phone: phoneNormalised,
           passwordHash,
           // Temporary: the layouts divert this login to /account/password.
           mustChangePassword: true,
@@ -92,7 +108,7 @@ export async function createUserAccount(
         action: "user.create",
         entity: "User",
         entityId: user.id,
-        after: { staffId, roles, email: email || null, phone: phone || null },
+        after: { staffId, roles, email: email || null, phone: phoneNormalised },
       });
     });
   } catch (error) {
