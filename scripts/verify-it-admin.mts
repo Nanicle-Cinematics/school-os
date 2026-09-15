@@ -26,8 +26,8 @@ const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const COOKIE = "school_os_session";
 const LANDING = "/users";
 
-/** The one screen the role is for. */
-const ALLOWED = ["/users"];
+/** The screens the role is for: the helpdesk one, and the technical setup. */
+const ALLOWED = ["/users", "/settings", "/settings/sms", "/settings/branding"];
 
 /** Everything else, including every screen that shows money or marks. */
 const FORBIDDEN = [
@@ -52,8 +52,10 @@ const FORBIDDEN = [
   "/expenses",
   "/messages",
   "/export",
-  "/settings",
-  "/settings/branding",
+  "/settings/terms",
+  "/settings/grading",
+  "/settings/components",
+  "/settings/structure",
   "/admin",
 ];
 
@@ -164,6 +166,46 @@ async function main() {
       "the list of logins is still readable",
       /Signs in with/i.test(page.html),
       "they can find the account to reset",
+    );
+
+    console.log("\nIt can set the school up, not set its policy");
+    /**
+     * ⚠️ The point of splitting /settings. An IT admin opening it must get the
+     * gateway and the crest, and NOT the fees policy that used to sit two cards
+     * below them — so this asserts both halves. Checking only that the page
+     * opens would pass on the version that handed them everything.
+     */
+    const settings = await get("/settings", token);
+    check("settings opens", settings.status === 200, `HTTP ${settings.status}`);
+    check(
+      "and offers the SMS gateway",
+      /SMS gateway/i.test(settings.html),
+      "the wiring is theirs",
+    );
+    check("and branding", /Crest/i.test(settings.html), "crest and signature");
+    check(
+      "but NOT the fees policy",
+      !/Days until an invoice is due/i.test(settings.html) &&
+        !/Spending that needs approval/i.test(settings.html),
+      "no due-days, no approval threshold",
+    );
+    check(
+      "nor whether the school texts parents",
+      !/Text a receipt when a payment is recorded/i.test(settings.html),
+      "messaging policy stays with the office",
+    );
+
+    const gateway = await get("/settings/sms", token);
+    check("the gateway page opens", gateway.status === 200, `HTTP ${gateway.status}`);
+    check(
+      "with a provider to set",
+      /Sender ID/i.test(gateway.html),
+      "provider and sender",
+    );
+    check(
+      "and says who turns sending on",
+      /set by the head/i.test(gateway.html),
+      "the split is explained, not just enforced",
     );
   } finally {
     await withBypass(() => prisma.session.delete({ where: { id: session.id } }));

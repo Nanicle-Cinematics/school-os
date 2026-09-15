@@ -5,7 +5,7 @@ import type { SmsProvider } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { parseAmount } from "@/lib/money";
 import { setTenantContext } from "@/lib/tenant-context";
-import { OFFICE } from "@/lib/permissions";
+import { OFFICE, TECHNICAL } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
@@ -187,22 +187,25 @@ export async function saveFeesPolicy(
   return { ok: "Fees policy saved." };
 }
 
-export async function saveSmsSettings(
+/**
+ * The gateway wiring: which provider, which sender ID.
+ *
+ * TECHNICAL, so an IT admin can set it up without also being handed the fees
+ * policy. Deliberately does NOT touch smsEnabled or the notify gates — see
+ * saveSmsPolicy, and the note on TECHNICAL for why the line falls here.
+ */
+export async function saveSmsGateway(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
-  const auth = await requireRole(OFFICE);
+  const auth = await requireRole(TECHNICAL);
   setTenantContext({ schoolId: auth.schoolId });
 
-  const smsEnabled = formData.get("smsEnabled") === "on";
   const providerRaw = String(formData.get("smsProvider") ?? "");
   const smsSenderId = String(formData.get("smsSenderId") ?? "").trim();
 
   if (providerRaw && !PROVIDERS.includes(providerRaw as SmsProvider)) {
     return { error: "Unknown SMS provider." };
-  }
-  if (smsEnabled && !providerRaw) {
-    return { error: "Pick a provider before turning SMS on." };
   }
   // Ghanaian gateways reject an alphanumeric sender longer than 11 characters,
   // and the rejection arrives per message, after the school has been billed.
@@ -210,17 +213,79 @@ export async function saveSmsSettings(
     return { error: "Sender ID can be at most 11 characters." };
   }
 
+  /**
+   * ⚠️ Clearing the provider while sending is ON is refused.
+   *
+   * The two halves of this setting now live on two screens with two different
+   * audiences, so each has to defend the invariant the other used to hold for
+   * free: SMS cannot be enabled with nothing behind it. Without this, an IT
+   * admin tidying up a provider field would leave the school "sending" into
+   * a gateway that is not there — and every text would dry-run silently, which
+   * is the failure this codebase already knows nobody notices.
+   */
+  if (!providerRaw) {
+    const current = await prisma.schoolSettings.findUnique({
+      where: { schoolId: auth.schoolId },
+      select: { smsEnabled: true },
+    });
+    if (current?.smsEnabled) {
+      return {
+        error:
+          "SMS is switched on, so it needs a provider. Ask the head to turn sending off first, or pick a provider.",
+      };
+    }
+  }
+
   await upsertSettings(auth.schoolId, {
-    smsEnabled,
     smsProvider: providerRaw ? (providerRaw as SmsProvider) : null,
     smsSenderId: smsSenderId || null,
+  });
+
+  revalidatePath("/settings");
+  revalidatePath("/settings/sms");
+  revalidatePath("/messages");
+  return { ok: "Gateway saved." };
+}
+
+/**
+ * Whether the school texts parents at all, and what triggers one.
+ *
+ * OFFICE, not TECHNICAL: every message costs the school money, so turning
+ * sending on is the proprietor's decision and not the helpdesk's.
+ */
+export async function saveSmsPolicy(
+  _prev: SettingsState,
+  formData: FormData,
+): Promise<SettingsState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const smsEnabled = formData.get("smsEnabled") === "on";
+
+  // The mirror of the refusal in saveSmsGateway. Turning sending on with no
+  // gateway configured would bill nobody and deliver nothing.
+  if (smsEnabled) {
+    const current = await prisma.schoolSettings.findUnique({
+      where: { schoolId: auth.schoolId },
+      select: { smsProvider: true },
+    });
+    if (!current?.smsProvider) {
+      return {
+        error:
+          "No SMS gateway is configured yet, so nothing would be delivered. Set the provider under Settings → SMS gateway first.",
+      };
+    }
+  }
+
+  await upsertSettings(auth.schoolId, {
+    smsEnabled,
     notifyOnPayment: formData.get("notifyOnPayment") === "on",
     notifyOnResultPublish: formData.get("notifyOnResultPublish") === "on",
   });
 
   revalidatePath("/settings");
   revalidatePath("/messages");
-  return { ok: smsEnabled ? "SMS is on." : "SMS saved — sending stays off." };
+  return { ok: smsEnabled ? "SMS is on." : "Saved — sending stays off." };
 }
 
 /**
@@ -287,7 +352,11 @@ export async function sendTestSms(
   _prev: TestSmsState,
   formData: FormData,
 ): Promise<TestSmsState> {
-  const auth = await requireRole(OFFICE);
+  // TECHNICAL: proving the wiring is the job of whoever did the wiring.
+  // It is ungated by smsEnabled on purpose, so the gateway can be checked
+  // BEFORE any parent hears from the school — and it costs one message,
+  // which is why it is not open to everyone.
+  const auth = await requireRole(TECHNICAL);
   setTenantContext({ schoolId: auth.schoolId });
 
   const phone = normalisePhone(String(formData.get("testPhone") ?? ""));
