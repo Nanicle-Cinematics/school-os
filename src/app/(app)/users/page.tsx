@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { ACCOUNT_SUPPORT, LEADERSHIP, OFFICE, canAccess, roleLabel } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE, ROLE_ADMIN, canAccess, roleLabel } from "@/lib/permissions";
 import { ASSIGNABLE_ROLES, PRIVILEGED_ROLES, getUserList } from "@/lib/user-data";
 import { Alert, PageHeader } from "../ui";
 import { UserPlus } from "lucide-react";
@@ -31,11 +31,11 @@ const ERRORS: Record<string, string> = {
 };
 
 export default async function UsersPage({ searchParams }: PageProps<"/users">) {
-  const auth = await requireRole(ACCOUNT_SUPPORT);
+  const auth = await requireRole(OFFICE);
   // Creating a login assigns a role, and an account-creating role that picks
   // its own roles can mint itself into the money. So the form is OFFICE only,
   // and an IT admin gets the list, the password resets and the suspensions.
-  const mayGrant = canAccess(auth.roles, OFFICE);
+  const mayGrant = canAccess(auth.roles, ROLE_ADMIN);
   const query = await searchParams;
   const { users, staffWithoutAccounts } = await getUserList(auth.schoolId);
   const canGrantPrivileged = canAccess(auth.roles, LEADERSHIP);

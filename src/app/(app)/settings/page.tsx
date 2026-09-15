@@ -4,7 +4,7 @@ import { DataTable, Row, type Column } from "../primitives";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { OFFICE, TECHNICAL, canAccess } from "@/lib/permissions";
+import { OFFICE, canAccess } from "@/lib/permissions";
 import { getSettings, getYearUsage } from "@/lib/settings-data";
 import { setCurrentTerm } from "@/lib/settings-actions";
 import { deleteAcademicYear } from "@/lib/term-actions";
@@ -36,7 +36,7 @@ const TERM_LABEL: Record<string, string> = {
 };
 
 export default async function SettingsPage() {
-  const auth = await requireRole(TECHNICAL);
+  const auth = await requireRole(OFFICE);
 
   /**
    * ⚠️ An IT admin gets a DIFFERENT Settings page, returned before the rest of

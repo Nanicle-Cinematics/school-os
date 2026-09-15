@@ -20,17 +20,17 @@ import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { demoSchool } from "./fixture.mjs";
-import { landingFor, isItAdminOnly } from "@/lib/permissions";
+import { landingFor } from "@/lib/permissions";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const COOKIE = "school_os_session";
-const LANDING = "/users";
+const LANDING = "/dashboard";
 
-/** The screens the role is for: the helpdesk one, and the technical setup. */
-const ALLOWED = ["/users", "/settings", "/settings/sms", "/settings/branding"];
-
-/** Everything else, including every screen that shows money or marks. */
-const FORBIDDEN = [
+/**
+ * Everything an IT admin runs the school with. Asserted by URL, not by reading
+ * the nav — a link that is merely rendered proves nothing about the guard.
+ */
+const ALLOWED = [
   "/dashboard",
   "/students",
   "/students/import",
@@ -41,21 +41,33 @@ const FORBIDDEN = [
   "/classes",
   "/subjects",
   "/assessments",
-  "/assessments/sheet",
   "/results",
-  "/results/remarks",
   "/promotions",
+  "/messages",
+  "/export",
+  "/users",
+  "/settings",
+  "/settings/sms",
+  "/settings/branding",
+  "/settings/terms",
+  "/settings/structure",
+  "/settings/grading",
+  "/settings/components",
+];
+
+/**
+ * ⚠️ The money, and nothing else.
+ *
+ * This list IS the boundary. It is expressed as routes rather than as a role
+ * set on purpose: the point of the check is that a screen guarded by FINANCE
+ * stays shut even after somebody widens a constant somewhere else.
+ */
+const FORBIDDEN = [
   "/fees",
   "/invoices",
   "/payments",
   "/payments/reconcile",
   "/expenses",
-  "/messages",
-  "/export",
-  "/settings/terms",
-  "/settings/grading",
-  "/settings/components",
-  "/settings/structure",
   "/admin",
 ];
 
@@ -129,21 +141,28 @@ async function main() {
 
   try {
     console.log("\nWhere an IT admin lands");
-    check("the role narrows the login", isItAdminOnly(["IT_ADMIN"]), "IT_ADMIN only");
-    check(
-      "a head who also holds it keeps the whole app",
-      !isItAdminOnly(["HEAD", "IT_ADMIN"]),
-      "not narrowed",
-    );
-    check("and landing is not the dashboard", landingFor(["IT_ADMIN"]) === LANDING, LANDING);
+    check("it lands on the dashboard like any office role", landingFor(["IT_ADMIN"]) === LANDING, LANDING);
 
-    console.log("\nThe one screen it reaches");
+    console.log("\nIt runs the school");
     for (const path of ALLOWED) {
       const res = await get(path, token);
       check(`${path} opens`, res.status === 200, `HTTP ${res.status}`);
     }
 
-    console.log("\nEverything else is refused");
+    /**
+     * The broadsheet takes a class and a term and calls notFound() without
+     * them, so a bare GET is 404 for a proprietor too. The thing worth
+     * asserting is that it is not REFUSED — a 307 here would mean the role
+     * cannot reach it at all.
+     */
+    const broadsheet = await get("/results/broadsheet", token);
+    check(
+      "/results/broadsheet is reachable (404 without a class, not refused)",
+      broadsheet.status !== 307 && broadsheet.status !== 302,
+      `HTTP ${broadsheet.status}`,
+    );
+
+    console.log("\nBut not the money");
     for (const path of FORBIDDEN) {
       const res = await get(path, token);
       const away = res.status === 307 || res.status === 302 || res.status === 404;
@@ -155,58 +174,55 @@ async function main() {
     check(
       "no create-login form is offered",
       !/Create login/i.test(page.html),
-      "the account form is OFFICE only",
+      "granting roles stays with the head — it is the one door that opens the money",
     );
     check(
       "and the page says who may grant instead",
       /decision for the head or the proprietor/i.test(page.html),
       "explained, not just missing",
     );
-    check(
-      "the list of logins is still readable",
-      /Signs in with/i.test(page.html),
-      "they can find the account to reset",
-    );
 
-    console.log("\nIt can set the school up, not set its policy");
+    console.log("\nAnd the dashboard tells it nothing about money");
     /**
-     * ⚠️ The point of splitting /settings. An IT admin opening it must get the
-     * gateway and the crest, and NOT the fees policy that used to sit two cards
-     * below them — so this asserts both halves. Checking only that the page
-     * opens would pass on the version that handed them everything.
+     * ⚠️ The money was gated on the tiles and the chart and NOT on the attention
+     * card, so "26 families owe GH₵24,158" reached every non-finance role. A
+     * boundary spread across call sites leaks from the one nobody listed.
      */
-    const settings = await get("/settings", token);
-    check("settings opens", settings.status === 200, `HTTP ${settings.status}`);
+    const dash = await get("/dashboard", token);
     check(
-      "and offers the SMS gateway",
-      /SMS gateway/i.test(settings.html),
-      "the wiring is theirs",
-    );
-    check("and branding", /Crest/i.test(settings.html), "crest and signature");
-    check(
-      "but NOT the fees policy",
-      !/Days until an invoice is due/i.test(settings.html) &&
-        !/Spending that needs approval/i.test(settings.html),
-      "no due-days, no approval threshold",
+      "no collections figure on the dashboard",
+      !/Collected/i.test(dash.html) && !/Outstanding/i.test(dash.html),
+      "the money tiles stay hidden",
     );
     check(
-      "nor whether the school texts parents",
-      !/Text a receipt when a payment is recorded/i.test(settings.html),
-      "messaging policy stays with the office",
+      "and the attention card names no debt",
+      !/families owe/i.test(dash.html) && !/family owes/i.test(dash.html),
+      "what is owed is finance's to see",
     );
 
-    const gateway = await get("/settings/sms", token);
-    check("the gateway page opens", gateway.status === 200, `HTTP ${gateway.status}`);
+    console.log("\nExports carry no money either");
+    const exports = await get("/export", token);
+    check("the export page opens", exports.status === 200, `HTTP ${exports.status}`);
+    /**
+     * ⚠️ Match the download LINK, not the word.
+     *
+     * The first version of this tested /Invoices/i against the whole page and
+     * failed — on the term selector's own label, "Term, for invoices, payments
+     * and results". Prose, not an offer. A guard that reports a leak which is
+     * not there costs the same afternoon as one that misses a leak that is.
+     */
     check(
-      "with a provider to set",
-      /Sender ID/i.test(gateway.html),
-      "provider and sender",
+      "but offers no invoices or payments to download",
+      !exports.html.includes("/api/export/invoices") &&
+        !exports.html.includes("/api/export/payments"),
+      "those datasets are FINANCE",
     );
     check(
-      "and says who turns sending on",
-      /set by the head/i.test(gateway.html),
-      "the split is explained, not just enforced",
+      "while the ones it may have are offered",
+      exports.html.includes("/api/export/students"),
+      "students, guardians, staff",
     );
+
   } finally {
     await withBypass(() => prisma.session.delete({ where: { id: session.id } }));
     await withBypass(() => prisma.membership.delete({ where: { id: membership.id } }));

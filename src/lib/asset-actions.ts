@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { SchoolAssetKind } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { TECHNICAL } from "@/lib/permissions";
+import { OFFICE } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 
@@ -45,9 +45,9 @@ export async function uploadSchoolAsset(
   _prev: AssetState,
   formData: FormData,
 ): Promise<AssetState> {
-  // TECHNICAL: uploading the crest is the technical half of a decision the
+  // OFFICE: uploading the crest is the technical half of a decision the
   // head has already made about what the crest IS.
-  const auth = await requireRole(TECHNICAL);
+  const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });
 
   const kind = String(formData.get("kind") ?? "") as SchoolAssetKind;
@@ -113,9 +113,9 @@ export async function uploadSchoolAsset(
 }
 
 export async function removeSchoolAsset(formData: FormData): Promise<void> {
-  // TECHNICAL: uploading the crest is the technical half of a decision the
+  // OFFICE: uploading the crest is the technical half of a decision the
   // head has already made about what the crest IS.
-  const auth = await requireRole(TECHNICAL);
+  const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });
 
   const kind = String(formData.get("kind") ?? "") as SchoolAssetKind;

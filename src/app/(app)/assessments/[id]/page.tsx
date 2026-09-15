@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP, canAccess } from "@/lib/permissions";
+import { ACADEMIC, canAccess } from "@/lib/permissions";
 import { getAssessmentForEntry } from "@/lib/assessment-data";
 import { setAssessmentStatus, deleteAssessment } from "@/lib/assessment-actions";
 import { StatusBadge } from "../../ui";
@@ -12,7 +12,7 @@ import { ScoreGrid, type Row } from "./score-grid";
 export const metadata: Metadata = { title: "Score entry · School OS" };
 
 export default async function ScoreEntryPage({ params }: PageProps<"/assessments/[id]">) {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(ACADEMIC);
   const { id } = await params;
   const data = await getAssessmentForEntry(id);
 
@@ -21,7 +21,7 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
   }
 
   const { assessment, rows } = data;
-  const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  const isLeadership = canAccess(auth.roles, ACADEMIC);
   const readOnly = assessment.status === "APPROVED";
 
   const gridRows: Row[] = rows.map((row) => ({

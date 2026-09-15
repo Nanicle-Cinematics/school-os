@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { TECHNICAL, OFFICE, canAccess } from "@/lib/permissions";
+import { OFFICE, canAccess } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { PageHeader, Card } from "../../ui";
 import { SmsGatewayForm } from "../settings-forms";
@@ -11,12 +11,12 @@ export const metadata: Metadata = { title: "SMS gateway · School OS" };
 /**
  * The gateway, on its own page.
  *
- * TECHNICAL rather than OFFICE, which is the whole reason this was split out:
+ * OFFICE rather than OFFICE, which is the whole reason this was split out:
  * an IT admin can wire up a provider and prove it with a test message without
  * being handed the fees policy that used to sit two cards above it.
  */
 export default async function SmsGatewayPage() {
-  const auth = await requireRole(TECHNICAL);
+  const auth = await requireRole(OFFICE);
   const settings = await prisma.schoolSettings.findUnique({
     where: { schoolId: auth.schoolId },
     select: { smsProvider: true, smsSenderId: true, smsEnabled: true },

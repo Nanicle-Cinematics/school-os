@@ -154,7 +154,18 @@ export type AttentionItem = {
 export async function getAttention(
   schoolId: string,
   term: { id: string; academicYearId: string } | null,
-  fees: { outstanding: number; debtorCount: number },
+  /**
+   * ⚠️ NULL for anyone outside FINANCE, and the card then says nothing about
+   * money.
+   *
+   * The dashboard already hid the collections chart and the money tiles behind
+   * `showMoney`, but this was handed the outstanding total unconditionally — so
+   * "26 families owe GH₵24,158" appeared in the attention list for a nurse, a
+   * librarian, and now an IT admin. The figure was gated in three places and
+   * leaked from the fourth, which is what a boundary spread across call sites
+   * does eventually.
+   */
+  fees: { outstanding: number; debtorCount: number } | null,
 ): Promise<AttentionItem[]> {
   const items: AttentionItem[] = [];
 
@@ -296,7 +307,7 @@ export async function getAttention(
   }
 
   // 2. Fees. Already counted for the stat cards — not queried twice.
-  if (fees.debtorCount > 0) {
+  if (fees && fees.debtorCount > 0) {
     items.push({
       kind: "fees",
       severity: "soon",

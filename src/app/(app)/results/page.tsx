@@ -3,7 +3,7 @@ import { LineChart } from "lucide-react";
 import { buttonClass } from "../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP, canAccess } from "@/lib/permissions";
+import { ACADEMIC, canAccess } from "@/lib/permissions";
 import { getResultsOverview } from "@/lib/results-data";
 import { getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
@@ -26,7 +26,7 @@ const COLUMNS: Column[] = [
 ];
 
 export default async function ResultsPage({ searchParams }: PageProps<"/results">) {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(ACADEMIC);
   const params = await searchParams;
 
   const [terms, currentTerm] = await Promise.all([getTermsForPicker(), getCurrentTerm()]);
@@ -49,7 +49,7 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
   }
 
   const overview = await getResultsOverview(termId);
-  const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  const isLeadership = canAccess(auth.roles, ACADEMIC);
   const term = terms.find((t) => t.id === termId);
 
   return (
