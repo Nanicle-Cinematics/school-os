@@ -30,10 +30,19 @@ export const ASSIGNABLE_ROLES: Role[] = [
   "LIBRARIAN",
   "HOUSE_MASTER",
   "NURSE",
+  "IT_ADMIN",
 ];
 
-/** Roles that may only be granted by someone who already holds leadership. */
-export const PRIVILEGED_ROLES: Role[] = ["OWNER", "HEAD", "ASSISTANT_HEAD"];
+/**
+ * Roles that may only be granted by someone who already holds leadership.
+ *
+ * IT_ADMIN is here despite not being a leadership role. It is the role that
+ * restores access to other people's accounts, so handing it out is a decision
+ * about who holds the keys — not a clerical one. A registrar creating helpdesk
+ * accounts at their own discretion is how the separation above quietly stops
+ * being a separation.
+ */
+export const PRIVILEGED_ROLES: Role[] = ["OWNER", "HEAD", "ASSISTANT_HEAD", "IT_ADMIN"];
 
 export async function getUserList(schoolId: string) {
   // schoolId is passed explicitly rather than left to the tenant context. RLS

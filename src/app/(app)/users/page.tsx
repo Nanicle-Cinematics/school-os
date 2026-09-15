@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP, OFFICE, canAccess, roleLabel } from "@/lib/permissions";
+import { ACCOUNT_SUPPORT, LEADERSHIP, OFFICE, canAccess, roleLabel } from "@/lib/permissions";
 import { ASSIGNABLE_ROLES, PRIVILEGED_ROLES, getUserList } from "@/lib/user-data";
 import { Alert, PageHeader } from "../ui";
 import { UserPlus } from "lucide-react";
@@ -31,7 +31,11 @@ const ERRORS: Record<string, string> = {
 };
 
 export default async function UsersPage({ searchParams }: PageProps<"/users">) {
-  const auth = await requireRole(OFFICE);
+  const auth = await requireRole(ACCOUNT_SUPPORT);
+  // Creating a login assigns a role, and an account-creating role that picks
+  // its own roles can mint itself into the money. So the form is OFFICE only,
+  // and an IT admin gets the list, the password resets and the suspensions.
+  const mayGrant = canAccess(auth.roles, OFFICE);
   const query = await searchParams;
   const { users, staffWithoutAccounts } = await getUserList(auth.schoolId);
   const canGrantPrivileged = canAccess(auth.roles, LEADERSHIP);
@@ -46,12 +50,14 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
           staffWithoutAccounts.length
         } staff without one`}
         action={
-          <NewAccountForm
-            staff={staffWithoutAccounts}
-            roles={ASSIGNABLE_ROLES}
-            privileged={PRIVILEGED_ROLES}
-            canGrantPrivileged={canGrantPrivileged}
-          />
+          mayGrant ? (
+            <NewAccountForm
+              staff={staffWithoutAccounts}
+              roles={ASSIGNABLE_ROLES}
+              privileged={PRIVILEGED_ROLES}
+              canGrantPrivileged={canGrantPrivileged}
+            />
+          ) : null
         }
       />
 
@@ -120,6 +126,13 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
             .map((person) => `${person.firstName} ${person.lastName}`)
             .join(", ")}
           {staffWithoutAccounts.length > 6 ? "…" : ""}
+        </p>
+      ) : null}
+
+      {!mayGrant ? (
+        <p className="text-xs text-slate-400">
+          You can reset a password and suspend or restore a login here. Creating an account, or
+          changing what one is allowed to do, is a decision for the head or the proprietor.
         </p>
       ) : null}
 

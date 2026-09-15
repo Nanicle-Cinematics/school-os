@@ -274,7 +274,7 @@ jobs:
           done
           echo "the app never became ready:"; cat /tmp/server.log; exit 1
 
-      - name: Role guards — a teacher and a parent see only their own screens
+      - name: Role guards — a teacher, a parent and an IT admin see only their own screens
         env:
           DB_RLS: "on"
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
@@ -282,6 +282,7 @@ jobs:
         run: |
           npm run verify:teacher
           npm run verify:parent
+          npm run verify:it-admin
 
       # A school provisioned minutes ago, walked screen by screen. This is the
       # check for onboarding dead ends — a screen that maps over an empty

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP, OFFICE, canAccess, roleLabel } from "@/lib/permissions";
+import { ACCOUNT_SUPPORT, LEADERSHIP, OFFICE, canAccess, roleLabel } from "@/lib/permissions";
 import { ASSIGNABLE_ROLES, PRIVILEGED_ROLES, getUserAccount } from "@/lib/user-data";
 import { removeUserAccess, setAccountSuspended } from "@/lib/user-actions";
 import { Card } from "../../ui";
@@ -20,7 +20,10 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 });
 
 export default async function UserDetailPage({ params }: PageProps<"/users/[id]">) {
-  const auth = await requireRole(OFFICE);
+  const auth = await requireRole(ACCOUNT_SUPPORT);
+  // Suspend and reset are the helpdesk half and stay; removing access and
+  // changing roles are grants, and belong to OFFICE.
+  const mayGrant = canAccess(auth.roles, OFFICE);
   const { id } = await params;
   const account = await getUserAccount(auth.schoolId, id);
 
@@ -69,15 +72,24 @@ export default async function UserDetailPage({ params }: PageProps<"/users/[id]"
         </dl>
       </Card>
 
-      <Card title="Roles">
-        <RolesForm
-          userId={user.id}
-          roles={ASSIGNABLE_ROLES}
-          selected={roles}
-          privileged={PRIVILEGED_ROLES}
-          canGrantPrivileged={canGrantPrivileged}
-        />
-      </Card>
+      {mayGrant ? (
+        <Card title="Roles">
+          <RolesForm
+            userId={user.id}
+            roles={ASSIGNABLE_ROLES}
+            selected={roles}
+            privileged={PRIVILEGED_ROLES}
+            canGrantPrivileged={canGrantPrivileged}
+          />
+        </Card>
+      ) : (
+        <Card title="Roles">
+          <p className="p-4 text-sm text-slate-500">
+            {roles.map((role) => roleLabel(role)).join(", ")} — changing this is a decision for the
+            head or the proprietor.
+          </p>
+        </Card>
+      )}
 
       <Card title="Password">
         <ResetPasswordForm userId={user.id} />
@@ -100,6 +112,11 @@ export default async function UserDetailPage({ params }: PageProps<"/users/[id]"
             </p>
           </form>
 
+          {/* Rendered, not hidden with a class: `hidden` leaves a working form
+              in the page for anyone who opens devtools. The action is
+              OFFICE-guarded server-side regardless — this is about not showing
+              a button that would only refuse. */}
+          {mayGrant ? (
           <form
             action={removeUserAccess}
             className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4"
@@ -114,6 +131,7 @@ export default async function UserDetailPage({ params }: PageProps<"/users/[id]"
                 : "Drops their roles at this school. The person record and anything they recorded stay."}
             </p>
           </form>
+          ) : null}
         </div>
       </Card>
     </div>

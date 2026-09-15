@@ -17,6 +17,7 @@ import {
   canAccess,
   isTeacherOnly,
   isParentOnly,
+  isItAdminOnly,
   landingFor,
   FINANCE,
 } from "@/lib/permissions";
@@ -77,7 +78,11 @@ export default async function DashboardPage() {
   // home is elsewhere has to be named explicitly — and a parent was not, so the
   // portal's first release rendered the school's attention list, collections and
   // activity feed to any guardian who typed the URL. Caught by verify:parent.
-  if (isTeacherOnly(auth.roles) || isParentOnly(auth.roles)) {
+  // ⚠️ The cost named above is why IT_ADMIN is here. It holds no listed role
+  // either, so without this line an IT admin typing /dashboard would get the
+  // attention list, the collections chart and the activity feed — the exact
+  // shape of the leak the portal's first release shipped.
+  if (isTeacherOnly(auth.roles) || isParentOnly(auth.roles) || isItAdminOnly(auth.roles)) {
     redirect(landingFor(auth.roles));
   }
   const data = await getDashboard(auth.schoolId);

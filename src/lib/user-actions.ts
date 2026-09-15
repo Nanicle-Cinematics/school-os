@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { Prisma, type Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { OFFICE, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { ACCOUNT_SUPPORT, OFFICE, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
@@ -187,7 +187,10 @@ export async function updateUserRoles(_prev: UserState, formData: FormData): Pro
 }
 
 export async function setAccountSuspended(formData: FormData): Promise<void> {
-  const auth = await requireRole(OFFICE);
+  // ACCOUNT_SUPPORT, not OFFICE: locking and unlocking a login is the helpdesk
+  // job an IT admin exists for. Creating one, changing its roles and removing
+  // it stay on OFFICE — see the note on ACCOUNT_SUPPORT.
+  const auth = await requireRole(ACCOUNT_SUPPORT);
   setTenantContext({ schoolId: auth.schoolId });
   const userId = String(formData.get("userId") ?? "");
   const suspend = String(formData.get("suspend") ?? "") === "1";
@@ -242,7 +245,7 @@ export async function resetUserPassword(
   _prev: UserState,
   formData: FormData,
 ): Promise<UserState> {
-  const auth = await requireRole(OFFICE);
+  const auth = await requireRole(ACCOUNT_SUPPORT);
   setTenantContext({ schoolId: auth.schoolId });
   const userId = String(formData.get("userId") ?? "");
   if (!userId) {
