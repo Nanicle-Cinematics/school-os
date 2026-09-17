@@ -21,7 +21,7 @@ const COLUMNS: Column[] = [
 
 // The register view drops the gender column: the section already says it, and
 // a running number in its place matches how a paper class register is ruled.
-const REGISTER_COLUMNS: Column[] = [
+const COLUMNS_2: Column[] = [
   { label: "No." },
   { label: "Admission no." },
   { label: "Name" },
@@ -33,29 +33,6 @@ type RosterEntry = Awaited<ReturnType<typeof getClassGroup>> extends infer R
     ? E
     : never
   : never;
-
-function RosterCells({ enrollment }: { enrollment: RosterEntry }) {
-  return (
-    <>
-      <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-500">
-        {enrollment.student.admissionNo}
-      </td>
-      <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
-        <Link href={`/students/${enrollment.student.id}`} className="hover:underline">
-          {enrollment.student.lastName}, {enrollment.student.firstName}
-        </Link>
-      </td>
-    </>
-  );
-}
-
-function EnrolmentCell({ enrollment }: { enrollment: RosterEntry }) {
-  return (
-    <td className="whitespace-nowrap px-4 py-2 text-slate-600">
-      {enrollment.status.toLowerCase()}
-    </td>
-  );
-}
 
 /** A "Boys (12)" band across the table, then the section's rows numbered from 1. */
 function RegisterSection({
@@ -70,15 +47,15 @@ function RegisterSection({
       <tr className="border-y border-hairline bg-slate-50">
         <th
           scope="rowgroup"
-          colSpan={REGISTER_COLUMNS.length}
-          className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wide text-slate-600"
+          colSpan={COLUMNS_2.length}
+          className="px-4 py-2 text-left text-xs font-bold text-slate-600"
         >
           {label} ({rows.length})
         </th>
       </tr>
       {rows.length === 0 ? (
         <tr>
-          <td colSpan={REGISTER_COLUMNS.length} className="px-4 py-3 text-sm text-slate-400">
+          <td colSpan={COLUMNS_2.length} className="px-4 py-3 text-sm text-slate-400">
             None
           </td>
         </tr>
@@ -88,8 +65,17 @@ function RegisterSection({
             <td className="whitespace-nowrap px-4 py-2 tabular-nums text-slate-500">
               {index + 1}
             </td>
-            <RosterCells enrollment={enrollment} />
-            <EnrolmentCell enrollment={enrollment} />
+            <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-500">
+              {enrollment.student.admissionNo}
+            </td>
+            <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
+              <Link href={`/students/${enrollment.student.id}`} className="hover:underline">
+                {enrollment.student.lastName}, {enrollment.student.firstName}
+              </Link>
+            </td>
+            <td className="whitespace-nowrap px-4 py-2 text-slate-600">
+              {enrollment.status.toLowerCase()}
+            </td>
           </Row>
         ))
       )}
@@ -206,7 +192,7 @@ export default async function ClassDetailPage({
         <div className="overflow-x-auto">
           {view === "register" ? (
             <DataTable
-              columns={REGISTER_COLUMNS}
+              columns={COLUMNS_2}
               empty={{ icon: Users, title: "No pupils placed in this class yet.", action: undefined }}
             >
               {roster.length > 0 ? (
@@ -215,7 +201,7 @@ export default async function ClassDetailPage({
                   <RegisterSection label="Girls" rows={girls} />
                   <tr className="border-t border-hairline bg-slate-50">
                     <td
-                      colSpan={REGISTER_COLUMNS.length}
+                      colSpan={COLUMNS_2.length}
                       className="px-4 py-2 text-xs font-semibold text-slate-600"
                     >
                       Total {roster.length} · {boys.length} boys · {girls.length} girls
@@ -231,11 +217,20 @@ export default async function ClassDetailPage({
             >
               {roster.map((enrollment) => (
                 <Row key={enrollment.id}>
-                  <RosterCells enrollment={enrollment} />
+                  <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-500">
+                    {enrollment.student.admissionNo}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
+                    <Link href={`/students/${enrollment.student.id}`} className="hover:underline">
+                      {enrollment.student.lastName}, {enrollment.student.firstName}
+                    </Link>
+                  </td>
                   <td className="whitespace-nowrap px-4 py-2 text-slate-600">
                     {enrollment.student.gender.toLowerCase()}
                   </td>
-                  <EnrolmentCell enrollment={enrollment} />
+                  <td className="whitespace-nowrap px-4 py-2 text-slate-600">
+                    {enrollment.status.toLowerCase()}
+                  </td>
                 </Row>
               ))}
             </DataTable>
