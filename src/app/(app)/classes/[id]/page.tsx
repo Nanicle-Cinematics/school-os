@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { Users } from "lucide-react";
 import { DataTable, Row, type Column } from "../../primitives";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { OFFICE } from "@/lib/permissions";
-import { getClassGroup } from "@/lib/class-data";
+import { canAccess, CLASS_REGISTER, OFFICE } from "@/lib/permissions";
+import { classIdsForTeacher, getClassGroup } from "@/lib/class-data";
 import { deleteClassGroup } from "@/lib/class-actions";
 import { Alert, Card } from "../../ui";
 import { SubmitButton } from "../../submit-button";
@@ -50,7 +50,7 @@ function RegisterSection({
           colSpan={COLUMNS_2.length}
           className="px-4 py-2 text-left text-xs font-bold text-slate-600"
         >
-          {label} ({rows.length})
+          {`${label} (${rows.length})`}
         </th>
       </tr>
       {rows.length === 0 ? (
@@ -120,13 +120,23 @@ export default async function ClassDetailPage({
   params,
   searchParams,
 }: PageProps<"/classes/[id]">) {
-  await requireRole(OFFICE);
+  const auth = await requireRole(CLASS_REGISTER);
+  const canEdit = canAccess(auth.roles, OFFICE);
   const { id } = await params;
   const query = await searchParams;
   const result = await getClassGroup(id);
 
   if (!result) {
     notFound();
+  }
+
+  // A teacher opens their own class and no other. Checked against the data,
+  // not the link they came from — a pasted URL must be refused the same way.
+  if (!canEdit) {
+    const own = await classIdsForTeacher(auth.staffId, result.year?.id ?? null);
+    if (!own.includes(id)) {
+      redirect("/classes");
+    }
   }
 
   const {
@@ -171,6 +181,7 @@ export default async function ClassDetailPage({
         </Alert>
       ) : null}
 
+      {canEdit ? (
       <Card title="Details">
         <EditClassForm
           levels={levels}
@@ -184,6 +195,7 @@ export default async function ClassDetailPage({
           }}
         />
       </Card>
+      ) : null}
 
       <Card
         title={year ? `Roster · ${year.name}` : "Roster"}
@@ -239,7 +251,21 @@ export default async function ClassDetailPage({
       </Card>
 
       <Card title="Who teaches what here">
-        {year ? (
+        {year && !canEdit ? (
+          <ul className="divide-y divide-hairline">
+            {subjectRows.map((row) => {
+              const teacher = teachers.find((t) => t.id === row.staffId);
+              return (
+                <li key={row.subjectId} className="flex justify-between gap-4 px-4 py-2.5 text-sm">
+                  <span className="text-slate-900">{row.name}</span>
+                  <span className="text-slate-600">
+                    {teacher ? `${teacher.firstName} ${teacher.lastName}` : "nobody yet"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : year ? (
           <AssignmentsForm
             classGroupId={classGroup.id}
             rows={subjectRows}
@@ -263,6 +289,7 @@ export default async function ClassDetailPage({
         )}
       </Card>
 
+      {canEdit ? (
       <Card title="Danger zone">
         <form action={deleteClassGroup} className="flex flex-wrap items-center gap-3 p-4">
           <input type="hidden" name="id" value={classGroup.id} />
@@ -276,6 +303,7 @@ export default async function ClassDetailPage({
           </p>
         </form>
       </Card>
+      ) : null}
     </div>
   );
 }

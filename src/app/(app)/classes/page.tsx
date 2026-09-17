@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { OFFICE } from "@/lib/permissions";
+import { canAccess, CLASS_REGISTER, OFFICE } from "@/lib/permissions";
 import { getClassSetup } from "@/lib/class-data";
 import { Alert, PageHeader } from "../ui";
 import { GraduationCap } from "lucide-react";
@@ -19,16 +19,20 @@ const COLUMNS: Column[] = [
 ];
 
 export default async function ClassesPage() {
-  const auth = await requireRole(OFFICE);
-  const { year, levels, classGroups, teachers } = await getClassSetup();
-  const canEdit = OFFICE.some((role) => auth.roles.includes(role));
+  const auth = await requireRole(CLASS_REGISTER);
+  const canEdit = canAccess(auth.roles, OFFICE);
+  // A teacher sees their own classes only; the office sees the school.
+  const { year, levels, classGroups, teachers } = await getClassSetup({
+    staffId: auth.staffId,
+    teacherOnly: !canEdit,
+  });
 
   const onRoll = classGroups.reduce((sum, group) => sum + group.enrolled, 0);
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader
-        title="Classes"
+        title={canEdit ? "Classes" : "My classes"}
         subtitle={
           year
             ? `${classGroups.length} classes · ${onRoll} enrolled in ${year.name}`
@@ -44,20 +48,22 @@ export default async function ClassesPage() {
       ) : null}
           <DataTable
             columns={COLUMNS}
-            empty={{ icon: GraduationCap, title: "No classes yet. A class is a level plus a stream — Basic 1 A, JHS 2 B.", action: undefined }}
+            empty={{
+              icon: GraduationCap,
+              title: canEdit
+                ? "No classes yet. A class is a level plus a stream — Basic 1 A, JHS 2 B."
+                : "You are not form teacher of a class, and have no subject assigned this year.",
+              action: undefined,
+            }}
           >
             {classGroups.map((group) => {
                   const over = group.capacity !== null && group.enrolled > group.capacity;
                   return (
                     <Row key={group.id}>
                       <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-900">
-                        {canEdit ? (
-                          <Link href={`/classes/${group.id}`} className="hover:underline">
-                            {group.level.name} {group.name}
-                          </Link>
-                        ) : (
-                          `${group.level.name} ${group.name}`
-                        )}
+                        <Link href={`/classes/${group.id}`} className="hover:underline">
+                          {group.level.name} {group.name}
+                        </Link>
                       </td>
                       <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">
                         {group.level.code}

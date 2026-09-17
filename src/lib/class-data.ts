@@ -29,10 +29,35 @@ export async function getTeacherOptions() {
   });
 }
 
-export async function getClassSetup() {
+/**
+ * The classes a teacher may see: the one they are form teacher of, plus any
+ * they teach a subject in THIS year. Last year's assignment does not count, for
+ * the same reason it opens no mark sheet.
+ */
+export async function classIdsForTeacher(staffId: string | null, yearId: string | null) {
+  if (!staffId) return [];
+  const formOf = await prisma.classGroup.findMany({
+    where: { formTeacherId: staffId },
+    select: { id: true },
+  });
+  const teaching = yearId
+    ? await prisma.teachingAssignment.findMany({
+        where: { staffId, academicYearId: yearId },
+        select: { classGroupId: true },
+        distinct: ["classGroupId"],
+      })
+    : [];
+  return [...new Set([...formOf.map((c) => c.id), ...teaching.map((a) => a.classGroupId)])];
+}
+
+export async function getClassSetup(options: { staffId?: string | null; teacherOnly?: boolean } = {}) {
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
   const levels = await prisma.level.findMany({ orderBy: { order: "asc" } });
+  const own = options.teacherOnly
+    ? await classIdsForTeacher(options.staffId ?? null, year?.id ?? null)
+    : null;
   const groups = await prisma.classGroup.findMany({
+    where: own ? { id: { in: own } } : undefined,
     orderBy: [{ level: { order: "asc" } }, { name: "asc" }],
     include: {
       level: { select: { id: true, name: true, code: true, order: true, stage: true } },
