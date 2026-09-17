@@ -1,5 +1,6 @@
 /**
- * Prove a class teacher can reach the report-card entry screens and nothing else.
+ * Prove a class teacher can reach the report-card entry screens and their own
+ * class register, and nothing else.
  *
  * The point is not that the nav hides the other links — a hidden link is not a
  * guard. This signs in as a teacher and asks for every route in the app by URL,
@@ -25,8 +26,8 @@ const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const COOKIE = "school_os_session";
 const LANDING = "/assessments/sheet";
 
-/** The two screens a teacher signs in to use. */
-const ALLOWED = ["/assessments/sheet", "/results/remarks"];
+/** The screens a teacher signs in to use: marking, remarks, and their register. */
+const ALLOWED = ["/assessments/sheet", "/results/remarks", "/classes"];
 
 /** Everything else reachable from the sidebar or by typing a URL. */
 const FORBIDDEN = [
@@ -36,7 +37,6 @@ const FORBIDDEN = [
   "/guardians",
   "/staff",
   "/houses",
-  "/classes",
   "/subjects",
   "/assessments",
   "/results",
@@ -150,7 +150,7 @@ async function main() {
   const sheet = await get(LANDING, token);
   const links = navLinks(sheet.html);
   const extra = links.filter((href) => !ALLOWED.includes(href));
-  check("the sidebar offers only the two marking screens", extra.length === 0,
+  check("the sidebar offers only the marking screens and the register", extra.length === 0,
     extra.length ? `also offers ${extra.join(", ")}` : links.join(", "));
 
   await withBypass(() =>
@@ -310,6 +310,16 @@ async function yearScoping() {
   check("nor does that class appear in the picker",
     !classPicker(stale.html).includes(classGroup!.id));
 
+  // The register follows the same year rule, and a pasted URL is refused, not
+  // merely unlinked.
+  const staleRegister = await get(`/classes/${classGroup!.id}`, token);
+  check("nor does that class's register open",
+    staleRegister.status >= 300 && staleRegister.status < 400,
+    `status ${staleRegister.status}`);
+  const staleList = await get("/classes", token);
+  check("and /classes lists no classes for them",
+    staleList.status === 200 && !staleList.html.includes(`/classes/${classGroup!.id}`));
+
   await withBypass(() =>
     prisma.teachingAssignment.update({
       where: { id: assignment.id },
@@ -322,6 +332,21 @@ async function yearScoping() {
     `${scores(current.html)} score inputs`);
   check("and that class appears in the picker",
     classPicker(current.html).includes(classGroup!.id));
+
+  const register = await get(`/classes/${classGroup!.id}?view=register`, token);
+  check("and its register opens, boys then girls", register.status === 200 &&
+    register.html.includes("Boys (") && register.html.includes("Girls ("),
+    `status ${register.status}`);
+  // Read-only: none of the office's forms may render for a teacher.
+  const forms = ["Save changes", "Save assignments", "Delete class"].filter((label) =>
+    register.html.includes(label));
+  check("the register is read-only for a teacher", forms.length === 0,
+    forms.length ? `renders ${forms.join(", ")}` : "no edit, assignment or delete form");
+  const currentList = await get("/classes", token);
+  check("and /classes lists that class and only theirs",
+    currentList.html.includes(`/classes/${classGroup!.id}`) &&
+      (currentList.html.match(/href="\/classes\/[a-z0-9]+"/g) ?? []).length === 1,
+    `${(currentList.html.match(/href="\/classes\/[a-z0-9]+"/g) ?? []).length} class links`);
 
   await withBypass(async () => {
     await prisma.session.deleteMany({

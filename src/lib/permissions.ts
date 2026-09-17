@@ -54,6 +54,18 @@ export const ROLE_ADMIN: Role[] = [...LEADERSHIP, "ADMIN"];
  */
 export const MARKING: Role[] = [...LEADERSHIP, "TEACHER", "IT_ADMIN"];
 
+/**
+ * The class register — the third and only other place a teacher goes.
+ *
+ * A form teacher keeps a register of their own class, boys then girls, and
+ * needs to read it without asking the office. So TEACHER may open /classes
+ * and a class page, but the page itself narrows a teacher-only user to the
+ * classes they form-teach or have a current-year assignment in
+ * (`classIdsForTeacher`), and renders read-only: every write action on a
+ * class stays OFFICE.
+ */
+export const CLASS_REGISTER: Role[] = [...OFFICE, "TEACHER"];
+
 export type NavItem = {
   href: string;
   label: string;
@@ -126,7 +138,7 @@ export const NAV: NavSection[] = [
     heading: "Academics",
     hue: "academics",
     items: [
-      { href: "/classes", label: "Classes", icon: "classes", roles: OFFICE },
+      { href: "/classes", label: "Classes", icon: "classes", roles: CLASS_REGISTER },
       { href: "/subjects", label: "Subjects", icon: "subjects", roles: OFFICE },
       { href: "/assessments/sheet", label: "Mark sheet", icon: "sheet", roles: MARKING },
       { href: "/assessments", label: "Assessments", icon: "assessments", roles: ACADEMIC },
