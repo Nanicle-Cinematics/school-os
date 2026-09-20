@@ -95,6 +95,10 @@ try {
   if (saved === "dark" || (saved !== "light" && system)) {
     document.documentElement.classList.add("dark");
   }
+  var skin = localStorage.getItem("skin");
+  if (skin === "oneui" || skin === "oxygen" || skin === "pixel") {
+    document.documentElement.dataset.skin = skin;
+  }
 } catch (e) {}
 `;
 

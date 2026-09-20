@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ThemeToggle } from "../theme-toggle";
+import { SkinPicker } from "../skin-picker";
 import { logout } from "@/lib/auth-actions";
 import { requireGuardian } from "@/lib/portal-auth";
 
@@ -44,6 +45,7 @@ export default async function PortalLayout({ children }: LayoutProps<"/">) {
             <p className="truncate text-sm font-bold text-slate-900">{ctx.name}</p>
           </div>
 
+          <SkinPicker />
           <ThemeToggle />
           <form action={logout}>
             <button
