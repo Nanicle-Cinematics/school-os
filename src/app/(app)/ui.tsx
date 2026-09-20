@@ -25,7 +25,7 @@ export function PageHeader({
     <div className="flex flex-wrap items-end justify-between gap-3 px-0.5 pb-1 pt-1">
       <div className="min-w-0">
         <SectionMark />
-        <h1 className="font-heading text-[31px] leading-[1.1] text-slate-900">
+        <h1 className="page-title font-heading text-[31px] leading-[1.1] text-slate-900">
           {title}
         </h1>
         {subtitle ? (
@@ -57,7 +57,7 @@ export function Card({
     <section className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
       {title ? (
         <div className="flex items-center justify-between border-b border-hairline px-4.5 py-4">
-          <h2 className="text-[14.5px] font-extrabold tracking-tight text-slate-900">
+          <h2 className="card-title text-[14.5px] font-extrabold tracking-tight text-slate-900">
             {title}
           </h2>
           {action}

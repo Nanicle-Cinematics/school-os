@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import { navFor, roleLabel } from "@/lib/permissions";
 import { canSearch } from "@/lib/search-data";
 import { ThemeToggle } from "../theme-toggle";
+import { SkinPicker } from "../skin-picker";
 import { logout } from "@/lib/auth-actions";
 import { prisma } from "@/lib/prisma";
 import { Sidebar, MobileNav, SectionTint, type RailTerm } from "./nav";
@@ -128,6 +129,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
                 Nanicle console
               </Link>
             ) : null}
+            <SkinPicker className="print:hidden" />
             <ThemeToggle className="print:hidden" />
             <form action={logout}>
               <button

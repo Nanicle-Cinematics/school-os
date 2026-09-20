@@ -987,6 +987,18 @@ opens with a white flash, worst at night, which is when the setting is for. The
 toggle reads that class with `useSyncExternalStore` rather than copying it into
 state.
 
+**Skins (2026-09-20).** `data-skin` on `<html>` — `oneui`, `oxygen`, `pixel`, or
+absent for Classic — is the same mechanism as `.dark` and composes with it: a
+skin re-cuts SHAPE, TYPE and SURFACE tokens (radii, shadows, materials, the
+`--text-*` scale, `--color-surface`/`slate-50`), light/dark keeps deciding
+colour. The blocks live under "SKINS" in globals.css; THEME_SCRIPT restores the
+choice before paint; `SkinPicker` (skin-picker.tsx) sits beside `ThemeToggle` in
+both layouts. The brand green is untouched in every skin on purpose — Pixel is
+Material You seeded from the brand, not purple. The two shared headings in
+`ui.tsx` carry `.card-title` / `.page-title` hooks so a skin can restyle them
+without touching a screen; add the hook, never a `[data-skin]` selector, to a
+screen file. `SHOT_SKIN=oneui npm run shots` captures a skin.
+
 ⚠️ **`npm run shots` and `shots:portal` reuse one Chrome profile**, so they now
 always write `theme` to localStorage rather than only when dark — a dark run
 otherwise leaves the setting behind and the next light run silently captures dark

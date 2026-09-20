@@ -81,6 +81,8 @@ await send("Network.setCookie", {
 // The theme is a class on <html> set from localStorage before paint, so seed
 // the storage the same way a person's first press would.
 //
+// The skin (SHOT_SKIN=classic|oneui|oxygen|pixel) is seeded the same way.
+//
 // ⚠️ ALWAYS set it, never just when dark. The profile directory is reused
 // between runs, so a dark capture left "theme=dark" behind and the next light
 // run silently shot dark screens — which is a very convincing way to verify the
@@ -88,7 +90,7 @@ await send("Network.setCookie", {
 await send("Page.addScriptToEvaluateOnNewDocument", {
   source: `try { localStorage.setItem("theme", ${
     process.env.SHOT_THEME === "dark" ? '"dark"' : '"light"'
-  }); } catch (e) {}`,
+  }); localStorage.setItem("skin", ${JSON.stringify(process.env.SHOT_SKIN ?? "classic")}); } catch (e) {}`,
 });
 
 const shots = [
