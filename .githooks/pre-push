@@ -1,0 +1,17 @@
+#!/bin/sh
+#
+# Run the source-only guards before a push.
+#
+# Opt-in, installed with `npm run hooks:install`. It runs the FAST tier only —
+# about forty seconds — because a gate that takes fifteen minutes is a gate
+# people learn to skip, and a skipped gate protects nothing.
+#
+# It catches the class of mistake that has actually reached CI from here: a
+# hand-rolled table where a DataTable was required, an uppercase label, a colour
+# straight from Tailwind instead of a token. The database-backed guards still
+# need `npm run check` before you open a pull request — the hook says so when it
+# passes.
+#
+# To push past it deliberately: git push --no-verify
+set -e
+npm run check:fast
