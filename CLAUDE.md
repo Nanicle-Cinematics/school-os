@@ -521,6 +521,13 @@ Amoah") while `verify:activity` sat in package.json with the answer in it. All
 four are in CI now. The same lesson as forcing a guard red before trusting it:
 a check nobody observes is a check that does not exist.
 
+And then it happened twice more, which is why `check.mts` now derives the list
+from the workflow rather than trusting anyone to remember. `verify:platform:sql`
+was the worse of the two: it proves the generated delete-a-school SQL takes the
+school's own logins and nothing else. Re-introducing the first draft's bug — a
+sweep of every orphan in the database — fails two of its checks, and one of them
+is **the platform admin's own account**.
+
 `verify:activity` also only walked `src/lib`, so an audit written from a ROUTE
 was invisible to it — which is exactly how `data.export` slipped past. It walks
 `src/app` too now.
@@ -559,7 +566,9 @@ is edited alone.
 
 **`verify:export:route` needs a dev server** and covers what the loaders cannot:
 the role refusal, the file headers, the audit row, and that the CSV has rows
-under the header. Two of its checks were vacuous when first written and both were
+under the header. It runs in CI against the built app, in the phase that already
+boots one. Forced red by disabling the role check: a teacher was handed all six
+datasets with a 200, and 7 of its 53 assertions failed. Two of its checks were vacuous when first written and both were
 caught by forcing them red — the audit count passed with auditing removed because
 28 rows from earlier runs already satisfied it, so it now counts only rows
 created since the run began.
@@ -1366,7 +1375,15 @@ adds a step to one and not the other, and the copy that is wrong is always the
 one you are looking at. It also derives, from the workflow's own ordering, which
 guards need the app running — anything after *Start the built app* — and refuses
 to look successful if a `verify:*` script exists that CI never runs. It found two
-on the day it was written: `verify:export:route` and `verify:platform:sql`.
+on the day it was written: `verify:export:route` and `verify:platform:sql`. Both
+are wired into CI now — 70 assertions that no pipeline had ever executed.
+
+⚠️ **That refusal printed its warning and then exited 0**, so the finding it
+reported on day one survived a green run and a merge. A check that names a
+problem and then says everything is fine is the thing it is complaining about;
+it fails the run now, in `--fast` too, since it costs nothing to evaluate
+(`package.json` and `ci.yml`, both already read) and the pre-push hook should
+catch it. Forced red by un-wiring one guard: exit 1, naming it.
 
 **The two tiers are not arbitrary.** A guard invoked with `--env-file=.env`
 reads the database; one without it reads only source. That is what the command

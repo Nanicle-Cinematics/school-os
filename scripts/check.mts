@@ -141,16 +141,29 @@ for (const failure of failures) {
   );
 }
 
+// This one FAILS rather than warning, which it did not when it was written: it
+// printed the ⚠️ line and still exited 0, so the finding it reported on day one
+// — `verify:export:route` and `verify:platform:sql`, two guards no pipeline had
+// ever executed — sat there past a green run and a merge. A check that reports
+// a problem and then says everything is fine is the thing it is complaining
+// about. It costs nothing to evaluate (package.json and ci.yml, both already
+// read), so it fails in `--fast` too and the pre-push hook catches it.
 if (neverRun.length > 0) {
   console.log(
     `\n⚠️  ${neverRun.length} guard(s) exist that ci.yml never runs: ${neverRun.join(", ")}`,
   );
   console.log("    Either add them to the workflow or delete them — an unrun guard is a comment.");
+  process.exitCode = 1;
 }
 
 if (failures.length > 0) {
   console.log(`\n${failures.length} check(s) failed. CI would have said the same.`);
   process.exitCode = 1;
+} else if (neverRun.length > 0) {
+  // Every check that RAN passed, so saying "all green" here would be true and
+  // useless — the run is still a failure, and the summary line is the part
+  // people read.
+  console.log("\nEvery check that ran passed, but the unrun guard(s) above fail this run.");
 } else if (fast) {
   console.log(
     `\nAll green on the source-only guards. The database-backed ones have NOT run — ` +
