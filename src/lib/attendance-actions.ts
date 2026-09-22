@@ -224,7 +224,7 @@ export async function deleteRegister(formData: FormData): Promise<void> {
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,
-      action: "attendance.deleteDay",
+      action: "attendance.day.remove",
       entity: "ClassGroup",
       entityId: classGroupId,
       before: { date: String(formData.get("date")), termId: day.termId },

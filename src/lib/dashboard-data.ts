@@ -556,6 +556,23 @@ const ACTIVITY: Record<
     title: (a) => `${count(a.students)} ${plural(a.students, "pupil")} moved up a year`,
     detail: "Promotions",
   },
+  /* The number that matters in a register is who was NOT there — a line saying
+     "the register was taken" tells a head nothing they could act on. */
+  "attendance.register": {
+    kind: "academic",
+    title: (a) => {
+      const away = Number(a.absent ?? 0) + Number(a.excused ?? 0);
+      return away > 0
+        ? `${count(away)} ${plural(away, "pupil")} away`
+        : "A full register — everybody in";
+    },
+    detail: "Attendance",
+  },
+  "attendance.day.remove": {
+    kind: "academic",
+    title: () => "A day's register was removed",
+    detail: "Attendance",
+  },
   "user.create": { kind: "admin", title: () => "A staff login was created", detail: "Users" },
   "user.roles": { kind: "admin", title: () => "Someone's roles changed", detail: "Users" },
   "term.update": { kind: "admin", title: () => "Term dates changed", detail: "Settings" },
