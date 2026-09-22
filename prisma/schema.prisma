@@ -137,12 +137,15 @@ model School {
   campaigns        MessageCampaign[]
   messages         Message[]
 
+  attendanceDays    AttendanceDay[]
+  attendanceEntries AttendanceEntry[]
+  fileAttachments   FileAttachment[]
+  budgets           Budget[]
+  paymentPlans      PaymentPlan[]
+  planInstalments   PaymentPlanInstalment[]
+  statementLines    StatementLine[]
+
   @@index([plan, subscriptionStatus])
-  fileAttachments     FileAttachment[]
-  budgets             Budget[]
-  paymentPlans        PaymentPlan[]
-  planInstalments     PaymentPlanInstalment[]
-  statementLines      StatementLine[]
 }
 
 /// A school's crest, logo or the head's signature, stored as bytes.
@@ -247,11 +250,11 @@ model PaymentPlan {
 /// be a second opinion about the same money, and this codebase has already
 /// learnt what happens when a status rots beside the ledger that moved on.
 model PaymentPlanInstalment {
-  id     String      @id @default(cuid())
+  id       String      @id @default(cuid())
   schoolId String
-  school   School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  planId String
-  plan   PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  school   School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  planId   String
+  plan     PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   sequence Int
   dueDate  DateTime
@@ -350,9 +353,9 @@ model SchoolSettings {
   // Free text printed on every bill: momo number, bank account, who to pay and
   // where. Deliberately not modelled as fields — schools use momo, a bank, the
   // bursar's window or all three, and the arrangement changes without warning.
-  paymentInstructions  String?
+  paymentInstructions      String?
   // Printed under the total, e.g. "Fees are payable in full by the third week."
-  invoiceNote          String?
+  invoiceNote              String?
 
   // SMS
   smsProvider           SmsProvider?
@@ -443,10 +446,10 @@ model User {
   createdCampaigns  MessageCampaign[]
   recordedExpenses  Expense[]         @relation("ExpenseRecordedBy")
   approvedExpenses  Expense[]         @relation("ExpenseApprovedBy")
+  budgetsSet        Budget[]          @relation("BudgetSetBy")
+  plansAgreed       PaymentPlan[]     @relation("PlanAgreedBy")
 
   @@index([schoolId])
-  budgetsSet   Budget[]      @relation("BudgetSetBy")
-  plansAgreed  PaymentPlan[] @relation("PlanAgreedBy")
 }
 
 // One login can hold several roles in a school (Head who also teaches), and a
@@ -607,9 +610,11 @@ model Term {
   feeStructures  FeeStructure[]
   expenses       Expense[]
 
+  attendanceDays AttendanceDay[]
+  budgets        Budget[]
+
   @@unique([academicYearId, sequence])
   @@index([schoolId])
-  budgets        Budget[]
 }
 
 // A rung on the ladder: "Basic 5", "JHS 2", "SHS 1".
@@ -657,6 +662,8 @@ model ClassGroup {
   subjectResults      SubjectResult[]
   termResults         TermResult[]
   teachingAssignments TeachingAssignment[]
+
+  attendanceDays AttendanceDay[]
 
   @@unique([schoolId, levelId, name])
   @@index([schoolId])
@@ -823,6 +830,8 @@ model Student {
   discounts      StudentDiscount[]
   messages       Message[]
 
+  attendanceEntries AttendanceEntry[]
+
   @@unique([schoolId, admissionNo])
   @@index([schoolId, status])
   @@index([schoolId, currentClassGroupId])
@@ -933,6 +942,8 @@ model Staff {
   enteredScores       Score[]              @relation("ScoreEnteredBy")
   subjectResults      SubjectResult[]
   messages            Message[]
+
+  registersTaken AttendanceDay[] @relation("RegisterTakenBy")
 
   @@unique([schoolId, staffNo])
   @@index([schoolId, status])
@@ -1248,6 +1259,70 @@ model TermResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ATTENDANCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AttendanceMark {
+  PRESENT
+  LATE // in school, late — counts present, but the office can see it
+  EXCUSED // away with a reason the school accepts — counts absent, with a note
+  ABSENT
+}
+
+/// One row per class per DAY: the register was taken.
+///
+/// Separate from the marks on purpose, because the report card's denominator is
+/// "days the register was taken", and that has to be a fact the database holds
+/// rather than something inferred from how many children happen to have marks.
+/// A day nobody marked produces no row, and therefore costs nobody an absence —
+/// the same principle as a subject nobody assessed not inventing a score.
+model AttendanceDay {
+  id           String     @id @default(cuid())
+  schoolId     String
+  school       School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  termId       String
+  term         Term       @relation(fields: [termId], references: [id], onDelete: Cascade)
+  classGroupId String
+  classGroup   ClassGroup @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+
+  /// The school day itself. A date, not a timestamp: a register belongs to a
+  /// day, and storing 00:00 in one timezone is how a Monday becomes a Sunday.
+  date DateTime @db.Date
+
+  takenByStaffId String?
+  takenBy        Staff?  @relation("RegisterTakenBy", fields: [takenByStaffId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries AttendanceEntry[]
+
+  @@unique([classGroupId, date])
+  @@index([schoolId, termId, classGroupId])
+}
+
+/// What one child was marked on one day.
+model AttendanceEntry {
+  id              String        @id @default(cuid())
+  schoolId        String
+  school          School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  attendanceDayId String
+  attendanceDay   AttendanceDay @relation(fields: [attendanceDayId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  mark AttendanceMark
+  /// Why, for an excused absence. Printed nowhere; read by the office.
+  note String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([attendanceDayId, studentId])
+  @@index([schoolId, studentId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FEES & PAYMENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1364,12 +1439,12 @@ model Invoice {
 
   items       InvoiceItem[]
   allocations PaymentAllocation[]
+  paymentPlan PaymentPlan?
 
   @@unique([schoolId, invoiceNo])
   @@unique([studentId, termId])
   @@index([schoolId, status])
   @@index([schoolId, termId])
-  paymentPlan PaymentPlan?
 }
 
 model InvoiceItem {
@@ -1504,12 +1579,12 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  allocations PaymentAllocation[]
+  allocations   PaymentAllocation[]
+  statementLine StatementLine?
 
   @@unique([schoolId, receiptNo])
   @@index([schoolId, paidAt])
   @@index([schoolId, studentId])
-  statementLine StatementLine?
 }
 
 // A payment can settle several invoices (this term plus arrears).
@@ -1552,10 +1627,10 @@ model ExpenseCategory {
   updatedAt DateTime @updatedAt
 
   expenses Expense[]
+  budgets  Budget[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
-  budgets  Budget[]
 }
 
 enum ExpenseStatus {

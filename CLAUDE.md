@@ -20,8 +20,10 @@ Shipping Phases 1–3 plus SMS:
 3. **Academics** — assessments, score entry, results computation, report cards
 4. **SMS** — bulk campaigns (by class, level, debtors) and transactional triggers
 
-Not modelled yet: timetable, attendance, admissions, library, boarding,
-transport, health, payroll. Single-campus by design — there is no `Branch` model.
+Plus **attendance** — a daily register per class, feeding the report card.
+
+Not modelled yet: timetable, admissions, library, boarding, transport, health,
+payroll. Single-campus by design — there is no `Branch` model.
 
 ## Gotchas
 
@@ -661,13 +663,73 @@ is never re-decided behind the office's back.
 pass mark above the best mark in the class must repeat the whole class, and the
 first term must leave every row `PENDING`.
 
-## A class teacher sees two screens
+## The register, and the day nobody marked it
 
-A teacher signs in to do one job — enter the term's marks for the subjects they
-teach, and write the conduct and remark for their class — so `TEACHER` appears
-on exactly two routes, `/assessments/sheet` and `/results/remarks`, and nowhere
-else. That is the whole mechanism: `requireRole` then refuses every other page
-without a separate list of prohibitions to keep in step with the app.
+Attendance is a **daily** mark per child, taken by the form teacher on
+`/attendance`: Present, Late, Excused or Absent. Late counts as present and
+stays visible to the office; Excused counts as absent and carries a reason. One
+register per class per day, enforced by a unique index, so re-marking in the
+afternoon corrects the morning instead of opening a second one.
+
+**Two tables, and the second is why the first exists.** `AttendanceDay` records
+that the register *was taken* for a class on a date; `AttendanceEntry` hangs the
+marks off it. The report card's denominator is "days the register was taken", and
+that has to be a fact the database holds rather than something inferred from how
+many children happen to have a mark — otherwise a day the teacher forgot is
+indistinguishable from a day everyone was absent, and **the school's own
+negligence prints as the child's attendance record**. A day nobody marked
+produces no row and costs nobody an absence, exactly as a subject nobody
+assessed invents no score.
+
+**The denominator is per CHILD, not per class.** A child who joined in October is
+marked out of the days they were actually here. That falls out of counting their
+own entries rather than the class's days, and it is what makes a mid-term
+admission read honestly.
+
+`syncAttendanceTotals` (in `attendance-engine.ts`, *not* the actions file — every
+export of a `"use server"` module is a callable endpoint, and this one takes a
+transaction handle) writes `TermResult.daysPresent/daysTotal` on every save. It
+runs only for a class whose register has actually been taken: a school still
+keeping paper must not have its typed-in figures wiped by a module it has not
+started using. `/results/remarks` asks the same question and renders those two
+boxes read-only once the register exists, and `saveClassRemarks` drops the typed
+values rather than letting a stale form field overwrite a derived number the
+teacher never touched.
+
+Deleting a day is `LEADERSHIP` only and recounts afterwards, or the card keeps a
+deleted day in its denominator.
+
+`npm run verify:attendance` covers it, and runs in CI **after the app starts**
+because half of it drives the real `saveRegister` over HTTP — `mayMark`, the term
+lookup and the roster check live behind `requireRole` and are unreachable from
+engine code. Two forced reds: an absurd figure on a PUBLISHED card must survive
+the sync and then be corrected once unpublished, and a class with no register
+must come back `{students: 0, days: 0}` with its hand-typed 42 of 50 intact.
+
+⚠️ Writing that HTTP half found two traps worth knowing before you write another
+one. "Remove this day" is also a form and also carries `classGroupId`, and it
+renders *first* — a loose form match posted to `deleteRegister` and destroyed the
+day it meant to mark. And a plain `action={fn}` form carries `$ACTION_ID`, while
+one driven by `useActionState` carries `$ACTION_REF_n` plus encrypted bound args
+instead, so matching on `$ACTION_ID` excludes exactly the forms that matter.
+
+## A class teacher sees three screens
+
+A teacher signs in to do a small, fixed job — enter the term's marks for the
+subjects they teach, write the conduct and remark for their class, and take the
+daily register — so `TEACHER` appears on exactly three routes,
+`/assessments/sheet`, `/results/remarks` and `/attendance`, plus a read-only
+`/classes`, and nowhere else. That is the whole mechanism: `requireRole` then
+refuses every other page without a separate list of prohibitions to keep in step
+with the app.
+
+⚠️ `/attendance` is the **one place a plain teacher writes about a class**, and
+it is a deliberate exception to the rule below that every write on a class stays
+`OFFICE`. Routing the register through the office would mean forty slips of
+paper walking down a corridor every morning, which is the thing it replaces. The
+role list is only the outer door; `mayMark` in `attendance-actions.ts` is the
+inner one, narrowing a teacher to the classes they form-teach or have a
+current-year assignment in.
 
 - **`MARKING`** (in `permissions.ts`) is those two screens and their actions —
   `openSheet`, `saveSheet`, `saveClassRemarks`. Everything else that used to be

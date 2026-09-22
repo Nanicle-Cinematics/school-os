@@ -25,6 +25,7 @@
     "recompute": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/recompute-results.mts",
     "recompute:prod": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.prod scripts/recompute-results.mts",
     "verify:results": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-results.mts",
+    "verify:attendance": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-attendance.mts",
     "verify:sms": "tsx scripts/verify-sms.mts",
     "verify:audience": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-audience.mts",
     "verify:isolation": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-isolation.mts",

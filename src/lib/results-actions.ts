@@ -283,12 +283,27 @@ export async function saveClassRemarks(
     return { error: "Nothing to save." };
   }
 
+  /**
+   * Once the register is being taken, it owns the attendance figures.
+   *
+   * These two fields were hand-typed before the attendance module existed and
+   * the inputs are still on screen for a school that has not started marking.
+   * For a class that HAS, a stale number in a form field would silently
+   * overwrite the derived one on save — the teacher would not even have
+   * touched it. So the class is asked, and the typed values are dropped.
+   */
+  const registerTaken = await prisma.attendanceDay.count({
+    where: { termId, classGroupId },
+  });
+  const derived = registerTaken > 0;
+
   let written = 0;
   await tenantTransaction(
     auth.schoolId,
     async (tx) => {
       for (const row of rows) {
-        const { studentId, ...fields } = row;
+        const { studentId, daysPresent, daysTotal, ...rest } = row;
+        const fields = derived ? rest : { ...rest, daysPresent, daysTotal };
         // upsert, not update: these are written during the term, before
         // computeResults has created any TermResult row to update.
         await tx.termResult.upsert({
@@ -305,12 +320,13 @@ export async function saveClassRemarks(
         action: "results.classRemarks",
         entity: "ClassGroup",
         entityId: classGroupId,
-        after: { termId, students: written },
+        after: { termId, students: written, attendanceFromRegister: derived },
       });
     },
     { timeout: 120_000, maxWait: 20_000 },
   );
 
   revalidatePath("/results/remarks");
-  return { ok: `Saved for ${written} student${written === 1 ? "" : "s"}.` };
+  const note = derived ? " Attendance comes from the register and was left alone." : "";
+  return { ok: `Saved for ${written} student${written === 1 ? "" : "s"}.${note}` };
 }
