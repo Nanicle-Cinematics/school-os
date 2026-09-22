@@ -22,6 +22,8 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "db:verify": "node --env-file=.env scripts/verify-seed.mjs",
+    "recompute": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/recompute-results.mts",
+    "recompute:prod": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env.prod scripts/recompute-results.mts",
     "verify:results": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-results.mts",
     "verify:sms": "tsx scripts/verify-sms.mts",
     "verify:audience": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-audience.mts",
