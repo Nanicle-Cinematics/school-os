@@ -1344,6 +1344,45 @@ layout already had to learn.
 shows its empty state on a freshly seeded database. That is correct, not broken.
 To see it populated, insert rows and delete them again.
 
+## Before you push
+
+```
+npm run check:fast     # source-only guards, ~40s
+npm run check          # every offline guard, CI's own order (~15 min on this link)
+npm run check -- --http  # plus the app-backed ones, with the app running
+npm run hooks:install  # once: check:fast runs before every push
+```
+
+⚠️ **The guards below were all here, all passing, and none of them ran until a
+push.** One pull request went red in CI three times — a hand-rolled table where
+`DataTable` was required, an uppercase label, two audited actions with no phrase
+— and every one of those answers was sitting in a script on this machine the
+whole time. A check nobody runs is a check that does not exist, and "remember to
+run them" had already been the plan.
+
+`scripts/check.mts` **reads the list out of `.github/workflows/ci.yml`** rather
+than keeping its own. A second copy of "what we check" drifts the moment someone
+adds a step to one and not the other, and the copy that is wrong is always the
+one you are looking at. It also derives, from the workflow's own ordering, which
+guards need the app running — anything after *Start the built app* — and refuses
+to look successful if a `verify:*` script exists that CI never runs. It found two
+on the day it was written: `verify:export:route` and `verify:platform:sql`.
+
+**The two tiers are not arbitrary.** A guard invoked with `--env-file=.env`
+reads the database; one without it reads only source. That is what the command
+already says, so `--fast` cannot fall out of step the way a hand-kept list of
+"the quick ones" would. It matters because the database is in Frankfurt: the
+source-only guards take about a second each, the database-backed ones up to
+three minutes. Hence a forty-second gate before every push and a full run before
+opening a pull request — a gate that takes fifteen minutes is one people learn
+to skip, and a skipped gate protects nothing.
+
+⚠️ **Do not pipe a verify script through `head` or `grep`.** Closing the pipe
+SIGPIPEs it before its own cleanup runs, which leaves `entityId: "verify"` rows
+behind and fails the NEXT run's final assertion on work that was never wrong.
+`check.mts` captures output instead of piping it, for exactly this reason.
+Redirect to a file if you need to read one directly.
+
 ## Verification scripts
 
 There is no test runner yet; these scripts exercise the real engine code against
