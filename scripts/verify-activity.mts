@@ -55,7 +55,7 @@ function walk(dir: string): string[] {
  */
 const written = new Set<string>();
 for (const file of [...walk("src/lib"), ...walk("src/app")]) {
-  for (const m of readFileSync(file, "utf8").matchAll(/action: "([a-z][a-z.]+)"/g)) {
+  for (const m of readFileSync(file, "utf8").matchAll(/action: "([a-z][A-Za-z.]+)"/g)) {
     written.add(m[1]);
   }
 }
@@ -79,6 +79,16 @@ const rows: { action: string; after: unknown; expect: RegExp }[] = [
   { action: "student.import", after: { created: 12 }, expect: /^12 pupils imported$/ },
   { action: "campaign.send", after: { recipients: 312 }, expect: /312 recipients/ },
   { action: "promotion.run", after: { students: 26 }, expect: /26 pupils moved up/ },
+  // The skipped half of a billing run is the half worth reading, so both
+  // branches are pinned rather than just the happy one.
+  { action: "invoice.generateBatch", after: { created: 180, skipped: 40 }, expect: /^180 invoices generated, 40 skipped$/ },
+  { action: "invoice.generateBatch", after: { created: 1, skipped: 0 }, expect: /^1 invoice generated$/ },
+  // The most frequent write in the app, and until now the feed had no words
+  // for it at all.
+  { action: "score.saveSheet", after: { marked: 40 }, expect: /^40 marks entered$/ },
+  { action: "attendance.register", after: { absent: 3, excused: 1 }, expect: /^4 pupils away$/ },
+  { action: "attendance.register", after: { absent: 0, excused: 0 }, expect: /everybody in/ },
+  { action: "feeCategory.create", after: { name: "PTA Levy" }, expect: /PTA Levy.*fee item/ },
 ];
 
 const created: string[] = [];

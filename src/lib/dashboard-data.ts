@@ -502,6 +502,45 @@ const ACTIVITY: Record<
   },
   "expense.cancel": { kind: "money", title: () => "An expense was cancelled", detail: "Cash book" },
   "invoice.cancel": { kind: "money", title: () => "An invoice was cancelled", detail: "Fees" },
+  /* The skipped count is the interesting half: a batch that billed 180 and
+     skipped 40 is a question, and a feed that only said "180 invoices" would
+     hide it. */
+  "invoice.generateBatch": {
+    kind: "money",
+    title: (a) => {
+      const created = count(a.created);
+      const skipped = Number(a.skipped);
+      const head = `${created} ${plural(a.created, "invoice")} generated`;
+      return Number.isFinite(skipped) && skipped > 0 ? `${head}, ${skipped} skipped` : head;
+    },
+    detail: "Fees",
+  },
+  "feeCategory.create": {
+    kind: "money",
+    title: (a) => {
+      const name = text(a.name);
+      return name ? `“${name}” was added as a fee item` : "A fee item was added";
+    },
+    detail: "Fees",
+  },
+  "feeCategory.update": {
+    kind: "money",
+    title: (a) => {
+      const name = text(a.name);
+      return name ? `The “${name}” fee item was changed` : "A fee item was changed";
+    },
+    detail: "Fees",
+  },
+  "feeCategory.delete": {
+    kind: "money",
+    title: () => "A fee item was removed",
+    detail: "Fees",
+  },
+  "feeStructure.delete": {
+    kind: "money",
+    title: () => "A fee structure was removed",
+    detail: "Fees",
+  },
   "guardian.login.create": {
     kind: "people",
     title: (a) => `${text(a.guardianName) ?? "A guardian"} was given a parent portal login`,
@@ -539,6 +578,25 @@ const ACTIVITY: Record<
     detail: "Academics",
   },
   "results.remarks": { kind: "academic", title: () => "Conduct and remarks saved", detail: "Academics" },
+  "results.classRemarks": {
+    kind: "academic",
+    title: (a) => `Conduct and remarks saved for ${count(a.students)} ${plural(a.students, "pupil")}`,
+    detail: "Academics",
+  },
+  /* Marks, phrased by how many landed rather than by the screen they came from
+     — a head reading the feed cares that Basic 5 got marked, not which of the
+     two entry screens did it. `cleared` is deliberately absent: a teacher
+     blanking a mistyped mark is not news. */
+  "score.saveSheet": {
+    kind: "academic",
+    title: (a) => `${count(a.marked)} ${plural(a.marked, "mark")} entered`,
+    detail: "Mark sheet",
+  },
+  "score.saveBatch": {
+    kind: "academic",
+    title: (a) => `${count(a.entered)} ${plural(a.entered, "mark")} entered`,
+    detail: "Assessment",
+  },
   "assessment.create": { kind: "academic", title: () => "An assessment was created", detail: "Academics" },
   "assessment.status": { kind: "academic", title: () => "An assessment was locked or reopened", detail: "Academics" },
   "assessment.delete": { kind: "academic", title: () => "An assessment was deleted", detail: "Academics" },
