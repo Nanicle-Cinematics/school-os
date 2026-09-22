@@ -148,6 +148,22 @@ jobs:
       - name: Subscriptions — read-only enforcement
         run: npm run verify:platform
 
+      # Deleting a school is done by pasting generated SQL into the Supabase
+      # editor, against a database this machine cannot reach — so the only
+      # moment it could be checked by running it is the moment it is too late.
+      # This builds the same situation here, runs the text the command itself
+      # printed (captured from its stdout, never retyped), and looks at what
+      # survived. The bystanders are the point: the connected version's first
+      # draft swept every orphan in the database rather than this school's own,
+      # and only a deliberate unrelated account caught it.
+      #
+      # Safe beside the seeded school: it creates and removes its own
+      # `zzz-sql-*` fixtures and touches nothing else. It runs before the RLS
+      # steps because the generated SQL is written for the OWNER connection,
+      # which is who the Supabase editor is.
+      - name: Deleting a school — the pasted SQL does what the command does
+        run: npm run verify:platform:sql
+
       # Every switch in /settings does something. Four of them did not:
       # blockReportOnArrears promised to withhold report cards and withheld
       # nothing, and the two position toggles printed regardless. The field list
@@ -338,6 +354,20 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:actions
+
+      # `verify:export` above exercises the loaders and the CSV writer. It
+      # cannot see the things that exist only on the route: the role refusal,
+      # the tenant context, the headers that make a browser save a file, and
+      # the audit row. Those are the parts that fail QUIETLY — a forgotten
+      # `setTenantContext` returns a header with no rows, which reads to a
+      # school as "we have no students", and a missing role check hands a
+      # teacher the whole register with a 200.
+      - name: Export over HTTP — the role, the headers and the audit row
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:export:route
 
       # if: always() so a failing guard still stops the app and shows its log —
       # a server left running would hang the job, and the log is usually where
