@@ -1312,10 +1312,25 @@ until now. `getActivity` adds no records; it phrases existing ones.
 Two fragile edges, both guarded by `npm run verify:activity`:
 
 - **The phrase map must cover every action the app writes.** `ACTIVITY_ACTIONS`
-  is exported so the verifier can grep every `action: "..."` in `src/lib` and
-  assert each one has a phrase — otherwise a new `writeAudit` reaches a head
-  teacher's dashboard as "invoice generate". It checks the reverse too: a phrase
-  for an action nobody writes is dead weight. 25 actions today, all covered.
+  is exported so the verifier can grep every `action: "..."` in `src/lib` **and
+  `src/app`** and assert each one has a phrase — otherwise a new `writeAudit`
+  reaches a head teacher's dashboard as "invoice generate". It checks the
+  reverse too: a phrase for an action nobody writes is dead weight.
+
+  ⚠️ **This guard has now been caught looking in the wrong place twice, and the
+  pattern is worth recognising before it happens a third time.** First it walked
+  only `src/lib`, so `data.export` — audited from a route — reached the
+  dashboard as a raw string. Then the scan itself read
+  `/action: "([a-z][a-z.]+)"/`: lowercase and dots only, so every camelCase
+  action was invisible to BOTH halves of the check. Eight were hiding there,
+  including `score.saveSheet`, the most frequent write in the app — the feed had
+  no words for a teacher entering marks, and the guard reported green because it
+  never looked. The pattern now allows capitals.
+
+  Both bugs share a shape: **the guard was green because of what it could not
+  see**, which is the failure mode a guard is least able to report on itself.
+  When you touch this check, delete a phrase on purpose and watch it go red
+  before you trust it.
 - **`after` is untyped JSON from twenty-five call sites.** Every field is read
   defensively (`money()`, `count()`, `plural()`), so one row with a missing key
   degrades to "Payment of an amount received" instead of taking the dashboard
