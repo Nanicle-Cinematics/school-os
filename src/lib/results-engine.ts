@@ -155,6 +155,16 @@ export type ComputeResult = {
   students: number;
   subjects: number;
   skipped: number;
+  /** Only in the third term, where the year's pass mark decides who moves up. */
+  promotion: YearPromotion | null;
+};
+
+export type YearPromotion = {
+  evaluated: number;
+  promoted: number;
+  repeated: number;
+  graduated: number;
+  passMark: number;
 };
 
 /**
@@ -207,7 +217,7 @@ export async function computeClassResults(
   const studentIds = enrolments.map((e) => e.studentId);
 
   if (studentIds.length === 0) {
-    return { students: 0, subjects: 0, skipped: 0 };
+    return { students: 0, subjects: 0, skipped: 0, promotion: null };
   }
 
   const assessments = await tx.assessment.findMany({
@@ -220,7 +230,7 @@ export async function computeClassResults(
   // previous year's teacher must not win the lookup.
   const term = await tx.term.findUnique({
     where: { id: termId },
-    select: { academicYearId: true },
+    select: { academicYearId: true, sequence: true },
   });
   const teaching = await tx.teachingAssignment.findMany({
     where: { schoolId, classGroupId, academicYearId: term?.academicYearId ?? "" },
@@ -303,17 +313,43 @@ export async function computeClassResults(
     }
   }
 
+  /**
+   * What the term is marked OUT OF.
+   *
+   * Every subject is worth 100 — the class and exam weights are defined to make
+   * 100 between them — so the denominator is just how many subjects the child
+   * sits, times 100. Upper primary offers nine, so the term is out of 900.
+   *
+   * The universe is the LEVEL's curriculum, not the subjects that happen to
+   * have marks in them. That is the whole point: a subject nobody entered
+   * scores nothing and pulls the total down, so the hole is visible on the
+   * broadsheet instead of being divided away. A school with no curriculum set
+   * up falls back to the assessed subjects, which is what this did before.
+   *
+   * Electives count only for the children who actually sat them — a school
+   * offering two and expecting one taken must not mark everybody out of both —
+   * and anything assessed off the curriculum counts as well, because a mark
+   * that exists has to be worth something.
+   */
+  const coreSubjectIds = classGroup.level.levelSubjects
+    .filter((levelSubject) => !levelSubject.isElective)
+    .map((levelSubject) => levelSubject.subjectId);
+
   // Roll up into TermResults with class positions.
   const rollups = studentIds.map((studentId) => {
-    const subjectTotals: number[] = [];
+    const counted = new Set(coreSubjectIds);
     const aggregatePoints: number[] = [];
+    let marked = 0;
+    let totalMarks = 0;
 
     for (const subjectId of subjectIds) {
       const entry = computed.get(subjectId)!.get(studentId)!;
       if (entry.total === null) {
         continue;
       }
-      subjectTotals.push(Number(entry.total));
+      counted.add(subjectId);
+      marked += 1;
+      totalMarks += Number(entry.total);
       if (aggregateSubjectIds.has(subjectId)) {
         const band = gradeFor(bands, entry.total);
         if (band) {
@@ -322,12 +358,35 @@ export async function computeClassResults(
       }
     }
 
-    const totalMarks = subjectTotals.reduce((sum, value) => sum + value, 0);
+    // Nothing marked at all: leave the row empty rather than declaring a child
+    // scored 0 of 900 in a term whose marking has not started.
+    if (marked === 0 || counted.size === 0) {
+      return {
+        studentId,
+        subjectsCount: 0,
+        subjectsOffered: null,
+        possibleMarks: null,
+        totalMarks: null,
+        average: null,
+        percentage: null,
+        aggregate: aggregateOf(aggregatePoints, aggregateSubjects),
+      };
+    }
+
+    const possibleMarks = counted.size * 100;
+    const percentage = (totalMarks / possibleMarks) * 100;
+
     return {
       studentId,
-      subjectsCount: subjectTotals.length,
-      totalMarks: subjectTotals.length > 0 ? totalMarks : null,
-      average: subjectTotals.length > 0 ? totalMarks / subjectTotals.length : null,
+      subjectsCount: marked,
+      subjectsOffered: counted.size,
+      possibleMarks,
+      totalMarks,
+      // The average is per OFFERED subject, so it agrees with the total above
+      // it on the card: 624 of 900 is an average of 69.3, not the 78 that
+      // dividing by the eight marked subjects would print beside it.
+      average: totalMarks / counted.size,
+      percentage,
       aggregate: aggregateOf(aggregatePoints, aggregateSubjects),
     };
   });
@@ -351,8 +410,11 @@ export async function computeClassResults(
       studentId: row.studentId,
       classGroupId,
       subjectsCount: row.subjectsCount,
+      subjectsOffered: row.subjectsOffered,
+      possibleMarks: row.possibleMarks,
       totalMarks: row.totalMarks === null ? null : new Prisma.Decimal(row.totalMarks.toFixed(2)),
       average: row.average === null ? null : new Prisma.Decimal(row.average.toFixed(2)),
+      percentage: row.percentage === null ? null : new Prisma.Decimal(row.percentage.toFixed(2)),
       aggregate: row.aggregate,
       classPosition: classPositions.get(row) ?? null,
       classSize,
@@ -365,7 +427,121 @@ export async function computeClassResults(
     });
   }
 
-  return { students: studentIds.length, subjects: subjectIds.length, skipped };
+  // The third term is the one that decides the year. Doing it here rather than
+  // on the promotion screen means the decision is taken from the marks that
+  // were just computed, once, and is already on the report card by the time
+  // anyone opens it.
+  const promotion =
+    term?.sequence === 3
+      ? await applyYearPromotion(tx, schoolId, termId, classGroupId, term.academicYearId)
+      : null;
+
+  return { students: studentIds.length, subjects: subjectIds.length, skipped, promotion };
+}
+
+/**
+ * Decide, from the whole year, who moves up.
+ *
+ * The rule is the marks across all three terms against the marks that were
+ * available across all three terms — 1861 of 2700 — not the third term alone.
+ * A child who fell apart in one term and recovered has not failed the year, and
+ * a school that judged them on the term they happened to be ill in would be
+ * doing something it could not defend to a parent.
+ *
+ * Terms with nothing computed simply do not contribute to either side of the
+ * fraction, so this is also correct for a school that adopts the system in the
+ * second term.
+ *
+ * The decision is written onto the third term's TermResult, which is where the
+ * promotion screen already looks for it — and it is a DEFAULT, not a verdict:
+ * the office overrides any row before running the promotion.
+ */
+export async function applyYearPromotion(
+  tx: Tx,
+  schoolId: string,
+  termId: string,
+  classGroupId: string,
+  academicYearId: string,
+): Promise<YearPromotion> {
+  const settings = await tx.schoolSettings.findUnique({ where: { schoolId } });
+  const passMark = settings?.promotionPassPercent ?? 45;
+
+  const classGroup = await tx.classGroup.findUniqueOrThrow({
+    where: { id: classGroupId },
+    select: { level: { select: { order: true } } },
+  });
+
+  // No rung above this one means the child is leaving, not being promoted into
+  // thin air — JHS 3 graduates.
+  const nextLevel = await tx.level.findFirst({
+    where: { schoolId, order: { gt: classGroup.level.order } },
+    orderBy: { order: "asc" },
+    select: { id: true },
+  });
+
+  const terms = await tx.term.findMany({
+    where: { schoolId, academicYearId },
+    select: { id: true },
+  });
+  const termIds = terms.map((t) => t.id);
+
+  const thisTerm = await tx.termResult.findMany({
+    where: { termId, classGroupId },
+    select: { studentId: true, status: true },
+  });
+  const studentIds = thisTerm.map((row) => row.studentId);
+
+  if (studentIds.length === 0) {
+    return { evaluated: 0, promoted: 0, repeated: 0, graduated: 0, passMark };
+  }
+
+  // Every term of the year for these children, whatever class they sat it in —
+  // a child moved between streams in January still carries their first term.
+  const yearRows = await tx.termResult.findMany({
+    where: { termId: { in: termIds }, studentId: { in: studentIds } },
+    select: { studentId: true, totalMarks: true, possibleMarks: true },
+  });
+
+  const totals = new Map<string, { marks: number; possible: number }>();
+  for (const row of yearRows) {
+    if (row.totalMarks === null || !row.possibleMarks) {
+      continue;
+    }
+    const running = totals.get(row.studentId) ?? { marks: 0, possible: 0 };
+    running.marks += Number(row.totalMarks);
+    running.possible += row.possibleMarks;
+    totals.set(row.studentId, running);
+  }
+
+  const counts = { evaluated: 0, promoted: 0, repeated: 0, graduated: 0, passMark };
+
+  for (const row of thisTerm) {
+    // A published card is settled. Re-deciding it behind the office's back is
+    // how a parent ends up holding two different answers.
+    if (row.status === "PUBLISHED") {
+      continue;
+    }
+    const total = totals.get(row.studentId);
+    if (!total || total.possible === 0) {
+      continue;
+    }
+
+    const percent = (total.marks / total.possible) * 100;
+    const promotionStatus =
+      percent < passMark ? "REPEATED" : nextLevel ? "PROMOTED" : "GRADUATED";
+
+    await tx.termResult.update({
+      where: { termId_studentId: { termId, studentId: row.studentId } },
+      data: { promotionStatus },
+    });
+
+    counts.evaluated += 1;
+    if (promotionStatus === "REPEATED") counts.repeated += 1;
+    else if (promotionStatus === "GRADUATED") counts.graduated += 1;
+    else counts.promoted += 1;
+  }
+
+  return counts;
 }
 
 /** 1st, 2nd, 3rd — printed on every report card. */

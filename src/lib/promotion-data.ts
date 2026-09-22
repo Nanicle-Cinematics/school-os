@@ -126,6 +126,32 @@ export async function getPromotionPlan(
     }
   }
 
+  // The year mark behind the decision — 1861 of 2700, 68.9%. Shown because the
+  // office is being asked to confirm a verdict, and a verdict with no number
+  // beside it is just a word the screen chose.
+  const settings = await prisma.schoolSettings.findFirst({
+    select: { promotionPassPercent: true },
+  });
+  const passMark = settings?.promotionPassPercent ?? 45;
+
+  const yearRows = studentIds.length
+    ? await prisma.termResult.findMany({
+        where: { studentId: { in: studentIds }, term: { academicYearId: sourceYearId } },
+        select: { studentId: true, totalMarks: true, possibleMarks: true },
+      })
+    : [];
+
+  const yearTotals = new Map<string, { marks: number; possible: number }>();
+  for (const row of yearRows) {
+    if (row.totalMarks === null || !row.possibleMarks) {
+      continue;
+    }
+    const running = yearTotals.get(row.studentId) ?? { marks: 0, possible: 0 };
+    running.marks += Number(row.totalMarks);
+    running.possible += row.possibleMarks;
+    yearTotals.set(row.studentId, running);
+  }
+
   // Anyone already placed in the target year — a second run must not look like
   // a fresh one.
   const existing = studentIds.length
@@ -153,6 +179,9 @@ export async function getPromotionPlan(
       decision = "GRADUATE";
     }
 
+    const year = yearTotals.get(enrollment.studentId) ?? null;
+    const yearPercent = year && year.possible > 0 ? (year.marks / year.possible) * 100 : null;
+
     return {
       enrollmentId: enrollment.id,
       student: enrollment.student,
@@ -161,6 +190,10 @@ export async function getPromotionPlan(
       fromReportCard: fromResult ?? null,
       destinationId: decision === "REPEAT" ? classGroup.id : defaultDestination,
       alreadyPlacedIn: placed.get(enrollment.studentId) ?? null,
+      yearMarks: year?.marks ?? null,
+      yearPossible: year?.possible ?? null,
+      yearPercent,
+      belowPass: yearPercent !== null && yearPercent < passMark,
     };
   });
 
@@ -171,6 +204,7 @@ export async function getPromotionPlan(
     nextLevel,
     destinationClasses,
     repeatClasses,
+    passMark,
     rows,
   };
 }

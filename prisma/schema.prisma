@@ -330,6 +330,11 @@ model SchoolSettings {
   showSubjectPosition Boolean @default(true)
   showAggregate       Boolean @default(true) // BECE-style best-6 aggregate
   aggregateSubjects   Int     @default(6)
+
+  /// The year mark, as a percentage of the marks available across all three
+  /// terms, below which a child repeats the class instead of moving up.
+  /// GES practice is a 45% pass; a school that marks differently changes it.
+  promotionPassPercent Int @default(45)
   // No reportCardTemplate. It offered a second layout that was never built, so
   // the column stored an answer nothing asked for. Removed 2026-09-12.
 
@@ -1205,6 +1210,19 @@ model TermResult {
   aggregate     Int? // best-N points, BECE style
   classPosition Int?
   classSize     Int?
+
+  /// What the term was marked OUT OF, frozen at compute time.
+  ///
+  /// Every subject is worth 100 (class weight + exam weight make 100), so an
+  /// upper-primary class offering 9 subjects is marked out of 900. Stored
+  /// rather than derived because a level's subject list is edited — a card
+  /// reprinted after a subject is added must still read the 900 it was marked
+  /// against, not a 1000 nobody sat.
+  subjectsOffered Int?
+  possibleMarks   Int?
+  /// totalMarks as a percentage of possibleMarks. The end-of-year promotion
+  /// rule sums this pair across the three terms; see `applyYearPromotion`.
+  percentage      Decimal? @db.Decimal(5, 2)
 
   // Attendance is summarised here so the report card can print it before the
   // attendance module exists; the module will later populate it automatically.

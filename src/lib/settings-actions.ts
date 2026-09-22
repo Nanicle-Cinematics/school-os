@@ -74,6 +74,7 @@ export async function saveAcademicPolicy(
   const classScoreWeight = Number(formData.get("classScoreWeight"));
   const examScoreWeight = Number(formData.get("examScoreWeight"));
   const aggregateSubjects = Number(formData.get("aggregateSubjects"));
+  const promotionPassPercent = Number(formData.get("promotionPassPercent"));
   const defaultGradingScaleId = String(formData.get("defaultGradingScaleId") ?? "");
 
   if (!Number.isFinite(classScoreWeight) || !Number.isFinite(examScoreWeight)) {
@@ -91,11 +92,15 @@ export async function saveAcademicPolicy(
   if (!Number.isFinite(aggregateSubjects) || aggregateSubjects < 1) {
     return { error: "Aggregate needs at least one subject (BECE uses 6)." };
   }
+  if (!Number.isFinite(promotionPassPercent) || promotionPassPercent < 0 || promotionPassPercent > 100) {
+    return { error: "The pass mark is a percentage between 0 and 100." };
+  }
 
   const data = {
     classScoreWeight: Math.trunc(classScoreWeight),
     examScoreWeight: Math.trunc(examScoreWeight),
     aggregateSubjects: Math.trunc(aggregateSubjects),
+    promotionPassPercent: Math.trunc(promotionPassPercent),
     defaultGradingScaleId: defaultGradingScaleId || null,
     showClassPosition: formData.get("showClassPosition") === "on",
     showSubjectPosition: formData.get("showSubjectPosition") === "on",
@@ -123,6 +128,7 @@ export async function saveAcademicPolicy(
             classScoreWeight: before.classScoreWeight,
             examScoreWeight: before.examScoreWeight,
             aggregateSubjects: before.aggregateSubjects,
+            promotionPassPercent: before.promotionPassPercent,
             defaultGradingScaleId: before.defaultGradingScaleId,
           }
         : null,
@@ -132,8 +138,9 @@ export async function saveAcademicPolicy(
 
   revalidatePath("/settings");
   revalidatePath("/results");
+  revalidatePath("/promotions");
   return {
-    ok: `Saved. ${data.classScoreWeight}% class score, ${data.examScoreWeight}% exam — takes effect the next time results are computed.`,
+    ok: `Saved. ${data.classScoreWeight}% class score, ${data.examScoreWeight}% exam, ${data.promotionPassPercent}% to pass the year — takes effect the next time results are computed.`,
   };
 }
 
