@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CalendarCheck } from "lucide-react";
 import { requireRole } from "@/lib/auth";
 import { ATTENDANCE, LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import {
@@ -11,12 +12,24 @@ import {
   today,
 } from "@/lib/attendance-data";
 import { deleteRegister } from "@/lib/attendance-actions";
-import { PageHeader, Card, EmptyRow, filterClass, tableHeadClass, thClass } from "../ui";
+import { PageHeader, Card, filterClass } from "../ui";
+import { DataTable, Row, type Column } from "../primitives";
 import { RegisterForm } from "./register-form";
 
 export const metadata: Metadata = { title: "Attendance · School OS" };
 
 const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", THIRD: "Third" };
+
+/** Sheds the three breakdown columns on a phone rather than scrolling sideways:
+ *  a form teacher checking one child wants the name and the percentage. */
+const SUMMARY_COLUMNS: Column[] = [
+  { label: "Student" },
+  { label: "Present", numeric: true },
+  { label: "Late", numeric: true, hideBelow: "sm" },
+  { label: "Excused", numeric: true, hideBelow: "sm" },
+  { label: "Absent", numeric: true, hideBelow: "sm" },
+  { label: "Attendance", numeric: true },
+];
 
 /**
  * A standing note about the state of the page, not the result of an action.
@@ -192,54 +205,43 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
               summary?.days.length === 1 ? "" : "s"
             } taken`}
           >
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className={tableHeadClass}>
-                  <tr>
-                    <th className={thClass}>Student</th>
-                    <th className={`${thClass} text-right`}>Present</th>
-                    <th className={`${thClass} text-right`}>Late</th>
-                    <th className={`${thClass} text-right`}>Excused</th>
-                    <th className={`${thClass} text-right`}>Absent</th>
-                    <th className={`${thClass} text-right`}>Attendance</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {!summary || summary.rows.length === 0 ? (
-                    <EmptyRow colSpan={6}>
-                      No register has been taken for this class this term yet.
-                    </EmptyRow>
-                  ) : (
-                    summary.rows.map((row) => (
-                      <tr key={row.studentId}>
-                        <td className="whitespace-nowrap px-4 py-2 font-medium text-slate-900">
-                          {row.name}
-                          <span className="ml-2 font-mono text-xs text-slate-400">
-                            {row.admissionNo}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-slate-700">
-                          {row.present}
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-slate-700">{row.late}</td>
-                        <td className="px-4 py-2 text-right tabular-nums text-slate-700">
-                          {row.excused}
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-slate-700">
-                          {row.absent}
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums font-semibold text-slate-900">
-                          {row.percent === null ? "—" : `${row.percent.toFixed(0)}%`}
-                          <span className="ml-1 text-xs font-normal text-slate-400">
-                            {row.present + row.late}/{row.days}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={SUMMARY_COLUMNS}
+              empty={{
+                icon: CalendarCheck,
+                title: "No register has been taken for this class this term yet.",
+                action: undefined,
+              }}
+            >
+              {(summary?.rows ?? []).map((row) => (
+                <Row key={row.studentId}>
+                  <td className="whitespace-nowrap px-4 py-2.5 font-medium text-slate-900">
+                    {row.name}
+                    <span className="ml-2 font-mono text-caption text-slate-400">
+                      {row.admissionNo}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
+                    {row.present}
+                  </td>
+                  <td className="hidden px-4 py-2.5 text-right tabular-nums text-slate-600 sm:table-cell">
+                    {row.late}
+                  </td>
+                  <td className="hidden px-4 py-2.5 text-right tabular-nums text-slate-600 sm:table-cell">
+                    {row.excused}
+                  </td>
+                  <td className="hidden px-4 py-2.5 text-right tabular-nums text-slate-600 sm:table-cell">
+                    {row.absent}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-right font-semibold tabular-nums text-slate-900">
+                    {row.percent === null ? "—" : `${row.percent.toFixed(0)}%`}
+                    <span className="ml-1 text-caption font-normal text-slate-400">
+                      {row.present + row.late}/{row.days}
+                    </span>
+                  </td>
+                </Row>
+              ))}
+            </DataTable>
             <p className="border-t border-hairline px-4 py-3 text-xs text-slate-400">
               These totals go onto the report card as “{register.rows.length > 0 ? "days present" : "attendance"} of
               days taken”. A day nobody marked is not counted against anybody — the denominator is

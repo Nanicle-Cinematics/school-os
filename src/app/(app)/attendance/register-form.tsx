@@ -108,7 +108,7 @@ export function RegisterForm({
         ].map((section) =>
           section.rows.length === 0 ? null : (
             <div key={section.label}>
-              <p className="bg-slate-50 px-4 py-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-500">
+              <p className="bg-slate-50 px-4 py-1.5 text-caption font-semibold text-slate-500">
                 {section.label} ({section.rows.length})
               </p>
               {section.rows.map((row, index) => {
