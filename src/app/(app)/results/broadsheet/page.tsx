@@ -68,6 +68,7 @@ export default async function BroadsheetPage({ searchParams }: PageProps<"/resul
                   </th>
                 ))}
                 <th className={`${thClass} text-right`}>Total</th>
+                <th className={`${thClass} text-right`}>%</th>
                 <th className={`${thClass} text-right`}>Avg</th>
                 <th className={`${thClass} text-right`}>Agg</th>
                 <th className={`${thClass} text-right`}>Pos</th>
@@ -78,7 +79,7 @@ export default async function BroadsheetPage({ searchParams }: PageProps<"/resul
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={columns.length + 6}
+                    colSpan={columns.length + 7}
                     className="px-4 py-10 text-center text-sm text-slate-500"
                   >
                     Nothing computed for this class yet.
@@ -112,7 +113,23 @@ export default async function BroadsheetPage({ searchParams }: PageProps<"/resul
                       );
                     })}
                     <td className="whitespace-nowrap px-4 py-2 text-right font-medium tabular-nums text-slate-900">
-                      {termResult.totalMarks ? Number(termResult.totalMarks).toFixed(0) : "—"}
+                      {termResult.totalMarks === null ? (
+                        "—"
+                      ) : (
+                        <>
+                          {Number(termResult.totalMarks).toFixed(0)}
+                          {termResult.possibleMarks ? (
+                            <span className="text-xs font-normal text-slate-400">
+                              /{termResult.possibleMarks}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-slate-700">
+                      {termResult.percentage === null
+                        ? "—"
+                        : `${Number(termResult.percentage).toFixed(1)}%`}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-slate-700">
                       {termResult.average ? Number(termResult.average).toFixed(1) : "—"}

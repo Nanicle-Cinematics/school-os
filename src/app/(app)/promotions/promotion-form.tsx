@@ -16,6 +16,11 @@ export type PlanRow = {
   fromReportCard: string | null;
   destinationId: string | null;
   alreadyPlacedIn: string | null;
+  /** The year's marks and what they were out of — 1861 of 2700. */
+  yearMarks: number | null;
+  yearPossible: number | null;
+  yearPercent: number | null;
+  belowPass: boolean;
 };
 
 const DECISION_LABELS: [Decision, string][] = [
@@ -34,6 +39,7 @@ export function PromotionForm({
   destinationClasses,
   repeatClasses,
   hasNextLevel,
+  passMark,
 }: {
   classGroupId: string;
   sourceYearId: string;
@@ -43,6 +49,7 @@ export function PromotionForm({
   destinationClasses: ClassOption[];
   repeatClasses: ClassOption[];
   hasNextLevel: boolean;
+  passMark: number;
 }) {
   const [state, formAction] = useActionState<PromotionState, FormData>(runPromotion, {});
   const [decisions, setDecisions] = useState<Record<string, Decision>>(() =>
@@ -68,6 +75,7 @@ export function PromotionForm({
           <thead className={tableHeadClass}>
             <tr>
               <th className={thClass}>Student</th>
+              <th className={thClass}>Year mark</th>
               <th className={thClass}>Report card said</th>
               <th className={thClass}>Decision</th>
               <th className={thClass}>Class in {targetYearName}</th>
@@ -75,7 +83,7 @@ export function PromotionForm({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.length === 0 ? (
-              <EmptyRow colSpan={4}>Nobody is enrolled in this class for that year.</EmptyRow>
+              <EmptyRow colSpan={5}>Nobody is enrolled in this class for that year.</EmptyRow>
             ) : (
               rows.map((row) => {
                 const decision = decisions[row.studentId];
@@ -95,6 +103,26 @@ export function PromotionForm({
                           already in {row.alreadyPlacedIn}
                         </span>
                       ) : null}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 tabular-nums">
+                      {row.yearPercent === null ? (
+                        <span className="text-slate-400">not computed</span>
+                      ) : (
+                        <>
+                          <span
+                            className={
+                              row.belowPass
+                                ? "font-semibold text-danger-ink"
+                                : "font-medium text-slate-900"
+                            }
+                          >
+                            {row.yearPercent.toFixed(1)}%
+                          </span>
+                          <span className="ml-2 text-xs text-slate-400">
+                            {Math.round(row.yearMarks ?? 0)} / {row.yearPossible}
+                          </span>
+                        </>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-slate-500">
                       {row.fromReportCard ? row.fromReportCard.toLowerCase() : "—"}
@@ -159,6 +187,11 @@ export function PromotionForm({
         <p className="text-xs text-slate-500">
           {counts.PROMOTE} promoting · {counts.REPEAT} repeating · {counts.GRADUATE} graduating ·{" "}
           {counts.HOLD} left alone
+        </p>
+
+        <p className="text-xs text-slate-400">
+          The decision each row starts on comes from the year&rsquo;s marks against a {passMark}%
+          pass. Change any of them — what you press here is what happens.
         </p>
 
         {rows.length > 0 ? (

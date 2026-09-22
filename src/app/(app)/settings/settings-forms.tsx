@@ -172,6 +172,7 @@ export type AcademicValues = {
   classScoreWeight: number;
   examScoreWeight: number;
   aggregateSubjects: number;
+  promotionPassPercent: number;
   defaultGradingScaleId: string | null;
   showClassPosition: boolean;
   showSubjectPosition: boolean;
@@ -237,6 +238,21 @@ export function AcademicForm({
             max={12}
             required
             defaultValue={values.aggregateSubjects}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field
+          label="Pass mark for the year (%)"
+          hint="Across all three terms. Below it, a child repeats."
+        >
+          <input
+            type="number"
+            name="promotionPassPercent"
+            min={0}
+            max={100}
+            required
+            defaultValue={values.promotionPassPercent}
             className={inputClass}
           />
         </Field>

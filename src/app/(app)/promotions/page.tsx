@@ -158,6 +158,7 @@ export default async function PromotionsPage({ searchParams }: PageProps<"/promo
               hasNextLevel={Boolean(plan.nextLevel)}
               destinationClasses={plan.destinationClasses}
               repeatClasses={plan.repeatClasses}
+              passMark={plan.passMark}
               rows={plan.rows.map((row) => ({
                 studentId: row.student.id,
                 admissionNo: row.student.admissionNo,
@@ -166,6 +167,10 @@ export default async function PromotionsPage({ searchParams }: PageProps<"/promo
                 fromReportCard: row.fromReportCard,
                 destinationId: row.destinationId,
                 alreadyPlacedIn: row.alreadyPlacedIn,
+                yearMarks: row.yearMarks,
+                yearPossible: row.yearPossible,
+                yearPercent: row.yearPercent,
+                belowPass: row.belowPass,
               }))}
             />
           </Card>

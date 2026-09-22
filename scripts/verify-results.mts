@@ -110,18 +110,173 @@ console.log("\nCross-checks");
 for (const tr of termResults) {
   const mine = subjectResults.filter((sr) => sr.studentId === tr.studentId);
   const total = mine.reduce((sum, sr) => sum + Number(sr.totalScore), 0);
-  const avg = total / mine.length;
   assert(
     `${tr.student.admissionNo} total matches sum of subjects`,
     Math.abs(total - Number(tr.totalMarks)) < 0.05,
     `stored ${tr.totalMarks} vs summed ${total.toFixed(2)}`,
   );
+  // The average is per OFFERED subject, not per marked one — an un-entered
+  // subject must drag it down, which is the whole point of the denominator.
+  const offered = tr.subjectsOffered ?? mine.length;
+  const avgOffered = total / offered;
   assert(
     `${tr.student.admissionNo} average matches`,
-    Math.abs(avg - Number(tr.average)) < 0.05,
-    `stored ${tr.average} vs ${avg.toFixed(2)}`,
+    Math.abs(avgOffered - Number(tr.average)) < 0.05,
+    `stored ${tr.average} vs ${avgOffered.toFixed(2)} over ${offered} offered`,
   );
   assert(`${tr.student.admissionNo} subject count`, mine.length === tr.subjectsCount);
+  assert(
+    `${tr.student.admissionNo} is marked out of ${offered} × 100`,
+    tr.possibleMarks === offered * 100,
+    `stored ${tr.possibleMarks}`,
+  );
+  assert(
+    `${tr.student.admissionNo} percentage is the total over what was available`,
+    Math.abs((total / (offered * 100)) * 100 - Number(tr.percentage)) < 0.05,
+    `stored ${tr.percentage}`,
+  );
+}
+
+// ── The denominator is the level's curriculum, not what got marked ──────────
+console.log("\nOut of what?");
+{
+  const offeredSubjects = await prisma.levelSubject.count({
+    where: { levelId: classGroup.levelId, isElective: false },
+  });
+  const anyRow = termResults[0];
+  assert(
+    "the class is marked out of the subjects its level offers",
+    (anyRow.subjectsOffered ?? 0) >= offeredSubjects,
+    `offered ${offeredSubjects}, marked out of ${anyRow.subjectsOffered}`,
+  );
+  assert(
+    "every child in the class is marked out of the same total",
+    new Set(termResults.map((tr) => tr.possibleMarks)).size === 1,
+    [...new Set(termResults.map((tr) => tr.possibleMarks))].join(", "),
+  );
+  // Marked can never exceed offered: the offered set contains it by construction,
+  // so an un-entered subject is a gap that costs its full 100 rather than
+  // shrinking the denominator to hide itself.
+  assert(
+    "what was marked is a subset of what was offered",
+    (anyRow.subjectsCount ?? 0) <= (anyRow.subjectsOffered ?? 0) && (anyRow.subjectsOffered ?? 0) > 0,
+    `${anyRow.subjectsCount} marked of ${anyRow.subjectsOffered} offered`,
+  );
+}
+
+// ── The year decides who moves up ──────────────────────────────────────────
+console.log("\nEnd-of-year promotion rule");
+{
+  const settings = await prisma.schoolSettings.findUnique({ where: { schoolId: school.id } });
+  const passMark = settings?.promotionPassPercent ?? 45;
+
+  const terms = await prisma.term.findMany({
+    where: { schoolId: school.id, academicYearId: term.academicYearId },
+    orderBy: { sequence: "asc" },
+  });
+  const third = terms.find((t) => t.sequence === 3);
+
+  if (!third) {
+    assert("the demo year has a third term", false);
+  } else {
+    // Compute all three terms, so the year total is real rather than one term
+    // standing in for three.
+    for (const t of terms) {
+      await prisma.$transaction(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tx) => computeClassResults(tx as any, school.id, t.id, classGroup.id),
+        { timeout: 180_000, maxWait: 30_000 },
+      );
+    }
+
+    const yearRows = await prisma.termResult.findMany({
+      where: { termId: { in: terms.map((t) => t.id) }, classGroupId: classGroup.id },
+      select: { studentId: true, termId: true, totalMarks: true, possibleMarks: true, promotionStatus: true },
+    });
+
+    const thirdRows = yearRows.filter((r) => r.termId === third.id);
+    assert("the third term produced results", thirdRows.length > 0, `${thirdRows.length} rows`);
+
+    const nextLevel = await prisma.level.findFirst({
+      where: { schoolId: school.id, order: { gt: classGroup.level.order } },
+      orderBy: { order: "asc" },
+    });
+
+    let checked = 0;
+    for (const row of thirdRows) {
+      const mine = yearRows.filter(
+        (r) => r.studentId === row.studentId && r.totalMarks !== null && r.possibleMarks,
+      );
+      const marks = mine.reduce((sum, r) => sum + Number(r.totalMarks), 0);
+      const possible = mine.reduce((sum, r) => sum + (r.possibleMarks ?? 0), 0);
+      if (possible === 0) {
+        continue;
+      }
+      const percent = (marks / possible) * 100;
+      const expected = percent < passMark ? "REPEATED" : nextLevel ? "PROMOTED" : "GRADUATED";
+      assert(
+        `year ${percent.toFixed(1)}% → ${expected.toLowerCase()}`,
+        row.promotionStatus === expected,
+        `stored ${row.promotionStatus} against a ${passMark}% pass over ${possible} marks`,
+      );
+      checked += 1;
+    }
+    assert("every child in the class got a year verdict", checked === thirdRows.length, `${checked} of ${thirdRows.length}`);
+
+    // The rule must be a function of the pass mark, not a hardcoded 45.
+    const scores = thirdRows.map((row) => {
+      const mine = yearRows.filter(
+        (r) => r.studentId === row.studentId && r.totalMarks !== null && r.possibleMarks,
+      );
+      const marks = mine.reduce((sum, r) => sum + Number(r.totalMarks), 0);
+      const possible = mine.reduce((sum, r) => sum + (r.possibleMarks ?? 0), 0);
+      return possible === 0 ? 0 : (marks / possible) * 100;
+    });
+    const ceiling = Math.ceil(Math.max(...scores)) + 1;
+
+    await prisma.schoolSettings.update({
+      where: { schoolId: school.id },
+      data: { promotionPassPercent: Math.min(ceiling, 100) },
+    });
+    await prisma.$transaction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (tx) => computeClassResults(tx as any, school.id, third.id, classGroup.id),
+      { timeout: 180_000, maxWait: 30_000 },
+    );
+    const afterRaise = await prisma.termResult.findMany({
+      where: { termId: third.id, classGroupId: classGroup.id },
+      select: { promotionStatus: true },
+    });
+    assert(
+      "raising the pass mark above the best mark repeats the whole class",
+      afterRaise.every((r) => r.promotionStatus === "REPEATED"),
+      afterRaise.map((r) => r.promotionStatus).join(", "),
+    );
+
+    await prisma.schoolSettings.update({
+      where: { schoolId: school.id },
+      data: { promotionPassPercent: passMark },
+    });
+    await prisma.$transaction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (tx) => computeClassResults(tx as any, school.id, third.id, classGroup.id),
+      { timeout: 180_000, maxWait: 30_000 },
+    );
+
+    // A first or second term must never decide the year.
+    const firstTerm = terms.find((t) => t.sequence === 1);
+    if (firstTerm) {
+      const firstRows = await prisma.termResult.findMany({
+        where: { termId: firstTerm.id, classGroupId: classGroup.id },
+        select: { promotionStatus: true },
+      });
+      assert(
+        "the first term leaves the promotion question open",
+        firstRows.every((r) => r.promotionStatus === "PENDING"),
+        firstRows.map((r) => r.promotionStatus).join(", "),
+      );
+    }
+  }
 }
 
 const sorted = [...termResults].sort((a, b) => Number(b.totalMarks) - Number(a.totalMarks));

@@ -7,6 +7,7 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { materialiseComponents } from "@/lib/assessment-templates";
+import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
 
 export type SheetState = { error?: string; ok?: string; savedAt?: string };
@@ -249,7 +250,29 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
     { timeout: 120_000, maxWait: 20_000 },
   );
 
+  /**
+   * Add the class up, now that the marks have landed.
+   *
+   * A teacher's job ends when the sheet is full; totting nine subjects into a
+   * mark out of 900 is arithmetic, and waiting for a head to press Compute meant
+   * the teacher never saw the number their own entry produced. This runs in its
+   * OWN transaction, after the marks are safely committed: the totals are
+   * derived and can always be recomputed, so a slow or failed roll-up must
+   * never cost anybody their typing.
+   */
+  let totalsError = false;
+  try {
+    await tenantTransaction(
+      auth.schoolId,
+      (tx) => computeClassResults(tx, auth.schoolId, termId, classGroupId),
+      { timeout: 180_000, maxWait: 30_000 },
+    );
+  } catch {
+    totalsError = true;
+  }
+
   revalidatePath("/assessments/sheet");
+  revalidatePath("/results");
 
   const marked = cells.filter((c) => c.rawScore !== null || c.isAbsent).length;
   const totals = newMax.size > 0 ? `, ${newMax.size} total${newMax.size === 1 ? "" : "s"} changed` : "";
@@ -257,8 +280,11 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
     approved.length > 0
       ? ` ${approved.length} approved component${approved.length === 1 ? " was" : "s were"} left untouched.`
       : "";
+  const tallied = totalsError
+    ? " The marks are safe, but the class totals could not be added up just now — try saving again."
+    : " Class totals updated.";
   return {
-    ok: `Saved ${marked} mark${marked === 1 ? "" : "s"}${totals}.${skipped}`,
+    ok: `Saved ${marked} mark${marked === 1 ? "" : "s"}${totals}.${skipped}${tallied}`,
     savedAt: new Date().toISOString(),
   };
 }

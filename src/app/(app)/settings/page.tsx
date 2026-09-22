@@ -65,6 +65,7 @@ export default async function SettingsPage() {
     classScoreWeight: settings?.classScoreWeight ?? 30,
     examScoreWeight: settings?.examScoreWeight ?? 70,
     aggregateSubjects: settings?.aggregateSubjects ?? 6,
+    promotionPassPercent: settings?.promotionPassPercent ?? 45,
     defaultGradingScaleId: settings?.defaultGradingScaleId ?? null,
     showClassPosition: settings?.showClassPosition ?? true,
     showSubjectPosition: settings?.showSubjectPosition ?? true,

@@ -606,6 +606,61 @@ failure while the school existed, and the retry then failed on a taken URL key.
 Read-then-`createMany` brought it to ~56s on this link. Keep new provisioning
 steps batched, and keep them idempotent on their natural key.
 
+## A term is marked out of something, and the year decides who moves up
+
+Every subject is worth **100** — the class and exam weights are defined to make
+100 between them — so a term's total has an obvious denominator: the number of
+subjects the class sits, times 100. Upper primary offers nine, so the term is
+out of **900** and the year is out of **2700**.
+
+`TermResult` now freezes that denominator (`subjectsOffered`, `possibleMarks`,
+`percentage`) instead of printing a bare numerator a parent has to be told how
+to read. Frozen, not derived, for the same reason positions are: a level's
+subject list gets edited, and a card reprinted next year must still read the 900
+the child was actually marked against.
+
+**The denominator is the level's curriculum, not what happened to get marked.**
+A subject nobody entered scores nothing and pulls the total down, so the hole
+shows up on the broadsheet instead of being divided away — which is exactly the
+kind of gap an end-of-year total must not hide. Two deliberate exceptions:
+electives count only for the children who actually sat them, and a class with
+nothing marked at all stays blank rather than declaring everyone scored 0 of 900
+in a term whose marking has not started. A school with no curriculum set up
+falls back to the assessed subjects, which is what the engine did before.
+
+⚠️ **`average` changed meaning with it.** It is now the mark per *offered*
+subject, so it agrees with the total printed beside it: 624 of 900 is an average
+of 69.3, not the 78 that dividing by the eight marked subjects used to print.
+Mid-term, a partly-entered class reads low on purpose.
+
+**The teacher never presses Compute.** `saveSheet` rolls the class up itself,
+in its own transaction after the marks have committed — the totals are derived
+and can always be recomputed, so a slow roll-up must never cost anybody their
+typing. Leadership's `/results` Compute button still exists for a whole-class
+recompute.
+
+**The third term decides the year.** `applyYearPromotion` runs at the end of
+`computeClassResults` when `term.sequence === 3`: marks across all three terms
+over the marks available across all three terms, against
+`SchoolSettings.promotionPassPercent` (default **45**, GES practice). Below it
+the child repeats; at or above it they are promoted, or graduated where there is
+no rung above. The verdict is written to the third term's
+`TermResult.promotionStatus`, which is where `/promotions` already looks — so
+the promotion screen opens with every row already defaulted, the year mark shown
+beside it, and the office free to change any of them. It is a default, not a
+verdict.
+
+The year, not the term, because a child who fell apart in one term and recovered
+has not failed the year, and judging them on the term they happened to be ill in
+is not something a head can defend to a parent. Terms with nothing computed
+contribute to neither side of the fraction, so a school that adopts the system
+in the second term is still judged on what it actually marked. A PUBLISHED card
+is never re-decided behind the office's back.
+
+`npm run verify:results` covers all of it, including the forced red: raising the
+pass mark above the best mark in the class must repeat the whole class, and the
+first term must leave every row `PENDING`.
+
 ## A class teacher sees two screens
 
 A teacher signs in to do one job — enter the term's marks for the subjects they

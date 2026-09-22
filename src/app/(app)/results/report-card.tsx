@@ -177,10 +177,26 @@ export function ReportCard({
             <td />
             <td />
             <td className="pt-2 text-right tabular-nums">
-              {termResult.totalMarks ? Number(termResult.totalMarks).toFixed(0) : "—"}
+              {termResult.totalMarks === null ? (
+                "—"
+              ) : (
+                <>
+                  {Number(termResult.totalMarks).toFixed(0)}
+                  {/* The denominator is the point: 624 alone tells a parent
+                      nothing until they know the class sat nine subjects. */}
+                  {termResult.possibleMarks ? (
+                    <span className="font-normal text-slate-500"> / {termResult.possibleMarks}</span>
+                  ) : null}
+                </>
+              )}
             </td>
             <td className="pt-2 text-center tabular-nums">
-              {termResult.average ? Number(termResult.average).toFixed(1) : "—"}
+              {termResult.average === null ? "—" : Number(termResult.average).toFixed(1)}
+              {termResult.percentage !== null ? (
+                <span className="block text-xs font-normal text-slate-500">
+                  {Number(termResult.percentage).toFixed(1)}%
+                </span>
+              ) : null}
             </td>
             {/* Spans whatever is left after the position column may have gone,
                 or the aggregate line lands under the wrong heading. */}

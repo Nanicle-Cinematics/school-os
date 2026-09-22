@@ -50,8 +50,16 @@ export async function computeResults(
     };
   }
 
+  const promotion = result.promotion;
+  const verdict =
+    promotion && promotion.evaluated > 0
+      ? ` Year totals decided: ${promotion.promoted} promoted, ${promotion.repeated} repeating${
+          promotion.graduated > 0 ? `, ${promotion.graduated} graduating` : ""
+        } at a ${promotion.passMark}% pass.`
+      : "";
+
   return {
-    ok: `Computed ${result.subjects} subject${result.subjects === 1 ? "" : "s"} for ${result.students} students.`,
+    ok: `Computed ${result.subjects} subject${result.subjects === 1 ? "" : "s"} for ${result.students} students.${verdict}`,
   };
 }
 
