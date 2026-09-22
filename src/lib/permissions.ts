@@ -66,6 +66,22 @@ export const MARKING: Role[] = [...LEADERSHIP, "TEACHER", "IT_ADMIN"];
  */
 export const CLASS_REGISTER: Role[] = [...OFFICE, "TEACHER"];
 
+/**
+ * Taking the register — the first thing a plain teacher WRITES about a class.
+ *
+ * `CLASS_REGISTER` above deliberately renders read-only, and that rule still
+ * holds for everything on `/classes`. Attendance is the exception, and it is
+ * one on purpose: the register is the form teacher's own daily job, and routing
+ * it through the office would mean forty slips of paper walking down a corridor
+ * every morning, which is the thing this replaces.
+ *
+ * The role list is the outer door. The inner one is `mayMark` in
+ * `attendance-actions.ts`, which narrows a teacher to the classes they form-
+ * teach or have a current-year assignment in — a teacher may open the screen,
+ * but only for their own classes.
+ */
+export const ATTENDANCE: Role[] = [...OFFICE, "TEACHER"];
+
 export type NavItem = {
   href: string;
   label: string;
@@ -90,6 +106,7 @@ export type NavIcon =
   | "results"
   | "remarks"
   | "promotions"
+  | "attendance"
   | "fees"
   | "invoices"
   | "payments"
@@ -139,6 +156,7 @@ export const NAV: NavSection[] = [
     hue: "academics",
     items: [
       { href: "/classes", label: "Classes", icon: "classes", roles: CLASS_REGISTER },
+      { href: "/attendance", label: "Attendance", icon: "attendance", roles: ATTENDANCE },
       { href: "/subjects", label: "Subjects", icon: "subjects", roles: OFFICE },
       { href: "/assessments/sheet", label: "Mark sheet", icon: "sheet", roles: MARKING },
       { href: "/assessments", label: "Assessments", icon: "assessments", roles: ACADEMIC },

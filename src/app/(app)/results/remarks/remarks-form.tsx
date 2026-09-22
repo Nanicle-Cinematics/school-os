@@ -71,12 +71,15 @@ export function RemarksForm({
   students,
   rows,
   daysInTerm,
+  fromRegister,
 }: {
   termId: string;
   classGroupId: string;
   students: Student[];
   rows: Record<string, Row>;
   daysInTerm: number | null;
+  /** The register is being taken for this class, so attendance is derived. */
+  fromRegister: boolean;
 }) {
   const [state, formAction] = useActionState(saveClassRemarks, {});
 
@@ -84,6 +87,13 @@ export function RemarksForm({
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="termId" value={termId} />
       <input type="hidden" name="classGroupId" value={classGroupId} />
+
+      {fromRegister ? (
+        <p className="rounded-control bg-info-tint px-3.5 py-2.5 text-sm text-info-ink">
+          Attendance for this class comes from the daily register now, so those two boxes are
+          read-only. Correct a day on the Attendance screen and these follow.
+        </p>
+      ) : null}
 
       <Suggestions id="conduct-options" items={CONDUCT} />
       <Suggestions id="attitude-options" items={ATTITUDE} />
@@ -168,7 +178,9 @@ export function RemarksForm({
                       name={`daysPresent:${student.id}`}
                       min={0}
                       defaultValue={row?.daysPresent ?? ""}
-                      className={inputClass}
+                      readOnly={fromRegister}
+                      title={fromRegister ? "Counted from the register" : undefined}
+                      className={`${inputClass}${fromRegister ? " bg-slate-100 text-slate-500" : ""}`}
                     />
                   </label>
                   <label className="text-sm">
@@ -179,8 +191,10 @@ export function RemarksForm({
                       type="number"
                       name={`daysTotal:${student.id}`}
                       min={0}
-                      defaultValue={row?.daysTotal ?? daysInTerm ?? ""}
-                      className={inputClass}
+                      defaultValue={row?.daysTotal ?? (fromRegister ? "" : (daysInTerm ?? ""))}
+                      readOnly={fromRegister}
+                      title={fromRegister ? "Days the register was taken" : undefined}
+                      className={`${inputClass}${fromRegister ? " bg-slate-100 text-slate-500" : ""}`}
                     />
                   </label>
                 </div>

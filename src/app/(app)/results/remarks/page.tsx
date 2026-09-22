@@ -12,8 +12,14 @@ export const metadata: Metadata = { title: "Conduct and remarks · School OS" };
 
 const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", THIRD: "Third" };
 
-/** Teaching days between two dates, excluding weekends. A sensible default the
- *  form teacher corrects — the attendance module will replace it later. */
+/**
+ * Teaching days between two dates, excluding weekends.
+ *
+ * The fallback for a school still keeping attendance on paper: a sensible
+ * default the form teacher corrects. A class whose register is being taken
+ * ignores this entirely — its denominator is the days somebody actually marked,
+ * which is a fact rather than a guess about weekends and holidays.
+ */
 function teachingDays(start: Date, end: Date) {
   let days = 0;
   const cursor = new Date(start);
@@ -59,6 +65,13 @@ export default async function ClassRemarksPage({ searchParams }: PageProps<"/res
     termRow?.startDate && termRow?.endDate
       ? teachingDays(termRow.startDate, termRow.endDate)
       : null;
+
+  // Whether this class's attendance is derived or still typed by hand. One
+  // count, and it decides both whether the boxes are editable and whether a
+  // save is allowed anywhere near them.
+  const registerTaken = chosen
+    ? await prisma.attendanceDay.count({ where: { termId, classGroupId } })
+    : 0;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -151,6 +164,7 @@ export default async function ClassRemarksPage({ searchParams }: PageProps<"/res
           students={data.students}
           rows={Object.fromEntries(data.byStudent)}
           daysInTerm={daysInTerm}
+          fromRegister={registerTaken > 0}
         />
       ) : null}
     </div>

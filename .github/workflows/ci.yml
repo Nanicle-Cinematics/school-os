@@ -291,6 +291,22 @@ jobs:
           npm run verify:parent
           npm run verify:it-admin
 
+      # Attendance runs HERE, not with the offline engine checks, because half
+      # of it drives the real `saveRegister` over HTTP — the term lookup, the
+      # roster check and `mayMark` live behind `requireRole` and cannot be
+      # reached any other way. Run without an app it skips that half loudly
+      # rather than passing on the engine alone.
+      #
+      # It WRITES, unlike most of the suite: a register has to exist before its
+      # arithmetic can be checked. It clears and rebuilds only its own class's
+      # attendance, so re-running it is safe against the seeded database.
+      - name: Attendance — the register, and what it puts on the report card
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:attendance
+
       # A school provisioned minutes ago, walked screen by screen. This is the
       # check for onboarding dead ends — a screen that maps over an empty
       # collection and offers no way forward — which the demo seed hides, because

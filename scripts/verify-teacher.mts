@@ -26,8 +26,12 @@ const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const COOKIE = "school_os_session";
 const LANDING = "/assessments/sheet";
 
-/** The screens a teacher signs in to use: marking, remarks, and their register. */
-const ALLOWED = ["/assessments/sheet", "/results/remarks", "/classes"];
+/**
+ * The screens a teacher signs in to use: marking, remarks, their register — and
+ * the daily attendance register, which is the one place a plain teacher WRITES
+ * about a class. The class page itself stays read-only for them.
+ */
+const ALLOWED = ["/assessments/sheet", "/results/remarks", "/classes", "/attendance"];
 
 /** Everything else reachable from the sidebar or by typing a URL. */
 const FORBIDDEN = [
