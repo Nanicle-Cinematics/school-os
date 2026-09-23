@@ -538,6 +538,43 @@ export async function generateInvoicesForTerm(
 }
 
 /**
+ * What a pupil actually owes, ACROSS terms.
+ *
+ * ⚠️ Do NOT sum `invoice.balance` across terms. Each term's invoice carries the
+ * previous term's unpaid balance forward into its own total, so the balances
+ * are a CHAIN, not a list of separate debts — adding them counts the same money
+ * once per term it has been owed. A child owing GH₵1,111 after three terms has
+ * balances of 892, 881 and 1,111 sitting in the table, and summing them says
+ * 2,884.
+ *
+ * Within ONE term, summing balances is correct and stays correct: that is the
+ * running figure, and the dashboard, the debtor ageing and the invoice list are
+ * all term-scoped. This is for the places that are not — the parent portal and
+ * the debtor SMS audience, which look at a child's whole history.
+ *
+ * Charges minus payments, rather than "the latest invoice's balance", because
+ * the chain is only trustworthy while nothing moves behind it: a reversed
+ * receipt puts money back onto an OLD invoice that a newer one has already
+ * carried forward, and the newest balance then understates. Subtracting
+ * `broughtForward` removes the duplication at its source and leaves exactly
+ * what the school charged.
+ */
+export function netOutstanding(
+  invoices: { total: Prisma.Decimal; broughtForward: Prisma.Decimal }[],
+  payments: { amount: Prisma.Decimal }[],
+) {
+  const charged = invoices.reduce(
+    (acc, invoice) => acc.add(invoice.total).sub(invoice.broughtForward),
+    new Prisma.Decimal(0),
+  );
+  const paid = payments.reduce((acc, payment) => acc.add(payment.amount), new Prisma.Decimal(0));
+  // Never negative: a family in credit owes nothing, and "−GH₵50 outstanding"
+  // on a portal reads as a debt to anyone scanning it.
+  const owed = charged.sub(paid);
+  return owed.isNegative() ? new Prisma.Decimal(0) : owed;
+}
+
+/**
  * Spread a payment across a student's unpaid invoices, oldest first.
  * Parents pay a lump sum against "school fees", not against invoice numbers, so
  * FIFO across arrears then current term is the behaviour bursars expect.

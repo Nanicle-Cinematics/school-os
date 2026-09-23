@@ -83,6 +83,114 @@ check("bigDebtors all owe at least 1000",
   bigDebtors.every((r) => Number(r.context.balance) >= 1000),
   bigDebtors.map((r) => r.context.balance).slice(0, 5).join(", "));
 
+
+/* ── Arrears are a CHAIN, not a list ──────────────────────────────────────────
+ *
+ * ⚠️ This section BUILDS a second term's invoice and removes it again, because
+ * the bug it guards cannot exist on the seeded school: st-mary-demo is billed
+ * for ONE term, and with one invoice per pupil "sum the balances" and "what
+ * they actually owe" are the same number. That is exactly why the debtor SMS
+ * shipped for months telling parents roughly double what they owed — every
+ * check anyone could run agreed with it.
+ *
+ * So: give one pupil a second invoice that carries the first one's balance
+ * forward, the way generateInvoicesForTerm does, and assert the texted figure
+ * is what the school is actually owed rather than the same money counted twice.
+ */
+const chainStudent = await inSchool(() =>
+  prisma.invoice.findFirst({
+    where: { schoolId: school.id, balance: { gt: 0 }, status: { not: "CANCELLED" } },
+    orderBy: { issueDate: "asc" },
+    select: { id: true, studentId: true, balance: true, termId: true },
+  }),
+);
+
+if (!chainStudent) {
+  console.log("  --   arrears chain — no unpaid invoice in the seed to build one from");
+} else {
+  const secondTerm = await inSchool(() =>
+    prisma.term.findFirst({
+      where: { schoolId: school.id, id: { not: chainStudent.termId } },
+      orderBy: { sequence: "asc" },
+      select: { id: true },
+    }),
+  );
+
+  let syntheticId: string | null = null;
+  try {
+    if (!secondTerm) {
+      console.log("  --   arrears chain — the seed has only one term");
+    } else {
+      const fees = 500;
+      const broughtForward = Number(chainStudent.balance);
+      const synthetic = await inSchool(() =>
+        prisma.invoice.create({
+          data: {
+            schoolId: school.id,
+            studentId: chainStudent.studentId,
+            termId: secondTerm.id,
+            invoiceNo: `VERIFY-CHAIN-${Date.now()}`,
+            issueDate: new Date(),
+            subtotal: fees,
+            discountTotal: 0,
+            broughtForward,
+            total: fees + broughtForward,
+            amountPaid: 0,
+            balance: fees + broughtForward,
+            status: "ISSUED",
+          },
+          select: { id: true },
+        }),
+      );
+      syntheticId = synthetic.id;
+
+      const [invoices, payments] = await inSchool(async () => [
+        await prisma.invoice.findMany({
+          where: { studentId: chainStudent.studentId, status: { not: "CANCELLED" } },
+          select: { total: true, broughtForward: true, balance: true },
+        }),
+        await prisma.payment.findMany({
+          where: { studentId: chainStudent.studentId, reversedAt: null, status: "CONFIRMED" },
+          select: { amount: true },
+        }),
+      ]);
+
+      // Worked out here rather than imported, so this asserts the ANSWER and
+      // not merely that the function agrees with itself.
+      const charged = invoices.reduce((n, i) => n + Number(i.total) - Number(i.broughtForward), 0);
+      const paid = payments.reduce((n, p) => n + Number(p.amount), 0);
+      const truly = Math.max(0, charged - paid);
+      const naive = invoices.reduce((n, i) => n + Number(i.balance), 0);
+
+      check(
+        "the fixture actually chains — the naive sum differs",
+        naive > truly + 0.005,
+        `naive ${naive.toFixed(2)} vs owed ${truly.toFixed(2)}`,
+      );
+
+      const chained = await inSchool(() =>
+        resolveAudience(school.id, "DEBTORS", {}, school.name),
+      );
+      const row = chained.find(
+        (r) => (r.context as { admission_no?: string }).admission_no !== undefined &&
+          r.studentId === chainStudent.studentId,
+      ) ?? chained.find((r) => r.studentId === chainStudent.studentId);
+
+      check(
+        "the debtor SMS quotes what is owed, not the sum of balances",
+        row !== undefined && Math.abs(Number(row.context.balance) - truly) < 0.01,
+        row
+          ? `texted ${row.context.balance}, owed ${truly.toFixed(2)}, naive sum ${naive.toFixed(2)}`
+          : "that pupil did not appear in the debtor audience at all",
+      );
+    }
+  } finally {
+    if (syntheticId) {
+      await inSchool(() => prisma.invoice.delete({ where: { id: syntheticId! } }));
+    }
+  }
+}
+
 console.log(`\n${failures === 0 ? "All checks passed" : `${failures} FAILED`}`);
 await prisma.$disconnect();
 process.exit(failures === 0 ? 0 : 1);
