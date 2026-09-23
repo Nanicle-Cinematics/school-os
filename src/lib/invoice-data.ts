@@ -5,6 +5,15 @@ import type { InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PLAN_SELECT, keepingToPlan } from "@/lib/report-access";
 import { AGE_BUCKETS, ageFilterWhere, statusFilterWhere, type AgeBucket } from "@/lib/invoice-engine";
+import {
+  chooseFeeStructure,
+  explainNoStructure,
+  priceFromStructure,
+  type SkippedStudent,
+} from "@/lib/invoice-engine";
+import type { Proforma } from "@/app/(app)/invoices/proforma-bill";
+
+type ProformaRow = Proforma;
 
 export type InvoiceFilters = {
   termId?: string;
@@ -243,4 +252,130 @@ export async function getInvoiceFilterOptions() {
     }),
   ]);
   return { terms, classGroups };
+}
+
+/**
+ * What a term WOULD cost each pupil, without invoicing anybody.
+ *
+ * Read-only on purpose: an advance bill is printed in the holidays, weeks
+ * before the office is ready to raise real invoices, and generating them early
+ * to produce a piece of paper would mean cancelling or editing them later. So
+ * this prices the term and writes nothing.
+ *
+ * ⚠️ The reads mirror `generateInvoicesForTerm` deliberately — same structures,
+ * same discounts, same brought-forward balance from the previous term — and the
+ * arithmetic itself is `priceFromStructure`, which the generator now also uses.
+ * A pro-forma that quotes a figure the invoice then contradicts is worse than
+ * no pro-forma: the parent has the paper, and the office has the argument.
+ */
+export async function getProformaForTerm(
+  termId: string,
+  options: { classGroupId?: string } = {},
+) {
+  const term = await prisma.term.findUnique({
+    where: { id: termId },
+    include: { academicYear: true },
+  });
+  if (!term) {
+    return null;
+  }
+
+  const students = await prisma.student.findMany({
+    where: {
+      status: "ACTIVE",
+      deletedAt: null,
+      ...(options.classGroupId ? { currentClassGroupId: options.classGroupId } : {}),
+    },
+    include: {
+      currentClassGroup: { select: { name: true, levelId: true, level: { select: { name: true } } } },
+      discounts: { where: { academicYearId: term.academicYearId }, include: { discount: true } },
+      guardians: {
+        where: { receivesBills: true },
+        include: { guardian: true },
+        orderBy: { isPrimary: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { admissionNo: "asc" },
+  });
+
+  const structures = await prisma.feeStructure.findMany({
+    where: { academicYearId: term.academicYearId, isActive: true },
+    include: { items: { include: { feeCategory: true } } },
+  });
+
+  const previousTerm = await prisma.term.findFirst({
+    where: { academicYearId: term.academicYearId, sequence: term.sequence - 1 },
+  });
+  const previousBalances = new Map<string, Prisma.Decimal>(
+    previousTerm
+      ? (
+          await prisma.invoice.findMany({
+            where: { termId: previousTerm.id, status: { not: "CANCELLED" } },
+            select: { studentId: true, balance: true },
+          })
+        ).map((row) => [row.studentId, row.balance])
+      : [],
+  );
+
+  const priced: ProformaRow[] = [];
+  const skipped: SkippedStudent[] = [];
+
+  for (const student of students) {
+    const who = {
+      admissionNo: student.admissionNo,
+      name: `${student.firstName} ${student.lastName}`,
+    };
+    const levelId = student.currentClassGroup?.levelId;
+    if (!levelId) {
+      skipped.push({ ...who, reason: { kind: "NO_CLASS" } });
+      continue;
+    }
+
+    const profile = {
+      residency: student.residency,
+      isNew: student.admissionDate ? student.admissionDate >= term.academicYear.startDate : false,
+    };
+    const levelStructures = structures.filter((s) => s.levelId === levelId);
+    const structure = chooseFeeStructure(levelStructures, profile, termId);
+    if (!structure) {
+      const level = student.currentClassGroup?.level?.name ?? "their level";
+      skipped.push({
+        ...who,
+        reason: explainNoStructure(levelStructures, profile, termId, level),
+      });
+      continue;
+    }
+
+    const money = priceFromStructure(
+      student.schoolId,
+      structure,
+      student.discounts.map((sd) => sd.discount),
+      previousBalances.get(student.id) ?? new Prisma.Decimal(0),
+    );
+    const link = student.guardians[0]?.guardian ?? null;
+
+    priced.push({
+      student: {
+        firstName: student.firstName,
+        lastName: student.lastName,
+        admissionNo: student.admissionNo,
+        className: student.currentClassGroup
+          ? `${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
+          : null,
+      },
+      guardian: link ? { firstName: link.firstName, lastName: link.lastName, phone: link.phone } : null,
+      lines: money.lines.map((l) => ({
+        description: l.description,
+        amount: l.amount,
+        discount: l.discount,
+      })),
+      subtotal: money.subtotal,
+      discountTotal: money.discountTotal,
+      broughtForward: money.broughtForward,
+      total: money.total,
+    });
+  }
+
+  return { term, priced, skipped };
 }

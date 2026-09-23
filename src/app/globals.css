@@ -514,9 +514,41 @@ html[data-skin="pixel"] .backdrop-blur-xl { backdrop-filter: none; -webkit-backd
 /* Paper stays paper whatever the skin: Classic shape inside a document. */
 html[data-skin] .paper { --radius-card: 20px; --radius-control: 14px; --shadow-card: none; }
 
+/**
+ * The school's crest, faded, behind a printed document.
+ *
+ * A background-image cannot be given an opacity, so the crest is layered UNDER
+ * a near-opaque white veil instead. The alternative — a ::before pseudo-element
+ * — would have to sit above each document's own `bg-white` and below its text,
+ * and none of the three documents wrap their children in anything to z-index
+ * against. Two background layers do it with no markup change.
+ *
+ * ⚠️ BOTH custom properties are opt-in, and that is deliberate: `.paper` is
+ * also worn by the attendance register, the class page and the expense form,
+ * which are screens rather than documents. With neither set the veil resolves
+ * to `transparent` over `none`, so those are untouched. `paperWatermark()` in
+ * src/lib/paper.ts is the only thing that sets them.
+ */
+.paper {
+  background-image:
+    linear-gradient(var(--paper-veil, transparent), var(--paper-veil, transparent)),
+    var(--paper-crest, none);
+  background-repeat: no-repeat;
+  background-position: center 44%;
+  background-size: min(62%, 440px) auto;
+}
+
 /* And whatever is on screen, a printer gets the light palette: nobody wants a
    class list printed as a black page, and the school pays for the toner. */
 @media print {
+  /* Without this the watermark prints on NOTHING: background images are
+     dropped from print by default, and a watermark that only exists on screen
+     is the one thing this feature is not. */
+  .paper {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
   html.dark {
     color-scheme: light;
 

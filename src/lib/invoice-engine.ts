@@ -408,6 +408,41 @@ export function groupSkipped(skipped: SkippedStudent[]): BlockedGroup[] {
 }
 
 /**
+ * What one student's bill for a term COMES TO — the arithmetic alone.
+ *
+ * Extracted so that the pro-forma (`/invoices/proforma`) and the real generator
+ * cannot disagree. They would: a pro-forma is a promise about what the bill
+ * will be, and a second copy of "subtotal minus discounts plus arrears" drifts
+ * the first time either side is edited alone — which in this codebase has
+ * already happened to a CSV header, a payment-method label and an invoice
+ * status. A parent shown one figure in July and billed another in September is
+ * the money version of that, and it is the office that gets shouted at.
+ *
+ * Pure: it takes rows already read and returns Decimals. Nothing here touches
+ * the database, so the pro-forma can price a term that has no invoices at all.
+ */
+export function priceFromStructure(
+  schoolId: string,
+  structure: { items: { feeCategoryId: string; amount: Prisma.Decimal; feeCategory: { name: string } }[] },
+  discounts: Parameters<typeof discountForLine>[0],
+  broughtForward: Prisma.Decimal,
+) {
+  const lines = structure.items.map((item) => ({
+    schoolId,
+    feeCategoryId: item.feeCategoryId,
+    description: item.feeCategory.name,
+    amount: item.amount,
+    discount: discountForLine(discounts, item.feeCategoryId, item.amount),
+  }));
+
+  const subtotal = lines.reduce((acc, l) => acc.add(l.amount), new Prisma.Decimal(0));
+  const discountTotal = lines.reduce((acc, l) => acc.add(l.discount), new Prisma.Decimal(0));
+  const total = subtotal.sub(discountTotal).add(broughtForward);
+
+  return { lines, subtotal, discountTotal, broughtForward, total };
+}
+
+/**
  * Build term invoices for every active student who doesn't already have one.
  *
  * Idempotent by design — Invoice is unique on (studentId, termId), and we skip
@@ -496,19 +531,13 @@ export async function generateInvoicesForTerm(
       continue;
     }
 
-    const discounts = student.discounts.map((sd) => sd.discount);
-    const lines = structure.items.map((item) => ({
+    const priced = priceFromStructure(
       schoolId,
-      feeCategoryId: item.feeCategoryId,
-      description: item.feeCategory.name,
-      amount: item.amount,
-      discount: discountForLine(discounts, item.feeCategoryId, item.amount),
-    }));
-
-    const subtotal = lines.reduce((acc, l) => acc.add(l.amount), new Prisma.Decimal(0));
-    const discountTotal = lines.reduce((acc, l) => acc.add(l.discount), new Prisma.Decimal(0));
-    const broughtForward = previousBalances.get(student.id) ?? new Prisma.Decimal(0);
-    const total = subtotal.sub(discountTotal).add(broughtForward);
+      structure,
+      student.discounts.map((sd) => sd.discount),
+      previousBalances.get(student.id) ?? new Prisma.Decimal(0),
+    );
+    const { lines, subtotal, discountTotal, broughtForward, total } = priced;
 
     const invoiceNo = await nextNumber(tx, schoolId, "INVOICE", takenProbes.invoice(tx, schoolId));
 

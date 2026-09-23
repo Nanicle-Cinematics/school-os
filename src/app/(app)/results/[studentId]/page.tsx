@@ -8,6 +8,7 @@ import { saveRemarks } from "@/lib/results-actions";
 import { reportHold } from "@/lib/report-access";
 import { formatCedis } from "@/lib/money";
 import { StatusBadge, inputClass } from "../../ui";
+import { buttonClass } from "../../button-style";
 import { ReportCard } from "../report-card";
 import { SubmitButton } from "../../submit-button";
 
@@ -47,7 +48,18 @@ export default async function ReportCardPage({
         >
           ← Broadsheet
         </Link>
-        <StatusBadge status={termResult.status} />
+        <div className="flex items-center gap-2">
+          <StatusBadge status={termResult.status} />
+          {/* A route, not window.print() here: this page carries the remarks
+              editor below the card, and printing it directly would work only
+              because of print:hidden. The print view is the card alone. */}
+          <Link
+            href={`/results/print?term=${termId}&student=${studentId}`}
+            className={buttonClass("secondary", "sm")}
+          >
+            Print this card
+          </Link>
+        </div>
       </div>
 
       {hold ? (

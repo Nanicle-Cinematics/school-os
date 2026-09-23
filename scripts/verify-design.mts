@@ -39,6 +39,12 @@ const hits = (re: RegExp, allow: (path: string) => boolean = () => false) =>
 const DOCUMENTS = [
   "results/report-card.tsx",
   "invoices/invoice-bill.tsx",
+  // The fourth, added deliberately. An advance bill is the same animal again —
+  // .paper, the shared masthead, its own print rules, handed to a parent in the
+  // holidays. Its heading SHOUTS on purpose and the shouting is the feature:
+  // "PRO-FORMA · ADVANCE BILL" and "NOT YET INVOICED" are what stop a parent
+  // filing it as a real invoice, or paying it twice when the real one arrives.
+  "invoices/proforma-bill.tsx",
   // Added deliberately, as the note below asks. A payment receipt is the same
   // animal as the bill: .paper, its own masthead, its own print rules, and it
   // is handed across a counter, signed and stamped. "PAYMENT RECEIPT" is the
@@ -113,6 +119,9 @@ console.log("\nOne set of primitives, not thirty copies");
 const NOT_LISTS = [
   "results/report-card.tsx",
   "invoices/invoice-bill.tsx",
+  // PRINTED DOCUMENTS, as above: a fee table on a document a parent keeps, not
+  // a list on a screen. It shares the bill's columns on purpose.
+  "invoices/proforma-bill.tsx",
   "assessments/sheet/sheet-form.tsx",
   "assessments/[id]/score-grid.tsx",
   "results/broadsheet/page.tsx",
