@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { sum } from "@/lib/money";
 import { reportHold, reportHoldsForTerms } from "@/lib/report-access";
+import { netOutstanding } from "@/lib/invoice-engine";
 
 /**
  * Reads for the parent portal.
@@ -36,14 +37,32 @@ export async function getMyChildren(studentIds: string[]) {
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   });
 
-  // One grouped query rather than one per child: a family with four children
-  // would otherwise be four round trips to Frankfurt on a slow link.
-  const owed = await prisma.invoice.groupBy({
-    by: ["studentId"],
+  /**
+   * ⚠️ NOT `_sum: { balance }`. This spans every term a child has ever been
+   * billed for, and each term's invoice carries the previous term's balance
+   * forward — so the grouped sum showed a parent roughly double what they owe.
+   * See netOutstanding.
+   *
+   * Two queries rather than one per child: a family with four children would
+   * otherwise be several round trips to Frankfurt on a slow link.
+   */
+  const owedInvoices = await prisma.invoice.findMany({
     where: { studentId: { in: studentIds }, status: { not: "DRAFT" } },
-    _sum: { balance: true },
+    select: { studentId: true, total: true, broughtForward: true },
   });
-  const owedBy = new Map(owed.map((row) => [row.studentId, row._sum.balance]));
+  const owedPayments = await prisma.payment.findMany({
+    where: { studentId: { in: studentIds }, reversedAt: null, status: "CONFIRMED" },
+    select: { studentId: true, amount: true },
+  });
+  const owedBy = new Map(
+    studentIds.map((id) => [
+      id,
+      netOutstanding(
+        owedInvoices.filter((row) => row.studentId === id),
+        owedPayments.filter((row) => row.studentId === id),
+      ),
+    ]),
+  );
 
   // A report card the school has not published is not a parent's to see, so the
   // count is of PUBLISHED rows only — the portal never reveals that an
@@ -150,7 +169,9 @@ export async function getChildFinance(studentId: string) {
   return {
     invoices,
     payments,
-    outstanding: sum(invoices.map((i) => i.balance)),
+    // ⚠️ Not a sum of balances — see netOutstanding. `invoices` here spans
+    // every term, and the balances chain rather than add.
+    outstanding: netOutstanding(invoices, payments),
     paidTotal: sum(payments.map((p) => p.amount)),
   };
 }

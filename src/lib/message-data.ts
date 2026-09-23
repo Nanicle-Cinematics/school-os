@@ -4,6 +4,7 @@ import type { AudienceType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalisePhone, type MergeContext } from "@/lib/sms";
 import { termLabel } from "@/lib/academic-year";
+import { netOutstanding } from "@/lib/invoice-engine";
 
 export type Recipient = {
   phone: string;
@@ -107,7 +108,13 @@ export async function resolveAudience(
       },
       invoices: {
         where: { status: { not: "CANCELLED" } },
-        select: { balance: true, dueDate: true },
+        select: { total: true, broughtForward: true, balance: true, dueDate: true },
+      },
+      // Needed to work out what is ACTUALLY owed: see netOutstanding. Reversed
+      // receipts are money the family does not have credit for.
+      payments: {
+        where: { reversedAt: null, status: "CONFIRMED" },
+        select: { amount: true },
       },
     },
   });
@@ -115,7 +122,14 @@ export async function resolveAudience(
   const recipients: Recipient[] = [];
 
   for (const student of students) {
-    const balance = student.invoices.reduce((sum, invoice) => sum + Number(invoice.balance), 0);
+    /**
+     * ⚠️ NOT a sum of invoice balances. This audience spans every term a child
+     * has been billed for, and each term's invoice carries the last one's
+     * balance forward — so summing texted a parent roughly double what they
+     * owed, into a template that says "has an outstanding balance of GHS
+     * {{balance}}". See netOutstanding.
+     */
+    const balance = Number(netOutstanding(student.invoices, student.payments));
 
     if (type === "DEBTORS") {
       const floor = filter.minBalance ?? 0.01;
