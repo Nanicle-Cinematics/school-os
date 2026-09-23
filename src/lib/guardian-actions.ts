@@ -137,6 +137,10 @@ export async function linkStudent(
 
   revalidatePath(`/guardians/${guardianId}`);
   revalidatePath("/guardians");
+  // Also reached from the student's own page now (linking an existing
+  // guardian to a student being edited), which is a route this action never
+  // used to touch.
+  revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");
   return { ok: "Linked." };
 }

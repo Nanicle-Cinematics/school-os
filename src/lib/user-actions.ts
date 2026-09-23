@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { Prisma, type Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext, withBypass } from "@/lib/tenant-context";
-import { OFFICE, ROLE_ADMIN, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { OFFICE, ROLE_ADMIN, ACCOUNT_CREATOR, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
@@ -23,7 +23,7 @@ export async function createUserAccount(
   _prev: UserState,
   formData: FormData,
 ): Promise<UserState> {
-  const auth = await requireRole(ROLE_ADMIN);
+  const auth = await requireRole(ACCOUNT_CREATOR);
   setTenantContext({ schoolId: auth.schoolId });
 
   const staffId = String(formData.get("staffId") ?? "");
@@ -40,6 +40,18 @@ export async function createUserAccount(
   // A secretary must not be able to promote themselves to proprietor.
   if (roles.some((role) => PRIVILEGED_ROLES.includes(role)) && !canAccess(auth.roles, LEADERSHIP)) {
     return { error: "Only a proprietor or head can grant leadership roles." };
+  }
+  /**
+   * ⚠️ ACCOUNT_CREATOR is wider than ROLE_ADMIN, and this is the difference
+   * that keeps it safe. An actor who is only here via IT_ADMIN must not be
+   * able to grant ACCOUNTANT — that reaches the money, which IT_ADMIN is
+   * deliberately kept out of everywhere else (see FINANCE in permissions.ts)
+   * — or ADMIN, which IS a ROLE_ADMIN role and would let IT mint a puppet
+   * account that reopens this same door. A real ROLE_ADMIN actor (leadership
+   * or an existing admin) is unaffected: they could always grant both.
+   */
+  if (roles.some((role) => role === "ACCOUNTANT" || role === "ADMIN") && !canAccess(auth.roles, ROLE_ADMIN)) {
+    return { error: "IT admin may create a staff login, but not one with finance or administrator access." };
   }
   if (!email && !phone) {
     return { error: "An email address or a phone number is needed to sign in." };

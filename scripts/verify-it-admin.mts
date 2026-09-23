@@ -1,14 +1,17 @@
 /**
- * Prove an IT admin can restore access and nothing else.
+ * Prove an IT admin runs the school's systems and stays out of its money.
  *
  * The role exists so a locked-out teacher can be let back in on a Monday
  * morning without handing the helpdesk the roll, every family's phone number
- * and the bulk SMS screen. This asserts both halves of that bargain: the one
- * screen they reach, and the fact that granting access is not on it.
+ * and the bulk SMS screen. It may now also create that teacher's login in the
+ * first place (see ACCOUNT_CREATOR in permissions.ts) — widened on request —
+ * but never one that reaches the money: `createUserAccount` refuses an
+ * IT-admin-only actor who tries to grant ACCOUNTANT or ADMIN. This asserts the
+ * FINANCE half of that bargain — the routes it may never open, and the fact
+ * that the money never appears on a screen it does reach.
  *
  * Like verify:teacher, it asks for every route BY URL. A hidden nav link is not
- * a guard, and neither is a button rendered behind a condition — the actions
- * are checked too, by replaying the real form POST.
+ * a guard, and neither is a button rendered behind a condition.
  *
  *   npm run dev
  *   npm run verify:it-admin
@@ -170,17 +173,30 @@ async function main() {
       check(`${path} is refused`, away, `HTTP ${res.status}${res.location ? ` -> ${res.location}` : ""}`);
     }
 
-    console.log("\nIt can restore access, not grant it");
+    /**
+     * ⚠️ Until this was the deliberate policy: IT_ADMIN could not create ANY
+     * login, because the account-creating role also picks the new account's
+     * roles and could mint itself into the money. Widened on request — see
+     * ACCOUNT_CREATOR in permissions.ts — so IT_ADMIN now opens this door too,
+     * but `createUserAccount` refuses an IT-admin-only actor who tries to grant
+     * ACCOUNTANT or ADMIN on the new account. That server-side refusal is
+     * exercised directly (bk3m9whrm, run by hand) rather than here: the create
+     * form sits behind a client `useState` toggle and is absent from the SSR
+     * HTML, so — same limitation `verify:actions` already documents — a no-JS
+     * POST replay cannot reach it. What this script CAN still prove without
+     * a browser is that the door is open and the boundary is explained.
+     */
+    console.log("\nIt can create a login, but not one that reaches the money");
     const page = await get("/users", token);
     check(
-      "no create-login form is offered",
-      !/Create login/i.test(page.html),
-      "granting roles stays with the head — it is the one door that opens the money",
+      "a create-login form is now offered",
+      /Create login/i.test(page.html),
+      "IT admin may create a staff login — see ACCOUNT_CREATOR in permissions.ts",
     );
     check(
-      "and the page says who may grant instead",
-      /decision for the head or the proprietor/i.test(page.html),
-      "explained, not just missing",
+      "and the page explains the finance/admin boundary",
+      /finance or administrator access/i.test(page.html),
+      "IT admin can open the door but not walk all the way through it",
     );
 
     console.log("\nAnd the dashboard tells it nothing about money");

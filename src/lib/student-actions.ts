@@ -238,6 +238,114 @@ export async function admitStudent(
   };
 }
 
+/**
+ * A guardian added from the STUDENT's own page — for a child admitted without
+ * one, or whose second parent needs linking later. `saveStudent`/EditStudentForm
+ * never touched guardians at all, so this was the only entry point missing:
+ * admission has the inline fieldset above, and /guardians/[id] can link an
+ * existing child, but nothing let the office add a parent while looking at the
+ * student record itself.
+ *
+ * Matches an existing guardian by phone first, exactly as admitStudent does —
+ * a family's second child must not create a second copy of the same mother.
+ */
+export async function addGuardianToStudent(
+  _prev: StudentState,
+  formData: FormData,
+): Promise<StudentState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const studentId = String(formData.get("studentId") ?? "");
+  const name = String(formData.get("guardianName") ?? "").trim();
+  const phone = String(formData.get("guardianPhone") ?? "").trim();
+  const relationship = String(formData.get("guardianRelationship") ?? "GUARDIAN") as GuardianRelationship;
+
+  if (!studentId) {
+    return { error: "Missing student." };
+  }
+  if (!name) {
+    return { error: "Give the guardian a name." };
+  }
+  if (!normalisePhone(phone)) {
+    return { error: "That phone number is not a Ghanaian mobile number, e.g. 0244123456." };
+  }
+  if (!RELATIONSHIPS.includes(relationship)) {
+    return { error: "Pick a relationship." };
+  }
+
+  const parts = name.split(/\s+/);
+  const firstName = parts[0];
+  const lastName = parts.slice(1).join(" ") || parts[0];
+  const isPrimary = formData.get("isPrimary") === "on";
+  const receivesBills = formData.get("receivesBills") === "on";
+  const receivesReports = formData.get("receivesReports") === "on";
+  const isEmergencyContact = formData.get("isEmergencyContact") === "on";
+
+  const student = await prisma.student.findUnique({ where: { id: studentId }, select: { id: true } });
+  if (!student) {
+    return { error: "That student no longer exists." };
+  }
+
+  let addedName = `${firstName} ${lastName}`;
+
+  await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {
+    // Siblings share a parent: match on the normalised phone so a second
+    // child does not create a second copy of the same mother.
+    const wanted = normalisePhone(phone);
+    const candidates = await tx.guardian.findMany({
+      where: { deletedAt: null },
+      select: { id: true, phone: true, firstName: true, lastName: true },
+    });
+    const existing = candidates.find((c) => normalisePhone(c.phone) === wanted);
+
+    const guardianId =
+      existing?.id ??
+      (
+        await tx.guardian.create({
+          data: { schoolId: auth.schoolId, firstName, lastName, phone },
+        })
+      ).id;
+
+    if (existing) {
+      addedName = `${existing.firstName} ${existing.lastName}`;
+    }
+
+    // One primary guardian per student — see linkStudent in guardian-actions.ts.
+    if (isPrimary) {
+      await tx.studentGuardian.updateMany({
+        where: { studentId, isPrimary: true },
+        data: { isPrimary: false },
+      });
+    }
+
+    await tx.studentGuardian.upsert({
+      where: { studentId_guardianId: { studentId, guardianId } },
+      create: {
+        schoolId: auth.schoolId,
+        studentId,
+        guardianId,
+        relationship,
+        isPrimary,
+        receivesBills,
+        receivesReports,
+        isEmergencyContact,
+      },
+      update: {
+        relationship,
+        isPrimary,
+        receivesBills,
+        receivesReports,
+        isEmergencyContact,
+      },
+    });
+  });
+
+  revalidatePath(`/students/${studentId}`);
+  revalidatePath("/guardians");
+  return { ok: `Linked ${addedName} to this student.` };
+}
+
 export async function saveStudent(_prev: StudentState, formData: FormData): Promise<StudentState> {
   const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });

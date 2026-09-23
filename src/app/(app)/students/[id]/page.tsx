@@ -12,6 +12,7 @@ import { Alert, Card, StatusBadge } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditStudentForm } from "../student-form";
 import { EnrolForm } from "./enrol-form";
+import { AddNewGuardianForm, LinkExistingGuardianForm } from "./guardian-form";
 
 const COLUMNS_0: Column[] = [
   { label: "Name" },
@@ -64,7 +65,7 @@ export default async function StudentDetailPage({
     notFound();
   }
 
-  const { student, year, enrollments, invoices, termResults, outstanding } =
+  const { student, year, enrollments, invoices, termResults, outstanding, availableGuardians } =
     result;
   const { classGroups, houses, programmes } = await getStudentFormOptions();
 
@@ -103,7 +104,7 @@ export default async function StudentDetailPage({
       {student.guardians.length === 0 ? (
         <Alert tone="error">
           No guardian is linked, so no bill, result or notice can reach anyone.
-          Link one from the guardian&rsquo;s page.
+          Add one below.
         </Alert>
       ) : null}
 
@@ -171,6 +172,14 @@ export default async function StudentDetailPage({
               }
           </DataTable>
         </div>
+      </Card>
+
+      <Card title="Link an existing guardian">
+        <LinkExistingGuardianForm studentId={student.id} guardians={availableGuardians} />
+      </Card>
+
+      <Card title="Add a new guardian">
+        <AddNewGuardianForm studentId={student.id} />
       </Card>
 
       <Card title="Class placement">

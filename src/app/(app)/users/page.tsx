@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import type { Role } from "@prisma/client";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP, OFFICE, ROLE_ADMIN, canAccess, roleLabel } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE, ROLE_ADMIN, ACCOUNT_CREATOR, canAccess, roleLabel } from "@/lib/permissions";
 import { ASSIGNABLE_ROLES, PRIVILEGED_ROLES, getUserList } from "@/lib/user-data";
 import { Alert, PageHeader } from "../ui";
 import { UserPlus } from "lucide-react";
@@ -33,9 +34,16 @@ const ERRORS: Record<string, string> = {
 export default async function UsersPage({ searchParams }: PageProps<"/users">) {
   const auth = await requireRole(OFFICE);
   // Creating a login assigns a role, and an account-creating role that picks
-  // its own roles can mint itself into the money. So the form is OFFICE only,
-  // and an IT admin gets the list, the password resets and the suspensions.
-  const mayGrant = canAccess(auth.roles, ROLE_ADMIN);
+  // its own roles can mint itself into the money — so ACCOUNT_CREATOR (which
+  // adds IT_ADMIN to ROLE_ADMIN) is paired with a wider set of LOCKED roles
+  // below for anyone who is not a full ROLE_ADMIN: ACCOUNTANT and ADMIN are
+  // added to PRIVILEGED_ROLES so an IT admin can open this form but cannot
+  // pick a role that reaches the money or reopens this same door.
+  const mayCreateAccounts = canAccess(auth.roles, ACCOUNT_CREATOR);
+  const hasFullAccountAdmin = canAccess(auth.roles, ROLE_ADMIN);
+  const lockedRoles: Role[] = hasFullAccountAdmin
+    ? PRIVILEGED_ROLES
+    : [...PRIVILEGED_ROLES, "ACCOUNTANT", "ADMIN"];
   const query = await searchParams;
   const { users, staffWithoutAccounts } = await getUserList(auth.schoolId);
   const canGrantPrivileged = canAccess(auth.roles, LEADERSHIP);
@@ -50,11 +58,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
           staffWithoutAccounts.length
         } staff without one`}
         action={
-          mayGrant ? (
+          mayCreateAccounts ? (
             <NewAccountForm
               staff={staffWithoutAccounts}
               roles={ASSIGNABLE_ROLES}
-              privileged={PRIVILEGED_ROLES}
+              privileged={lockedRoles}
               canGrantPrivileged={canGrantPrivileged}
             />
           ) : null
@@ -129,10 +137,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
         </p>
       ) : null}
 
-      {!mayGrant ? (
+      {mayCreateAccounts && !hasFullAccountAdmin ? (
         <p className="text-xs text-slate-400">
-          You can reset a password and suspend or restore a login here. Creating an account, or
-          changing what one is allowed to do, is a decision for the head or the proprietor.
+          As IT admin you can create a staff login, reset a password and suspend or restore one.
+          A login with finance or administrator access, or a change to what an existing login is
+          allowed to do, is a decision for the head or the proprietor.
         </p>
       ) : null}
 

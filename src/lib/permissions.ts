@@ -36,6 +36,20 @@ export const ACADEMIC: Role[] = [...LEADERSHIP, "IT_ADMIN"];
  */
 export const ROLE_ADMIN: Role[] = [...LEADERSHIP, "ADMIN"];
 
+/**
+ * Who may CREATE a staff login — wider than ROLE_ADMIN by design.
+ *
+ * IT_ADMIN is added here on request: the helpdesk half of the job (suspend,
+ * restore, reset a password) was always theirs, and "create the account in
+ * the first place" is the same kind of task. It does NOT reopen the door the
+ * comment above closed — `createUserAccount` still refuses to let an actor who
+ * reaches this only via IT_ADMIN (not ROLE_ADMIN) grant ACCOUNTANT or ADMIN, so
+ * an IT admin cannot mint a puppet account that reaches the money or reaches
+ * this same door. See the check in user-actions.ts, not this list, for that
+ * boundary.
+ */
+export const ACCOUNT_CREATOR: Role[] = [...ROLE_ADMIN, "IT_ADMIN"];
+
 
 
 /**

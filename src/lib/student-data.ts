@@ -136,5 +136,15 @@ export async function getStudent(id: string) {
   // one fewer round trip, and it cannot disagree with the table shown below it.
   const outstanding = sum(invoices.map((invoice) => invoice.balance));
 
-  return { student, year, enrollments, invoices, termResults, outstanding };
+  // Candidates for linking: the mirror of getGuardian's "students not already
+  // tied to this guardian" — guardians not already tied to THIS student.
+  const linkedGuardianIds = new Set(student.guardians.map((link) => link.guardianId));
+  const availableGuardians = await prisma.guardian.findMany({
+    where: { deletedAt: null, id: { notIn: [...linkedGuardianIds] } },
+    select: { id: true, firstName: true, lastName: true, phone: true },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    take: 500,
+  });
+
+  return { student, year, enrollments, invoices, termResults, outstanding, availableGuardians };
 }
