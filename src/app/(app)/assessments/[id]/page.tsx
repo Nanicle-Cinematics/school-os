@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, canAccess } from "@/lib/permissions";
+import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getAssessmentForEntry } from "@/lib/assessment-data";
 import { setAssessmentStatus, deleteAssessment } from "@/lib/assessment-actions";
 import { StatusBadge } from "../../ui";
@@ -21,7 +21,13 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
   }
 
   const { assessment, rows } = data;
-  const isLeadership = canAccess(auth.roles, ACADEMIC);
+  // ⚠️ Checked against LEADERSHIP, not the page's own ACADEMIC gate — an IT
+  // Admin can OPEN this page (they manage components under Settings) but
+  // approving a grade is a leadership decision, not a technical one.
+  // `setAssessmentStatus` already refuses an IT Admin's APPROVED transition
+  // server-side; this just stops the page offering a button that would only
+  // redirect them away.
+  const isLeadership = canAccess(auth.roles, LEADERSHIP);
   const readOnly = assessment.status === "APPROVED";
 
   const gridRows: Row[] = rows.map((row) => ({
