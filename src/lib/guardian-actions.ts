@@ -94,7 +94,7 @@ export async function linkStudent(
   const guardianId = String(formData.get("guardianId") ?? "");
   const studentId = String(formData.get("studentId") ?? "");
   const relationship = String(formData.get("relationship") ?? "GUARDIAN") as GuardianRelationship;
-  const isPrimary = formData.get("isPrimary") === "on";
+  const checkedPrimary = formData.get("isPrimary") === "on";
 
   if (!guardianId || !studentId) {
     return { error: "Pick a student to link." };
@@ -104,6 +104,16 @@ export async function linkStudent(
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    /**
+     * ⚠️ The FIRST guardian a student gets is always primary, box ticked or
+     * not — otherwise a student with none on file stays reading "None on
+     * file" on the pupils list (which shows the PRIMARY guardian only) even
+     * though a guardian was genuinely just linked. See addGuardianToStudent
+     * in student-actions.ts, which had the identical gap.
+     */
+    const hadAnyGuardian = (await tx.studentGuardian.count({ where: { studentId } })) > 0;
+    const isPrimary = checkedPrimary || !hadAnyGuardian;
+
     // One primary guardian per student — that is who the bill and the report
     // card are addressed to, so promoting this one demotes the incumbent.
     if (isPrimary) {

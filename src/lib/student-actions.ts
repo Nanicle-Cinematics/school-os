@@ -277,7 +277,7 @@ export async function addGuardianToStudent(
   const parts = name.split(/\s+/);
   const firstName = parts[0];
   const lastName = parts.slice(1).join(" ") || parts[0];
-  const isPrimary = formData.get("isPrimary") === "on";
+  const checkedPrimary = formData.get("isPrimary") === "on";
   const receivesBills = formData.get("receivesBills") === "on";
   const receivesReports = formData.get("receivesReports") === "on";
   const isEmergencyContact = formData.get("isEmergencyContact") === "on";
@@ -311,7 +311,18 @@ export async function addGuardianToStudent(
       addedName = `${existing.firstName} ${existing.lastName}`;
     }
 
-    // One primary guardian per student — see linkStudent in guardian-actions.ts.
+    /**
+     * ⚠️ The FIRST guardian a student gets is always primary, whether or not
+     * the office ticked the box. admitStudent already does this unconditionally
+     * for a guardian captured at admission — this screen exists precisely for
+     * the students admission skipped, so it must not need a checkbox to reach
+     * the same result. Without this, "add their only guardian" silently left
+     * the pupils list reading "None on file" (it only shows the PRIMARY one),
+     * which read as though nothing had been saved at all.
+     */
+    const hadAnyGuardian = (await tx.studentGuardian.count({ where: { studentId } })) > 0;
+    const isPrimary = checkedPrimary || !hadAnyGuardian;
+
     if (isPrimary) {
       await tx.studentGuardian.updateMany({
         where: { studentId, isPrimary: true },
@@ -342,6 +353,7 @@ export async function addGuardianToStudent(
   });
 
   revalidatePath(`/students/${studentId}`);
+  revalidatePath("/students");
   revalidatePath("/guardians");
   return { ok: `Linked ${addedName} to this student.` };
 }
