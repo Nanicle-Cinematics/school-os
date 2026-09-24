@@ -41,7 +41,7 @@ function Feedback({ state }: { state: StructureState }) {
 
 function Fields({ values }: { values?: ComponentRow }) {
   return (
-    <div className="grid flex-1 gap-2 sm:grid-cols-4">
+    <div className="grid flex-1 gap-2 sm:grid-cols-3">
       <input
         type="text"
         name="title"
@@ -72,14 +72,6 @@ function Fields({ values }: { values?: ComponentRow }) {
         placeholder="Total marks"
         defaultValue={values?.maxScore ?? ""}
         aria-label="Total marks"
-        className={inputClass}
-      />
-      <input
-        type="number"
-        name="order"
-        placeholder="Order"
-        defaultValue={values?.order ?? ""}
-        aria-label="Order"
         className={inputClass}
       />
     </div>

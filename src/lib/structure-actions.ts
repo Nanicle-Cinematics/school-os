@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma, type Stage } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { LEADERSHIP, OFFICE } from "@/lib/permissions";
+import { ACADEMIC, OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
 import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
@@ -243,14 +243,20 @@ export async function applyCurriculum(
 }
 
 /**
- * The components every subject is marked out of. Leadership sets the school
- * default; a teacher adjusts any component's total marks on their own sheet.
+ * The components every subject is marked out of.
+ *
+ * ACADEMIC (leadership + IT_ADMIN), matching who can even open this screen —
+ * `/settings/components` itself is gated the same way. It used to require
+ * strict LEADERSHIP while the page rendered for IT_ADMIN too, so an IT admin
+ * saw a fully-enabled form whose every submit silently redirected away
+ * (`requireRole` on a mismatch, with no error to show) — Add/Save/Delete all
+ * looked broken from where they were sitting.
  */
 export async function saveComponent(
   _prev: StructureState,
   formData: FormData,
 ): Promise<StructureState> {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(ACADEMIC);
   setTenantContext({ schoolId: auth.schoolId });
 
   const id = String(formData.get("id") ?? "");
@@ -329,7 +335,7 @@ export async function saveComponent(
  * factory, not the record.
  */
 export async function deleteComponent(formData: FormData): Promise<void> {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(ACADEMIC);
   setTenantContext({ schoolId: auth.schoolId });
   const id = String(formData.get("id") ?? "");
   if (!id) {
@@ -362,7 +368,7 @@ export async function applyDefaultComponents(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _formData: FormData,
 ): Promise<StructureState> {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(ACADEMIC);
   setTenantContext({ schoolId: auth.schoolId });
 
   const result = await tenantTransaction(auth.schoolId, (tx) =>
