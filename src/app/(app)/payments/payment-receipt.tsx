@@ -2,6 +2,7 @@ import { formatCedis, cedisInWords } from "@/lib/money";
 import { paymentSource } from "@/lib/payment-labels";
 import type { ReceiptPayment } from "@/lib/payment-data";
 import type { BillSchool } from "@/lib/invoice-data";
+import { paperWatermark } from "@/lib/paper";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -57,6 +58,7 @@ export function PaymentReceipt({
       className={`paper rounded-xl border border-slate-200 bg-white p-6 text-slate-900 print:rounded-none print:border-0 print:p-0 ${
         breakAfter ? "print:break-after-page" : ""
       }`}
+      style={paperWatermark(school.crestUrl)}
     >
       <header className="flex items-center gap-4 border-b-2 border-brand-800 pb-3">
         {school.crestUrl ? (

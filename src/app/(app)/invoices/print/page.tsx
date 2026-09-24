@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { formatCedis } from "@/lib/money";
 import { Alert } from "../../ui";
 import { InvoiceBill } from "../invoice-bill";
+import { PrintButton } from "../../print-button";
 
 export const metadata: Metadata = { title: "Print invoices · School OS" };
 
@@ -85,6 +86,8 @@ export default async function PrintInvoicesPage({ searchParams }: PageProps<"/in
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+        <PrintButton label={onlyId ? "Print this bill" : `Print ${bills.length} bill${bills.length === 1 ? "" : "s"}`} />
         {onlyId ? null : (
           <Link
             href={`/invoices/print?term=${termId}${classGroupId ? `&class=${classGroupId}` : ""}${
@@ -95,6 +98,7 @@ export default async function PrintInvoicesPage({ searchParams }: PageProps<"/in
             {unpaidOnly ? "Include settled bills" : "Only those still owing"}
           </Link>
         )}
+        </div>
       </div>
 
       {!school.settings?.paymentInstructions ? (

@@ -12,6 +12,7 @@ import {
   invoicesOnKeptPlans,
 } from "@/lib/invoice-data";
 import { getCurrentTerm } from "@/lib/fee-data";
+import { prisma } from "@/lib/prisma";
 import { formatCedis } from "@/lib/money";
 import {
   AGE_BUCKETS,
@@ -76,6 +77,44 @@ export default async function InvoicesPage({
     }),
   ]);
 
+  /**
+   * The term AFTER the one being viewed — what an advance bill is for.
+   *
+   * Within the year by sequence, and at the third term it rolls to the first
+   * term of the next academic year. That last case is the one that matters:
+   * July is exactly when a Ghanaian school wants parents to know September's
+   * figure, and it is also when the next year's terms have just been created.
+   *
+   * ⚠️ Sequentially, not by date. Terms are re-dated by hand on
+   * /settings/terms, and a school correcting last year's dates must not change
+   * which term follows which.
+   */
+  const viewing = termId
+    ? await prisma.term.findUnique({
+        where: { id: termId },
+        select: {
+          sequence: true,
+          academicYearId: true,
+          academicYear: { select: { startDate: true } },
+        },
+      })
+    : null;
+  const nextTerm = viewing
+    ? ((await prisma.term.findFirst({
+        where: { academicYearId: viewing.academicYearId, sequence: viewing.sequence + 1 },
+        select: { id: true },
+      })) ??
+      (await prisma.term.findFirst({
+        where: {
+          sequence: 1,
+          academicYear: { startDate: { gt: viewing.academicYear.startDate } },
+        },
+        orderBy: { academicYear: { startDate: "asc" } },
+        select: { id: true },
+      })))
+    : null;
+  const nextTermId = nextTerm?.id ?? null;
+
   const ageing = await getDebtorAgeing(termId);
   const owed = ageing.reduce((sum, row) => sum + row.total, 0);
   const plans = await invoicesOnKeptPlans(termId);
@@ -92,12 +131,24 @@ export default async function InvoicesPage({
         subtitle={`${data.count} matching invoices`}
         action={
           termId ? (
-            <Link
-              href={`/invoices/print?term=${termId}${classGroupId ? `&class=${classGroupId}` : ""}`}
-              className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Print bills{classGroupId ? " for this class" : ""}
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/invoices/print?term=${termId}${classGroupId ? `&class=${classGroupId}` : ""}`}
+                className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Print bills{classGroupId ? " for this class" : ""}
+              </Link>
+              {/* The NEXT term, costed but not invoiced — what a parent can pay
+                  against during the holidays. */}
+              {nextTermId ? (
+                <Link
+                  href={`/invoices/proforma?term=${nextTermId}${classGroupId ? `&class=${classGroupId}` : ""}`}
+                  className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Advance bills for next term
+                </Link>
+              ) : null}
+            </div>
           ) : null
         }
       />

@@ -1,6 +1,7 @@
 import { formatCedis } from "@/lib/money";
 import { isOverdue } from "@/lib/invoice-engine";
 import type { BillInvoice, BillSchool } from "@/lib/invoice-data";
+import { paperWatermark } from "@/lib/paper";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -55,6 +56,7 @@ export function InvoiceBill({
       className={`paper rounded-xl border border-slate-200 bg-white p-6 text-slate-900 print:rounded-none print:border-0 print:p-0 ${
         breakAfter ? "print:break-after-page" : ""
       }`}
+      style={paperWatermark(school.crestUrl)}
     >
       <header className="flex items-center gap-4 border-b-2 border-brand-800 pb-3 text-center">
         {school.crestUrl ? (

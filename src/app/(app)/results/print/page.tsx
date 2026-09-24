@@ -3,12 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth, requireRole } from "@/lib/auth";
 import { ACADEMIC } from "@/lib/permissions";
-import { getClassReportCards } from "@/lib/results-data";
-import { reportHoldsForClass } from "@/lib/report-access";
+import { getClassReportCards, getReportCard } from "@/lib/results-data";
+import { reportHoldsForClass, reportHold } from "@/lib/report-access";
 import { formatCedis } from "@/lib/money";
 import { prisma } from "@/lib/prisma";
 import { Alert } from "../../ui";
 import { ReportCard } from "../report-card";
+import { PrintButton } from "../../print-button";
 
 export const metadata: Metadata = { title: "Print report cards · School OS" };
 
@@ -23,12 +24,83 @@ export default async function PrintReportCardsPage({
 
   const termId = typeof query.term === "string" ? query.term : "";
   const classGroupId = typeof query.class === "string" ? query.class : "";
+  const studentId = typeof query.student === "string" ? query.student : "";
   // Published-only by default: an unpublished card is a draft the office has not
   // signed off, and handing forty of those to parents cannot be undone.
   const includeDrafts = query.drafts === "1";
 
-  if (!termId || !classGroupId) {
+  if (!termId || (!classGroupId && !studentId)) {
     notFound();
+  }
+
+  /**
+   * ONE child, printed on purpose.
+   *
+   * This is the release valve the class run deliberately lacks. The batch drops
+   * a card held for arrears and names it, because forty sheets come out of a
+   * printer and nobody checks the other thirty-eight — but a head who must hand
+   * over one card has to be able to. So the single print does NOT silently drop
+   * a held card; it prints it and says, on the paper, that it was released and
+   * what is owed. One deliberate act on one child is a decision. A missing sheet
+   * in a stack of forty is an accident waiting to be blamed on the software.
+   */
+  if (studentId) {
+    const single = await getReportCard(termId, studentId);
+    if (!single) {
+      notFound();
+    }
+    const held = await reportHold(studentId, termId, single.settings);
+    const student = single.termResult.student;
+    const unpublishedCard = single.termResult.status !== "PUBLISHED";
+
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+          <div>
+            <Link
+              href={`/results/${studentId}?term=${termId}`}
+              className="text-sm text-slate-500 hover:text-slate-900"
+            >
+              ← Report card
+            </Link>
+            <h1 className="mt-1 text-xl font-semibold text-slate-900">
+              {student.firstName} {student.lastName}
+            </h1>
+            <p className="mt-0.5 text-sm text-slate-500">
+              One sheet · {student.admissionNo}
+            </p>
+          </div>
+          <PrintButton label="Print this card" />
+        </div>
+
+        {unpublishedCard ? (
+          <Alert tone="error">
+            This card is not published. The parent cannot see it in the portal, and what
+            you are about to print is a draft.
+          </Alert>
+        ) : null}
+
+        {held ? (
+          <Alert tone="error">
+            Released deliberately. {formatCedis(held.balance)} is outstanding on invoice{" "}
+            {held.invoiceNo}, and the school withholds cards in arrears — this one is left
+            out of the class run and hidden from the parent portal. Printing it here is a
+            decision to hand it over anyway.
+          </Alert>
+        ) : null}
+
+        <ReportCard
+          schoolName={auth.schoolName}
+          schoolMotto={auth.schoolMotto}
+          schoolCrestUrl={auth.schoolCrestUrl}
+          headSignatureUrl={auth.headSignatureUrl}
+          headName={auth.headName}
+          termResult={single.termResult}
+          subjectResults={single.subjectResults}
+          settings={single.settings}
+        />
+      </div>
+    );
   }
 
   const classGroup = await prisma.classGroup.findUnique({
@@ -93,6 +165,8 @@ export default async function PrintReportCardsPage({
           </p>
         </div>
 
+        <div className="flex items-center gap-2">
+          <PrintButton label={`Print ${printable.length} card${printable.length === 1 ? "" : "s"}`} />
         {unpublished > 0 && !includeDrafts ? (
           <Link
             href={`/results/print?term=${termId}&class=${classGroupId}&drafts=1`}
@@ -101,6 +175,7 @@ export default async function PrintReportCardsPage({
             Include {unpublished} unpublished
           </Link>
         ) : null}
+        </div>
       </div>
 
       {unpublished > 0 && !includeDrafts ? (
