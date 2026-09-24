@@ -370,8 +370,13 @@ export async function applyDefaultComponents(
   );
 
   refresh();
-  if (result.created === 0) {
-    return { ok: "Already set up — nothing was missing." };
+  if (result.created === 0 && result.updated === 0 && result.removed === 0) {
+    return { ok: "Already matches the standard — nothing to change." };
   }
-  return { ok: `Added ${result.created} component${result.created === 1 ? "" : "s"}.` };
+  const parts = [
+    result.created > 0 ? `${result.created} added` : null,
+    result.updated > 0 ? `${result.updated} updated` : null,
+    result.removed > 0 ? `${result.removed} removed` : null,
+  ].filter(Boolean);
+  return { ok: `${parts.join(", ")}.` };
 }

@@ -135,7 +135,8 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
             <p className="text-sm text-slate-600">
               Nothing has been set up to mark for {subject?.name} in {classGroup?.level.name}{" "}
               {classGroup?.name} this term. Opening the sheet creates the school&rsquo;s standard
-              components — you can change any component&rsquo;s total marks afterwards.
+              components, out of the marks a head or proprietor has assigned them
+              {isLeadership ? " — you can change any component's total marks from here" : ""}.
             </p>
           </div>
         </Card>
@@ -159,6 +160,7 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
             scoreFor={Object.fromEntries(sheet.scoreFor)}
             classWeight={sheet.classWeight}
             examWeight={sheet.examWeight}
+            isLeadership={isLeadership}
           />
           <p className="text-xs text-slate-500">
             {sheet.students.length} students ·{" "}

@@ -25,7 +25,8 @@ export default async function ComponentsPage() {
         <h1 className="mt-1 text-xl font-semibold text-slate-900">Assessment components</h1>
         <p className="mt-0.5 text-sm text-slate-500">
           What every subject is marked out of. A teacher opening a mark sheet gets these
-          automatically, and can change any component&rsquo;s total marks for their own class.
+          automatically, marked out of exactly the total set here — only a head or proprietor
+          can change a component&rsquo;s total marks.
         </p>
       </div>
 

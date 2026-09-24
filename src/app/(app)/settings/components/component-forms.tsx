@@ -168,16 +168,16 @@ export function ComponentSection({
 
         <div className="mt-4 border-t border-slate-200 pt-3">
           <form action={defaultsAction}>
-            <SubmitButton variant="secondary" pendingLabel="Adding…">
-              {components.length === 0
-                ? "Add the standard components"
-                : "Add any standard components that are missing"}
+            <SubmitButton variant="secondary" pendingLabel="Setting up…">
+              {components.length === 0 ? "Add the standard components" : "Reset to the standard components"}
             </SubmitButton>
           </form>
           <Feedback state={defaultsState} />
           <p className="mt-2 text-xs text-slate-400">
-            Class Test 1 and 2, Group Work 1 and 2, Project Work and the Examination. Nothing you
-            have renamed or re-marked is touched.
+            Class Test 1, 2 and 3 (10 marks each), Project Work (20) and the Examination (50). Adds
+            any that are missing, updates any still set up under an earlier standard, and removes
+            an earlier standard&rsquo;s Group Work 1/2. Anything you added under a name of your own
+            is never touched.
           </p>
         </div>
       </div>

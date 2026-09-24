@@ -77,6 +77,7 @@ export function SheetForm({
   scoreFor,
   classWeight,
   examWeight,
+  isLeadership,
 }: {
   termId: string;
   classGroupId: string;
@@ -86,6 +87,14 @@ export function SheetForm({
   scoreFor: Record<string, Cell>;
   classWeight: number;
   examWeight: number;
+  /**
+   * ⚠️ Only leadership may raise a component's ceiling from here — see the
+   * matching guard in saveSheet. A plain teacher's max-marks box is locked to
+   * what Settings → Assessment components assigned, or the server-side cap
+   * would be trivially bypassable by anyone who could still edit this box even
+   * though their submitted value is now ignored.
+   */
+  isLeadership: boolean;
 }) {
   const [state, formAction] = useActionState<SheetState, FormData>(saveSheet, {});
 
@@ -151,12 +160,17 @@ export function SheetForm({
                     <span className="text-xs text-slate-400">/</span>
                     <input
                       type="number"
-                      name={`max:${column.id}`}
+                      // No `name` at all when locked — a disabled input is not
+                      // submitted by a browser, but this also keeps a raw POST
+                      // replay from finding a max: field to forge. saveSheet
+                      // ignores one anyway, but the field not existing here is
+                      // one less thing to reason about.
+                      name={isLeadership ? `max:${column.id}` : undefined}
                       min={1}
                       max={1000}
                       step="1"
                       value={maxima[column.id] ?? ""}
-                      disabled={column.status === "APPROVED"}
+                      disabled={!isLeadership || column.status === "APPROVED"}
                       onChange={(e) =>
                         setMaxima((prev) => ({ ...prev, [column.id]: e.target.value }))
                       }
@@ -166,6 +180,8 @@ export function SheetForm({
                   </label>
                   {column.status === "APPROVED" ? (
                     <p className="mt-0.5 text-[10px] text-warning-ink">locked</p>
+                  ) : !isLeadership ? (
+                    <p className="mt-0.5 text-[10px] text-slate-400">set by the school</p>
                   ) : null}
                 </th>
               ))}

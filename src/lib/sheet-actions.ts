@@ -50,7 +50,7 @@ async function mayTeach(
   return count > 0;
 }
 
-/** Create this term's six components for one class and subject. */
+/** Create this term's components for one class and subject. */
 export async function openSheet(_prev: SheetState, formData: FormData): Promise<SheetState> {
   const auth = await requireRole(MARKING);
   setTenantContext({ schoolId: auth.schoolId });
@@ -92,9 +92,9 @@ type Cell = { assessmentId: string; studentId: string; rawScore: number | null; 
 /**
  * Save the whole grid — every component for every student — in one transaction.
  *
- * A teacher marking six components used to make six passes over the same forty
- * names, on six screens. This is one screen and one save, which also means a
- * half-finished sheet is never half-saved.
+ * A teacher marking several components used to make a pass over the same forty
+ * names per component, on separate screens. This is one screen and one save,
+ * which also means a half-finished sheet is never half-saved.
  *
  * Blank still means "not marked yet" and deletes the row; absent still means
  * zero. Conflating those is how a child gets a zero for a test the teacher
@@ -121,11 +121,20 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
 
   const byId = new Map(assessments.map((a) => [a.id, a]));
 
-  // Column totals first: a teacher who raises Class Test 1 from 20 to 25 marks
-  // must have that applied before the scores are range-checked against it,
-  // or their own new maximum rejects the marks they just typed.
+  /**
+   * ⚠️ Only LEADERSHIP may raise a component's ceiling from the sheet.
+   *
+   * Column totals used to be open to anyone with MARKING access, so a
+   * component set at Settings → Assessment components to 10 marks could be
+   * quietly raised on a single sheet and a score above it typed straight in —
+   * the total a proprietor assigned was a suggestion, not a limit. A plain
+   * TEACHER's `max:` fields are now ignored outright, whatever the form
+   * (client-tampered or not) sent, and every score is capped against the
+   * assessment's own persisted maxScore instead.
+   */
+  const mayChangeTotals = canAccess(auth.roles, LEADERSHIP);
   const newMax = new Map<string, number>();
-  for (const [key, value] of formData.entries()) {
+  for (const [key, value] of mayChangeTotals ? formData.entries() : []) {
     if (!key.startsWith("max:")) {
       continue;
     }
