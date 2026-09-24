@@ -1,14 +1,43 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
 import { navFor, roleLabel } from "@/lib/permissions";
 import { canSearch } from "@/lib/search-data";
+import { schoolIconUrls } from "@/lib/manifest-data";
 import { ThemeToggle } from "../theme-toggle";
 import { SkinPicker } from "../skin-picker";
 import { logout } from "@/lib/auth-actions";
 import { prisma } from "@/lib/prisma";
 import { Sidebar, MobileNav, SectionTint, type RailTerm } from "./nav";
+
+/**
+ * A signed-in school's own crest, standing in for the generic School OS mark
+ * — the browser tab, the iOS home-screen icon, and (via `/api/manifest`) the
+ * Android install prompt all read from here.
+ *
+ * A school with no crest returns `{}`, same as `paperWatermark()` returns
+ * `{}` for a document with none: the root layout's generic mark shows through
+ * untouched rather than this layer having to know what the default looks like.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const auth = await requireAuth();
+  const icons = schoolIconUrls(auth.schoolCrestUrl);
+  if (!icons) {
+    return {};
+  }
+  return {
+    manifest: "/api/manifest",
+    icons: {
+      icon: [
+        { url: icons.icon192, sizes: "192x192", type: "image/png" },
+        { url: icons.icon512, sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: icons.appleTouch, sizes: "180x180", type: "image/png" }],
+    },
+  };
+}
 
 const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", THIRD: "Third" };
 

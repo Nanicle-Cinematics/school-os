@@ -1,9 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ThemeToggle } from "../theme-toggle";
 import { SkinPicker } from "../skin-picker";
 import { logout } from "@/lib/auth-actions";
 import { requireGuardian } from "@/lib/portal-auth";
+import { schoolIconUrls } from "@/lib/manifest-data";
 
 /**
  * The parent portal's chrome.
@@ -17,6 +19,31 @@ import { requireGuardian } from "@/lib/portal-auth";
  * refuses a login that is not a guardian, so no portal page has to re-check that
  * it is being opened by the right kind of person.
  */
+
+/**
+ * A parent installing the portal gets THEIR child's school on their home
+ * screen, not the generic School OS mark — see the same override on the
+ * staff layout for the reasoning. A family with children at two schools using
+ * this app sees whichever school the session is currently active for, same as
+ * every other tenant-scoped thing on this page.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const ctx = await requireGuardian();
+  const icons = schoolIconUrls(ctx.schoolCrestUrl);
+  if (!icons) {
+    return {};
+  }
+  return {
+    manifest: "/api/manifest",
+    icons: {
+      icon: [
+        { url: icons.icon192, sizes: "192x192", type: "image/png" },
+        { url: icons.icon512, sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: icons.appleTouch, sizes: "180x180", type: "image/png" }],
+    },
+  };
+}
 export default async function PortalLayout({ children }: LayoutProps<"/">) {
   const ctx = await requireGuardian();
 

@@ -1246,6 +1246,37 @@ So it does not work offline, and does not pretend to — nothing here renders
 without the database anyway, and an offline launch gets the browser's offline
 page rather than a stale report card.
 
+**A signed-in school gets ITS OWN crest as the home-screen icon**, not the
+generic mark. `/manifest.webmanifest` above is the anonymous default — logged
+out, or a school with no crest uploaded. Once `(app)/layout.tsx` or
+`(portal)/layout.tsx` resolves a session, their `generateMetadata` points
+`manifest` at `/api/manifest` instead, which reads the SAME static file off
+disk and swaps only its `icons` array — one source of truth for name,
+description, colours; the crest is the only thing allowed to differ per
+school.
+
+`/api/school-icon/[variant]` (`src/lib/school-icon.ts`) composites the raw
+crest — uploaded for print, so no guarantee it is square or padded — onto a
+white square with `sharp`. The maskable and apple-touch variants shrink the
+crest further first, into the W3C safe zone, because a crest has no
+hand-drawn `maskable.svg` twin to bleed full-frame the way the generic mark
+does.
+
+⚠️ **`/api/manifest` reads the session cookie, so it is `Cache-Control:
+private, no-store` — never cached by anything shared.** The icon URLs it
+returns are the opposite: versioned with the crest's own `?v=` token
+(`schoolIconUrls` in `src/lib/manifest-data.ts` borrows it rather than minting
+a second one), so those ARE `immutable` and a re-upload changes the url
+instead of the bytes behind it. Getting the two backwards either serves one
+school's crest to the next session that shares a shared cache, or never picks
+up a reprinted crest at all.
+
+A school with no crest gets a 404 from `/api/school-icon/*` and a redirect
+from `/api/manifest` back to the generic file — decided one layer up, in
+`generateMetadata`, which returns `{}` and lets the root layout's defaults
+show through untouched rather than the icon route guessing at a fallback of
+its own.
+
 ## "Needs your attention"
 
 The dashboard's first card is four computed rules, each a sentence and the link
