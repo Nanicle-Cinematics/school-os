@@ -58,17 +58,28 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
       <PageHeader
         title="Assessments"
         subtitle={
-          scope.isLeadership
+          scope.seesWholeSchool
             ? `${assessments.length} across the school`
             : `${assessments.length} for your classes`
         }
         action={
-          <NewAssessment
-            classGroups={scope.classGroups}
-            subjects={scope.subjects}
-            terms={terms}
-            currentTermId={currentTerm?.id}
-          />
+          scope.canManage ? (
+            <NewAssessment
+              classGroups={scope.classGroups}
+              subjects={scope.subjects}
+              terms={terms}
+              currentTermId={currentTerm?.id}
+            />
+          ) : (
+            // Seeing every class's assessments is not permission to create,
+            // submit or delete one — every one of those actions requires
+            // LEADERSHIP outright. Said plainly rather than just leaving the
+            // button off, which reads as "not loaded yet" more than "not
+            // for you."
+            <span className="rounded-full border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-slate-500">
+              View only
+            </span>
+          )
         }
       />
 

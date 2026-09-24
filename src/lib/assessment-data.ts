@@ -8,11 +8,21 @@ import { canAccess, LEADERSHIP } from "@/lib/permissions";
  * Classes and subjects the signed-in user may enter scores for.
  * Leadership sees everything; a teacher sees only their own assignments, which
  * is what stops one teacher marking another's subject.
+ *
+ * ⚠️ `seesWholeSchool` and `canManage` are DIFFERENT questions with the same
+ * answer for leadership and different answers for everyone else. An IT Admin
+ * has no Staff record, so `!auth.staffId` falls into the same branch as
+ * leadership and correctly sees every class — there is nothing else to scope
+ * an admin account by. But seeing everything is not permission to change it:
+ * `createAssessment`, `saveScores`, `setAssessmentStatus` and `deleteAssessment`
+ * all require LEADERSHIP outright, so a caller that reused the old single
+ * `isLeadership` field to decide whether to SHOW a "New assessment" button
+ * offered IT Admin a button that only redirected them away on click.
  */
 export async function getTeachingScope(auth: AuthContext) {
-  const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  const canManage = canAccess(auth.roles, LEADERSHIP);
 
-  if (isLeadership || !auth.staffId) {
+  if (canManage || !auth.staffId) {
     const [classGroups, subjects] = await Promise.all([
       prisma.classGroup.findMany({
         orderBy: [{ level: { order: "asc" } }, { name: "asc" }],
@@ -20,7 +30,7 @@ export async function getTeachingScope(auth: AuthContext) {
       }),
       prisma.subject.findMany({ orderBy: { order: "asc" } }),
     ]);
-    return { isLeadership: true, classGroups, subjects, pairs: null };
+    return { seesWholeSchool: true, canManage, classGroups, subjects, pairs: null };
   }
 
   const assignments = await prisma.teachingAssignment.findMany({
@@ -35,7 +45,8 @@ export async function getTeachingScope(auth: AuthContext) {
   const subjects = [...new Map(assignments.map((a) => [a.subjectId, a.subject])).values()];
 
   return {
-    isLeadership: false,
+    seesWholeSchool: false,
+    canManage: false,
     classGroups,
     subjects,
     pairs: assignments.map((a) => ({ classGroupId: a.classGroupId, subjectId: a.subjectId })),
