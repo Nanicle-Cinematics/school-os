@@ -179,6 +179,89 @@ export async function materialiseComponents(
   return result;
 }
 
+export type RolloutResult = { pairs: number; created: number };
+
+/**
+ * Bring every class-and-subject ALREADY marking this term up to the current
+ * standard, in one pass.
+ *
+ * `materialiseComponents` above only ever touches the one class and subject a
+ * teacher named — right for a teacher opening their own sheet, wrong for a
+ * head who just changed the school-wide standard. Settings → Assessment
+ * components used to update only the template row: a "Class Test 3" added
+ * there stayed invisible on every sheet opened before the click, because
+ * nothing revisited them. A school waits for nobody to notice that and go
+ * open each sheet again by hand — so this does it instead, everywhere the
+ * gap now exists.
+ *
+ * "Already marking this term" means has at least one Assessment row for that
+ * term — the same thing `sheet/page.tsx` calls an opened sheet. A class and
+ * subject that has never been opened is left alone; opening it for the first
+ * time is still `materialiseComponents`' job, run from the sheet itself.
+ *
+ * Two queries and one bulk create regardless of how many classes and subjects
+ * a school runs, rather than looping `materialiseComponents` pair by pair —
+ * a school with, say, 15 classes across 10 subjects each is a couple of
+ * hundred existence checks done one at a time, which is the kind of thing
+ * that is fast against a demo school and slow against a real one.
+ */
+export async function rolloutComponents(
+  tx: TenantTx,
+  schoolId: string,
+  termId: string,
+  createdByStaffId: string | null,
+): Promise<RolloutResult> {
+  const templates = await tx.assessmentTemplate.findMany({
+    where: { schoolId, isActive: true },
+  });
+  if (templates.length === 0) {
+    return { pairs: 0, created: 0 };
+  }
+
+  const existing = await tx.assessment.findMany({
+    where: { schoolId, termId },
+    select: { classGroupId: true, subjectId: true, title: true },
+  });
+
+  const openPairs = new Map<string, { classGroupId: string; subjectId: string; titles: Set<string> }>();
+  for (const row of existing) {
+    const key = `${row.classGroupId}:${row.subjectId}`;
+    let pair = openPairs.get(key);
+    if (!pair) {
+      pair = { classGroupId: row.classGroupId, subjectId: row.subjectId, titles: new Set() };
+      openPairs.set(key, pair);
+    }
+    pair.titles.add(row.title);
+  }
+
+  const toCreate: Prisma.AssessmentCreateManyInput[] = [];
+  for (const pair of openPairs.values()) {
+    for (const template of templates) {
+      if (pair.titles.has(template.title)) {
+        continue;
+      }
+      toCreate.push({
+        schoolId,
+        termId,
+        classGroupId: pair.classGroupId,
+        subjectId: pair.subjectId,
+        type: template.type,
+        title: template.title,
+        maxScore: template.maxScore,
+        weight: template.maxScore,
+        status: "OPEN",
+        createdByStaffId,
+      });
+    }
+  }
+
+  if (toCreate.length > 0) {
+    await tx.assessment.createMany({ data: toCreate });
+  }
+
+  return { pairs: openPairs.size, created: toCreate.length };
+}
+
 /**
  * An exam item is identified by its type, not by a flag on the row — the
  * results engine already splits on type, and duplicating that decision onto

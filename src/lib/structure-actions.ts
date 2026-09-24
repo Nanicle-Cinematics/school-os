@@ -7,7 +7,7 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { ACADEMIC, OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
-import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
+import { applyDefaultAssessmentTemplate, rolloutComponents } from "@/lib/assessment-templates";
 import { writeAudit } from "@/lib/audit";
 
 export type StructureState = { error?: string; ok?: string };
@@ -371,18 +371,44 @@ export async function applyDefaultComponents(
   const auth = await requireRole(ACADEMIC);
   setTenantContext({ schoolId: auth.schoolId });
 
-  const result = await tenantTransaction(auth.schoolId, (tx) =>
-    applyDefaultAssessmentTemplate(tx, auth.schoolId),
-  );
+  const { template, rollout } = await tenantTransaction(auth.schoolId, async (tx) => {
+    const template = await applyDefaultAssessmentTemplate(tx, auth.schoolId);
+
+    // The template alone is not the point — a class already marking this
+    // term needs the new standard ON ITS SHEET, not just recorded somewhere
+    // in Settings. Runs every time, even when the template itself did not
+    // change, so clicking this again after a class opens a NEW sheet catches
+    // it up too.
+    const currentTerm = await tx.term.findFirst({ where: { isCurrent: true }, select: { id: true } });
+    const rollout = currentTerm
+      ? await rolloutComponents(tx, auth.schoolId, currentTerm.id, auth.staffId)
+      : null;
+
+    return { template, rollout };
+  });
 
   refresh();
-  if (result.created === 0 && result.updated === 0 && result.removed === 0) {
-    return { ok: "Already matches the standard — nothing to change." };
-  }
-  const parts = [
-    result.created > 0 ? `${result.created} added` : null,
-    result.updated > 0 ? `${result.updated} updated` : null,
-    result.removed > 0 ? `${result.removed} removed` : null,
+  // Only this action creates Assessment rows, so only this action needs to
+  // tell those two pages their cached data is stale.
+  revalidatePath("/assessments");
+  revalidatePath("/assessments/sheet");
+
+  const templateParts = [
+    template.created > 0 ? `${template.created} added` : null,
+    template.updated > 0 ? `${template.updated} updated` : null,
+    template.removed > 0 ? `${template.removed} removed` : null,
   ].filter(Boolean);
-  return { ok: `${parts.join(", ")}.` };
+  const templateMsg =
+    templateParts.length > 0 ? `${templateParts.join(", ")}.` : "Already matches the standard.";
+
+  if (!rollout) {
+    return { ok: `${templateMsg} No current term is set, so no sheet was updated.` };
+  }
+  const rolloutMsg =
+    rollout.created > 0
+      ? ` Applied to ${rollout.pairs} class${rollout.pairs === 1 ? "" : "es"} already marking this term — ${rollout.created} new component${rollout.created === 1 ? "" : "s"} added.`
+      : rollout.pairs > 0
+        ? ` ${rollout.pairs} class${rollout.pairs === 1 ? "" : "es"} already marking this term ${rollout.pairs === 1 ? "was" : "were"} already up to date.`
+        : "";
+  return { ok: `${templateMsg}${rolloutMsg}` };
 }
