@@ -23,12 +23,12 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
   const { assessment, rows } = data;
   // ⚠️ Checked against LEADERSHIP, not the page's own ACADEMIC gate — an IT
   // Admin can OPEN this page (they manage components under Settings) but
-  // approving a grade is a leadership decision, not a technical one.
-  // `setAssessmentStatus` already refuses an IT Admin's APPROVED transition
-  // server-side; this just stops the page offering a button that would only
-  // redirect them away.
+  // every mutation here — submitting, saving a score, approving, deleting —
+  // requires LEADERSHIP server-side. Everything below keys off this one
+  // check: hide a button an IT Admin cannot use, and read-only the grid
+  // instead of leaving either to fail silently on click.
   const isLeadership = canAccess(auth.roles, LEADERSHIP);
-  const readOnly = assessment.status === "APPROVED";
+  const readOnly = assessment.status === "APPROVED" || !isLeadership;
 
   const gridRows: Row[] = rows.map((row) => ({
     studentId: row.student.id,
@@ -65,7 +65,7 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={assessment.status} />
 
-            {assessment.status === "OPEN" ? (
+            {assessment.status === "OPEN" && isLeadership ? (
               <form action={setAssessmentStatus}>
                 <input type="hidden" name="assessmentId" value={assessment.id} />
                 <input type="hidden" name="status" value="SUBMITTED" />
@@ -102,7 +102,7 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
               </form>
             ) : null}
 
-            {assessment.status !== "APPROVED" ? (
+            {assessment.status !== "APPROVED" && isLeadership ? (
               <form action={deleteAssessment}>
                 <input type="hidden" name="assessmentId" value={assessment.id} />
                 <SubmitButton variant="danger" pendingLabel="Deleting…">
@@ -115,7 +115,9 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
 
         {readOnly ? (
           <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            These scores are approved and locked. A head or proprietor can unlock them for edits.
+            {assessment.status === "APPROVED"
+              ? "These scores are approved and locked. A head or proprietor can unlock them for edits."
+              : "You can view this sheet, but only a head or proprietor can enter, submit or change marks."}
           </p>
         ) : null}
       </div>
