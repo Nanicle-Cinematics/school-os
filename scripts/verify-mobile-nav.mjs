@@ -68,10 +68,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chrome = spawn(CHROME, [
   "--headless=new", `--remote-debugging-port=${PORT}`, "--hide-scrollbars", "--disable-gpu",
   "--no-sandbox", "--no-first-run", `--user-data-dir=/tmp/school-os-mobile-nav-${Date.now()}`, "about:blank",
-], { stdio: "ignore" });
+], { stdio: ["ignore", "ignore", "pipe"] });
+
+// A silent failure here used to read only "chrome did not start" — eighteen
+// seconds of polling a port that was never going to answer, with no reason
+// why. Capture stderr and the exit itself so the NEXT one says what actually
+// happened (missing shared lib, sandbox refusal, OOM-killed) instead of
+// making someone reproduce it on a runner to find out.
+let stderr = "";
+chrome.stderr.on("data", (chunk) => { stderr += chunk; });
+let exited = null;
+chrome.on("exit", (code, signal) => { exited = { code, signal }; });
 
 let target;
 for (let i = 0; i < 60; i++) {
+  if (exited) break; // no point polling a process that has already died
   try {
     const listed = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
     target = listed.find((t) => t.type === "page");
@@ -79,7 +90,13 @@ for (let i = 0; i < 60; i++) {
   } catch {}
   await sleep(300);
 }
-if (!target) { chrome.kill(); throw new Error("chrome did not start"); }
+if (!target) {
+  chrome.kill();
+  const why = exited
+    ? `chrome exited (code ${exited.code}, signal ${exited.signal})`
+    : "chrome never opened the debugging port";
+  throw new Error(`chrome did not start — ${why}${stderr ? `\n${stderr.trim()}` : ""}`);
+}
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
