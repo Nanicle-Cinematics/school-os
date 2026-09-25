@@ -120,14 +120,14 @@ export function Marketing() {
       <main>
         <section className="mx-auto max-w-5xl px-5 pb-16 pt-16 sm:pt-24">
           <p className="text-sm font-semibold text-accent-700">
-            For Ghanaian schools, from KG to JHS
+            For African schools, from KG to JHS
           </p>
           <h1 className="mt-3 max-w-2xl font-heading text-4xl leading-tight text-slate-900 sm:text-5xl">
             One place for the pupils, the marks and the fees.
           </h1>
           <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600">
             School OS keeps the register, works out the terminal results, prints the report cards
-            and chases the fees — built around three terms, GES conventions and the way a Ghanaian
+            and chases the fees — built around three terms, GES conventions and the way an African
             school office actually runs.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -152,10 +152,13 @@ export function Marketing() {
           {/* ⚠️ On a phone the whole dashboard is a grey smudge — 1440px of
               screen squeezed into 414 makes every figure illegible, and an
               illegible screenshot is 400KB that says nothing. So small screens
-              get the top-left CORNER at a readable scale and the rest clipped,
-              which is the part that carries the meaning: the school, the roll,
-              and the money. Full width from `sm` up. */}
-          <div className="mt-14 overflow-hidden rounded-panel border border-hairline bg-surface shadow-raised">
+              open on the top-left CORNER at a readable scale — the school, the
+              roll, and the money — rather than the whole thing shrunk to
+              nothing. `overflow-x-auto`, not `-hidden`: the rest of the
+              dashboard is still there, a swipe to the right away, not clipped
+              off for good. Full width from `sm` up, where it needs no crop or
+              scroll at all. */}
+          <div className="mt-14 overflow-x-auto overscroll-x-contain rounded-panel border border-hairline bg-surface shadow-raised [-webkit-overflow-scrolling:touch]">
             <Image
               src={dashboardShot}
               alt="The School OS dashboard: 44 pupils on roll, fees collected against fees billed, families owing, and the report cards still waiting to be published."

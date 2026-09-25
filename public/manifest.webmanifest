@@ -2,7 +2,7 @@
   "id": "/",
   "name": "School OS",
   "short_name": "School OS",
-  "description": "School management for Ghanaian schools — by Nanicle Enterprise Solutions.",
+  "description": "School management for African schools — by Nanicle Enterprise Solutions.",
   "start_url": "/login",
   "scope": "/",
   "display": "standalone",

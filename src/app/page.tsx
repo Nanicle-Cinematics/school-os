@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/session";
 import { Marketing } from "./marketing";
 
 export const metadata: Metadata = {
-  title: "School OS — school management for Ghanaian schools",
+  title: "School OS — school management for African schools",
   description:
     "Pupils, marks, terminal report cards and fees in one place, built around three terms and GES conventions. Seven days free, then GH₵800 a month.",
 };
