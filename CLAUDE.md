@@ -1468,7 +1468,7 @@ It also runs against a deployment, signing in through the real login form so it
 needs no database at all:
 
 ```bash
-VERIFY_BASE_URL=https://school-os-lilac.vercel.app \
+VERIFY_BASE_URL=https://www.schoolosafrica.com \
 VERIFY_EMAIL=you@example.com VERIFY_PASSWORD='…' npm run verify:actions
 ```
 

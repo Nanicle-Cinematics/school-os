@@ -52,7 +52,7 @@ export type InviteState = {
 };
 
 function portalUrl() {
-  return (process.env.APP_URL ?? "https://school-os-lilac.vercel.app").replace(/\/$/, "");
+  return (process.env.APP_URL ?? "https://www.schoolosafrica.com").replace(/\/$/, "");
 }
 
 /** Show who would be invited and what it would cost. Writes nothing. */
