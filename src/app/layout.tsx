@@ -33,7 +33,7 @@ const display = Newsreader({
 export const metadata: Metadata = {
   applicationName: "School OS",
   title: "School OS",
-  description: "School management for Ghanaian schools — by Nanicle Enterprise Solutions.",
+  description: "School management for African schools — by Nanicle Enterprise Solutions.",
   manifest: "/manifest.webmanifest",
   // Proves to Google Search Console that Nanicle controls this site, so the
   // marketing page can be crawled and indexed. Site-wide on purpose — every
