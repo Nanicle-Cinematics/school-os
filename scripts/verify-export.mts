@@ -173,7 +173,7 @@ check("the people datasets are OFFICE", DATASETS.students.roles === OFFICE);
 
 console.log("\nFilenames a school can file");
 
-const name = exportFilename("students", "St. Mary's R/C JHS", null, new Date("2026-09-12"));
+const name = exportFilename("students", "Hope Education Complex", null, new Date("2026-09-12"));
 check(
   "punctuation and spaces cannot break the download",
   /^[a-z0-9-]+\.csv$/.test(name),

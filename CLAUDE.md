@@ -1549,7 +1549,7 @@ npm run db:seed      # demo Ghanaian school with fees, invoices, payments
 npm run db:studio    # browse the data
 ```
 
-Demo login after seeding: `owner@stmarydemo.edu.gh` / `Password123!`
+Demo login after seeding: `owner@hopedemo.edu.gh` / `Password123!`
 
 <!-- BEGIN:nextjs-agent-rules -->
 

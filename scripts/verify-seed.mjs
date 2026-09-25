@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
 
-const school = await prisma.school.findUnique({ where: { slug: "st-mary-demo" } });
+const school = await prisma.school.findUnique({ where: { slug: "hope-demo" } });
 const schoolId = school.id;
 
 const inv = await prisma.invoice.aggregate({

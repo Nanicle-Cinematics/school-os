@@ -27,7 +27,7 @@ import { PrismaClient } from "@prisma/client";
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 9341;
 const OUT = "public/screenshots";
-const DEMO_SLUG = "st-mary-demo";
+const DEMO_SLUG = "hope-demo";
 
 const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL });
 

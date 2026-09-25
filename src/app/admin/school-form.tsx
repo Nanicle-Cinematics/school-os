@@ -54,13 +54,13 @@ export function NewSchoolForm() {
             type="text"
             name="name"
             required
-            placeholder="St. Mary's Preparatory & JHS"
+            placeholder="Hope Education Complex"
             className={inputClass}
           />
         </Field>
 
         <Field label="URL key" hint="Left blank, it is derived from the name.">
-          <input type="text" name="slug" placeholder="st-marys-prep" className={inputClass} />
+          <input type="text" name="slug" placeholder="hope-education-complex" className={inputClass} />
         </Field>
 
         <Field label="Short name" hint="Report cards and the SMS sender ID.">

@@ -221,7 +221,7 @@ async function openSession() {
   }
 
   const user = await db(() => prisma.user.findFirst({
-    where: { email: "owner@stmarydemo.edu.gh", deletedAt: null },
+    where: { email: "owner@hopedemo.edu.gh", deletedAt: null },
     include: { memberships: true },
   }));
   if (!user) {
@@ -721,7 +721,7 @@ async function importChecks(cookie) {
     "first_name,last_name,gender,class,admission_no,guardian_name,guardian_phone",
     "Verify,Probe,F,,,,",
     "NoGender,Probe,,,,,",
-    `Duplicate,Probe,M,,${existing?.admissionNo ?? "SM/0001"},,`,
+    `Duplicate,Probe,M,,${existing?.admissionNo ?? "HEC/0001"},,`,
     "BadClass,Probe,M,Nowhere Z,,,",
   ].join("\n");
 

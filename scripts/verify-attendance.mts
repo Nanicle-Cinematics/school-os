@@ -40,7 +40,7 @@ console.log("Days are days, not timestamps");
   assert("an impossible month is refused", parseDay("2026-13-01") === null || dayKey(parseDay("2026-13-01")!) !== "2026-13-01");
 }
 
-const school = await prisma.school.findUniqueOrThrow({ where: { slug: "st-mary-demo" } });
+const school = await prisma.school.findUniqueOrThrow({ where: { slug: "hope-demo" } });
 // The helpers under test go through the app's tenant-guarded client, which
 // refuses to answer without a school — exactly as it would for an action.
 setTenantContext({ schoolId: school.id });

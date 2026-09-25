@@ -91,7 +91,7 @@ export async function GET(
   );
 
   // The short name if the school set one, else its full name — the filename is
-  // sanitised either way, so "St. Mary's R/C JHS" lands as st-mary-s-r-c-jhs.
+  // sanitised either way, so "Hope Education Complex" lands as hope-education-complex.
   const filename = exportFilename(
     dataset,
     auth.schoolShortName ?? auth.schoolName,
