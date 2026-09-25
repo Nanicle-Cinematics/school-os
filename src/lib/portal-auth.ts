@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, type AuthContext } from "@/lib/auth";
@@ -37,7 +38,9 @@ export type GuardianContext = AuthContext & {
  * mistake, not an attack: it lands on /no-access rather than an empty portal
  * that would look like the school had lost their children.
  */
-export async function requireGuardian(): Promise<GuardianContext> {
+// Same reason `requireAuth` is cached: the portal layout's `generateMetadata`
+// and its page body both call this per request.
+export const requireGuardian = cache(async (): Promise<GuardianContext> => {
   const auth = await requireAuth();
 
   if (!auth.guardianId) {
@@ -52,7 +55,7 @@ export async function requireGuardian(): Promise<GuardianContext> {
   });
 
   return { ...auth, guardianId: auth.guardianId, studentIds: links.map((l) => l.studentId) };
-}
+});
 
 /**
  * Confirm a student id from the URL belongs to this guardian.
