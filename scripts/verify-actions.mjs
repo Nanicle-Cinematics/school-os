@@ -20,7 +20,7 @@
  * Against a deployed environment, where there is no local database and possibly
  * no data yet, sign in through the real login form instead:
  *
- *   VERIFY_BASE_URL=https://school-os-lilac.vercel.app \
+ *   VERIFY_BASE_URL=https://www.schoolosafrica.com \
  *   VERIFY_EMAIL=you@example.com VERIFY_PASSWORD='…' npm run verify:actions
  *
  * The guard checks need fixtures (a graded scale, a billed student, a level in
