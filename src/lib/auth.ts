@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { getSessionUser } from "@/lib/session";
@@ -38,7 +39,18 @@ export type AuthContext = {
  *
  * Redirects rather than throwing, so pages can call it as their first line.
  */
-export async function requireAuth(): Promise<AuthContext> {
+/**
+ * One session/user/membership/school join per REQUEST, not per call.
+ *
+ * A layout and its page both call `requireAuth` (or `requireRole`, which calls
+ * this), and `generateMetadata` now makes it three — a root layout, a nested
+ * layout's metadata, and the page itself, each re-running the same join. React's
+ * `cache` gives identical zero-argument calls one shared execution per request,
+ * same as `src/lib/tenant-context.ts` already relies on for exactly this reason.
+ * A redirect thrown on the first call is cached too, which is correct: a session
+ * that is missing once is missing for the rest of the request.
+ */
+export const requireAuth = cache(async (): Promise<AuthContext> => {
   const result = await getSessionUser();
   if (!result) {
     redirect("/login");
@@ -104,7 +116,7 @@ export async function requireAuth(): Promise<AuthContext> {
     mustChangePassword: user.mustChangePassword,
     isPlatformAdmin: user.isPlatformAdmin,
   };
-}
+});
 
 /** requireAuth plus a role check. Use on pages that only some roles may open. */
 export async function requireRole(allowed: Role[]): Promise<AuthContext> {
