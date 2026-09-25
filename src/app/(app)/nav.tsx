@@ -294,7 +294,7 @@ function RailBody({
           {(school.shortName ?? school.name).slice(0, 2).toUpperCase()}
         </span>
         {/* Two lines rather than an ellipsis: a school's name is the one string
-            here that must never be cut off — "St. Mary's Preparator…" is not a
+            here that must never be cut off — "Hope Education Compl…" is not a
             school. */}
         <span className="min-w-0 text-[13.5px] font-extrabold leading-[1.15] tracking-tight text-slate-900">
           {school.name}

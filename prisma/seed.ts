@@ -21,8 +21,8 @@ const prisma = new PrismaClient({
   datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
 });
 
-const SLUG = "st-mary-demo";
-const EMAIL_DOMAIN = "stmarydemo.edu.gh";
+const SLUG = "hope-demo";
+const EMAIL_DOMAIN = "hopedemo.edu.gh";
 const YEAR = "2026/2027";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -173,9 +173,9 @@ async function main() {
   console.log("Creating school…");
   const school = await prisma.school.create({
     data: {
-      name: "St. Mary's Preparatory & JHS",
+      name: "Hope Education Complex",
       slug: SLUG,
-      shortName: "SMPJHS",
+      shortName: "HEC",
       motto: "Knowledge and Character",
       email: `info@${EMAIL_DOMAIN}`,
       phone: "0302123456",
@@ -195,12 +195,12 @@ async function main() {
           examScoreWeight: 50,
           invoiceDueDays: 21,
           smsEnabled: false,
-          smsSenderId: "SMPJHS",
+          smsSenderId: "HEC",
         },
       },
       sequences: {
         create: [
-          { key: "ADMISSION", prefix: "SM/", padding: 4, next: 1 },
+          { key: "ADMISSION", prefix: "HEC/", padding: 4, next: 1 },
           { key: "STAFF", prefix: "STF-", padding: 3, next: 1 },
           { key: "INVOICE", prefix: "INV-", padding: 5, next: 1 },
           { key: "RECEIPT", prefix: "RCT-", padding: 5, next: 1 },

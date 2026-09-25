@@ -18,7 +18,7 @@ function check(label: string, condition: boolean, detail = "") {
   }
 }
 
-const school = await prisma.school.findUniqueOrThrow({ where: { slug: "st-mary-demo" } });
+const school = await prisma.school.findUniqueOrThrow({ where: { slug: "hope-demo" } });
 
 /** The app client is tenant-scoped now, so a script must set the context too. */
 function inSchool<T>(fn: () => Promise<T>): Promise<T> {
@@ -87,7 +87,7 @@ check("bigDebtors all owe at least 1000",
 /* ── Arrears are a CHAIN, not a list ──────────────────────────────────────────
  *
  * ⚠️ This section BUILDS a second term's invoice and removes it again, because
- * the bug it guards cannot exist on the seeded school: st-mary-demo is billed
+ * the bug it guards cannot exist on the seeded school: hope-demo is billed
  * for ONE term, and with one invoice per pupil "sum the balances" and "what
  * they actually owe" are the same number. That is exactly why the debtor SMS
  * shipped for months telling parents roughly double what they owed — every

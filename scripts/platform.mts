@@ -9,13 +9,13 @@
  * Run it against whichever database the env file points at:
  *
  *   npm run platform -- admin you@example.com            # create or reset
- *   npm run platform -- delete-school st-mary-demo       # tenant + orphans
+ *   npm run platform -- delete-school hope-demo       # tenant + orphans
  *
  * Or, when the database password is lost rather than merely unused, the same
  * two things as SQL to paste into the Supabase editor — no connection at all:
  *
  *   npm run platform -- sql you@example.com
- *   npm run platform -- sql-delete-school st-mary-demo
+ *   npm run platform -- sql-delete-school hope-demo
  *
  * For PRODUCTION, put the connection string in `.env.prod` — covered by
  * .gitignore's `.env*`, and NOT a name Next auto-loads, unlike `.env.local`:

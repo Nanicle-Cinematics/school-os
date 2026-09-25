@@ -53,12 +53,12 @@ const rendered = renderTemplate(
     guardian_name: "Ama Mensah",
     student_name: "Kofi Mensah",
     balance: "487.00",
-    school_name: "St. Mary's",
+    school_name: "Hope Education Complex",
   },
 );
 check(
   "all fields substituted",
-  rendered === "Dear Ama Mensah, Kofi Mensah owes GHS 487.00. - St. Mary's",
+  rendered === "Dear Ama Mensah, Kofi Mensah owes GHS 487.00. - Hope Education Complex",
   rendered,
 );
 check(
@@ -116,7 +116,7 @@ const receipt = renderTemplate(defaultTemplateBody(TRANSACTIONAL.paymentReceived
   amount: "250.00",
   balance: "487.00",
   receipt_no: "RCPT/0001",
-  school_name: "St. Mary's",
+  school_name: "Hope Education Complex",
 });
 check("the packaged receipt renders", receipt.includes("GHS 250.00") && receipt.includes("RCPT/0001"), receipt);
 check("and leaves no unfilled merge field", !receipt.includes("{{"), receipt);

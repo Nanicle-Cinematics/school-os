@@ -347,7 +347,7 @@ export async function getSchoolForPlatform(schoolId: string) {
   });
 }
 
-/** Turn a school's name into a URL key: "St. Mary's Prep" → "st-marys-prep". */
+/** Turn a school's name into a URL key: "Hope Education Complex" → "hope-education-complex". */
 export function slugify(input: string) {
   return input
     .normalize("NFKD")

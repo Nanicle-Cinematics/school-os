@@ -70,7 +70,7 @@ const d = (n: number) => new Prisma.Decimal(n);
 assert("ordinals", ordinal(1) === "1st" && ordinal(2) === "2nd" && ordinal(11) === "11th" && ordinal(23) === "23rd");
 
 // ── Engine against real data ────────────────────────────────────────────────
-const school = await prisma.school.findUniqueOrThrow({ where: { slug: "st-mary-demo" } });
+const school = await prisma.school.findUniqueOrThrow({ where: { slug: "hope-demo" } });
 const term = await prisma.term.findFirstOrThrow({ where: { schoolId: school.id, isCurrent: true } });
 const classGroup = await prisma.classGroup.findFirstOrThrow({
   where: { schoolId: school.id, level: { code: "JHS2" } },
