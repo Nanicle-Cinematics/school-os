@@ -425,7 +425,7 @@ async function main() {
       const student = await prisma.student.create({
         data: {
           schoolId,
-          admissionNo: `SM/${pad(admissionSeq)}`,
+          admissionNo: `HEC/${pad(admissionSeq)}`,
           firstName,
           lastName,
           gender: isFemale ? "FEMALE" : "MALE",

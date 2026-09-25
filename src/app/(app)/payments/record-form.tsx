@@ -78,7 +78,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
             type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="e.g. Mensah or SM/0012"
+            placeholder="e.g. Mensah or HEC/0012"
             className={inputClass}
           />
         </Field>
