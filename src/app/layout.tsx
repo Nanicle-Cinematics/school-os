@@ -35,6 +35,10 @@ export const metadata: Metadata = {
   title: "School OS",
   description: "School management for Ghanaian schools — by Nanicle Enterprise Solutions.",
   manifest: "/manifest.webmanifest",
+  // Proves to Google Search Console that Nanicle controls this site, so the
+  // marketing page can be crawled and indexed. Site-wide on purpose — every
+  // route serves this meta tag, but Google only ever reads it off "/".
+  verification: { google: "3lqUaFUOwnUxwmM9t9eVvY_2iJoLmh-M-e4DUyIyiYU" },
   appleWebApp: {
     capable: true,
     title: "School OS",
