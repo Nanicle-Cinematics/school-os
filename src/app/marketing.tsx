@@ -31,12 +31,11 @@ import dashboardShot from "../../public/product-dashboard.png";
  * to WhatsApp a number than to fill in anything, and an email-only page quietly
  * loses the people most ready to buy.
  *
- * ⚠️ Still a personal inbox and a personal number. Swap both for Nanicle ones
- * before this page is advertised anywhere — an address on a public page is an
- * address that gets scraped.
+ * Both are Nanicle's own — the email is the one already on file as the
+ * business's domain registrant contact, not a personal inbox.
  */
 const CONTACT = {
-  email: "degraftnanaaboagye@gmail.com",
+  email: "nanicleenterprisesolutions@gmail.com",
   /** E.164 for the links; `phoneShown` is the same number for human eyes. */
   phone: "+233503635922",
   phoneShown: "+233 50 363 5922",
