@@ -11,12 +11,42 @@ import { createSession, destroySession } from "@/lib/session";
 
 export type LoginState = { error?: string };
 
+/** Wrong passwords before the identifier is locked out. */
+const MAX_LOGIN_ATTEMPTS = 8;
+/** How long a lockout lasts once triggered. */
+const LOCKOUT_MINUTES = 15;
+
+async function recordFailedAttempt(identifier: string) {
+  const attempt = await withBypass(() =>
+    prisma.loginAttempt.upsert({
+      where: { identifier },
+      create: { identifier, attempts: 1 },
+      update: { attempts: { increment: 1 } },
+    }),
+  );
+  if (attempt.attempts >= MAX_LOGIN_ATTEMPTS) {
+    await withBypass(() =>
+      prisma.loginAttempt.update({
+        where: { identifier },
+        data: { lockedUntil: new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) },
+      }),
+    );
+  }
+}
+
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const identifier = String(formData.get("identifier") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
   if (!identifier || !password) {
     return { error: "Enter your email or phone number and your password." };
+  }
+
+  const locked = await withBypass(() =>
+    prisma.loginAttempt.findUnique({ where: { identifier } }),
+  );
+  if (locked?.lockedUntil && locked.lockedUntil > new Date()) {
+    return { error: `Too many attempts. Try again in ${LOCKOUT_MINUTES} minutes.` };
   }
 
   // Sign in by email or phone — many parents and staff have no email address.
@@ -46,11 +76,19 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const invalid = { error: "Incorrect email/phone or password." };
 
   if (!user?.passwordHash) {
+    await recordFailedAttempt(identifier);
     return invalid;
   }
   if (!(await verifyPassword(password, user.passwordHash))) {
+    // Count the miss BEFORE answering, same discipline as the password-reset
+    // code: a typo and a brute force are told apart by the counter, not by how
+    // fast either one gets a response.
+    await recordFailedAttempt(identifier);
     return invalid;
   }
+  // A correct password clears any lockout building up against this identifier.
+  await withBypass(() => prisma.loginAttempt.deleteMany({ where: { identifier } }));
+
   // A platform admin deliberately belongs to no school — the Nanicle console
   // sits outside every tenant. Requiring a membership here locked the only
   // account that can provision the first school out of the product entirely.
