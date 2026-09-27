@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Prisma, StudentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { sum } from "@/lib/money";
+import { netOutstanding } from "@/lib/invoice-engine";
 
 // Queries are sequential rather than Promise.all — see the note in class-data.ts:
 // the pool holds one connection, so a fan-out only queues and then times out.
@@ -132,9 +132,17 @@ export async function getStudent(id: string) {
     take: 6,
   });
 
-  // Owed is read off the invoices already loaded rather than re-aggregated —
-  // one fewer round trip, and it cannot disagree with the table shown below it.
-  const outstanding = sum(invoices.map((invoice) => invoice.balance));
+  // ⚠️ NOT a sum of invoice balances. This spans every term the student has
+  // been billed for, and each term's invoice carries the previous term's
+  // balance forward — so summing counted old arrears twice, the same bug PR
+  // #82 fixed for the debtor SMS audience and the parent portal (see
+  // netOutstanding). This screen reads "across all terms" and renders as an
+  // alarm when nonzero, so it needs the same fix.
+  const payments = await prisma.payment.findMany({
+    where: { studentId: id, reversedAt: null, status: "CONFIRMED" },
+    select: { amount: true },
+  });
+  const outstanding = netOutstanding(invoices, payments);
 
   // Candidates for linking: the mirror of getGuardian's "students not already
   // tied to this guardian" — guardians not already tied to THIS student.
