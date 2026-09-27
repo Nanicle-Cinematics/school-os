@@ -509,6 +509,22 @@ model PasswordReset {
   @@index([expiresAt])
 }
 
+/**
+ * Failed sign-in guesses, keyed by the IDENTIFIER typed at the login form —
+ * never by userId. Login already answers an unknown identifier and a wrong
+ * password with the same message so the form cannot be used to enumerate
+ * accounts; keying lockout by identifier instead of by user keeps that
+ * guarantee, since a made-up email locks out exactly the same way a real one
+ * does.
+ */
+model LoginAttempt {
+  id          String    @id @default(cuid())
+  identifier  String    @unique
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
 model Session {
   id             String   @id @default(cuid())
   userId         String
