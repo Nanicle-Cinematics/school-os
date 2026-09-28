@@ -87,6 +87,7 @@ export default async function PrintReceiptsPage({ searchParams }: PageProps<"/pa
             key={receipt.id}
             school={school}
             payment={receipt}
+            printedBy={auth.name}
             breakAfter={Boolean(onlyId)}
           />
         ))}

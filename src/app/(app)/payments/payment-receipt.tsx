@@ -2,7 +2,7 @@ import { formatCedis, cedisInWords } from "@/lib/money";
 import { paymentSource } from "@/lib/payment-labels";
 import type { ReceiptPayment } from "@/lib/payment-data";
 import type { BillSchool } from "@/lib/invoice-data";
-import { paperWatermark } from "@/lib/paper";
+import { paperWatermark, printedByLine } from "@/lib/paper";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -35,10 +35,12 @@ function contactLine(school: BillSchool) {
 export function PaymentReceipt({
   school,
   payment,
+  printedBy,
   breakAfter = false,
 }: {
   school: BillSchool;
   payment: ReceiptPayment;
+  printedBy: string;
   breakAfter?: boolean;
 }) {
   const address = addressLine(school);
@@ -179,6 +181,7 @@ export function PaymentReceipt({
         <div className="text-[11px] text-slate-500">
           <p>Received by {payment.recordedBy?.name ?? "the school office"}</p>
           <p className="mt-0.5">Keep this receipt. It is your proof of payment.</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">{printedByLine(printedBy)}</p>
         </div>
         <div className="w-40 shrink-0 text-center">
           <div className="h-8 border-b border-slate-400" />

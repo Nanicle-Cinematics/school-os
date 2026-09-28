@@ -76,7 +76,7 @@ export default async function InvoiceDetailPage({ params }: PageProps<"/invoices
         </div>
       </div>
 
-      <InvoiceBill school={school} invoice={invoice} />
+      <InvoiceBill school={school} invoice={invoice} printedBy={auth.name} />
 
       <Card title={`Payments (${payments.length})`}>
         {payments.length === 0 ? (

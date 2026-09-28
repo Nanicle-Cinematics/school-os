@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { formatCedis } from "@/lib/money";
 import type { BillSchool } from "@/lib/invoice-data";
-import { paperWatermark } from "@/lib/paper";
+import { paperWatermark, printedByLine } from "@/lib/paper";
 import { BillLetterhead } from "../bill-letterhead";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
@@ -54,11 +54,13 @@ export function ProformaBill({
   school,
   term,
   proforma,
+  printedBy,
   breakAfter = false,
 }: {
   school: BillSchool;
   term: { name: string; academicYear: { name: string }; startDate: Date };
   proforma: Proforma;
+  printedBy: string;
   breakAfter?: boolean;
 }) {
   const { student, guardian } = proforma;
@@ -174,6 +176,8 @@ export function ProformaBill({
           </p>
         </div>
       ) : null}
+
+      <p className="mt-3 text-[10px] text-slate-400">{printedByLine(printedBy)}</p>
     </article>
   );
 }

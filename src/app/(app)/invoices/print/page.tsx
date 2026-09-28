@@ -124,6 +124,7 @@ export default async function PrintInvoicesPage({ searchParams }: PageProps<"/in
           key={invoice.id}
           school={school}
           invoice={invoice}
+          printedBy={auth.name}
           breakAfter={index < bills.length - 1}
         />
       ))}

@@ -17,6 +17,29 @@ import type { CSSProperties } from "react";
  * Returns an empty object when the school has uploaded no crest, so a document
  * for a school without one is exactly as it was.
  */
+const printedAtFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+/**
+ * Who generated THIS copy, and when — not who recorded the underlying
+ * transaction (a receipt already says "Received by", which is a different
+ * fact: the office staff who took the money, once, whenever that happened).
+ * A printed financial document handed to a parent, a board or an auditor
+ * should be traceable back to whoever pulled it and when, the way real
+ * accounting software stamps its reports — otherwise there is no way to
+ * answer "where did this copy come from, and does it match the system
+ * today?" `at` defaults to render time, which on a server-rendered page IS
+ * the moment this printout was generated.
+ */
+export function printedByLine(name: string, at: Date = new Date()): string {
+  return `Printed by ${name} · ${printedAtFmt.format(at)}`;
+}
+
 export function paperWatermark(crestUrl: string | null | undefined): CSSProperties {
   if (!crestUrl) {
     return {};

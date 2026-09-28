@@ -1,7 +1,7 @@
 import { formatCedis } from "@/lib/money";
 import { isOverdue } from "@/lib/invoice-engine";
 import type { BillInvoice, BillSchool } from "@/lib/invoice-data";
-import { paperWatermark } from "@/lib/paper";
+import { paperWatermark, printedByLine } from "@/lib/paper";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -37,10 +37,12 @@ function contactLine(school: BillSchool) {
 export function InvoiceBill({
   school,
   invoice,
+  printedBy,
   breakAfter = false,
 }: {
   school: BillSchool;
   invoice: BillInvoice;
+  printedBy: string;
   breakAfter?: boolean;
 }) {
   const guardian = invoice.student.guardians[0]?.guardian;
@@ -223,6 +225,8 @@ export function InvoiceBill({
           <p className="mt-1">Bursar / Accounts</p>
         </div>
       </div>
+
+      <p className="mt-2 text-[10px] text-slate-400">{printedByLine(printedBy)}</p>
 
       {/* The counterfoil: a parent paying at the school window hands this back,
           so the bursar has the invoice number without hunting for the child. */}
