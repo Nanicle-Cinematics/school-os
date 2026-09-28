@@ -89,6 +89,68 @@ owner connection and `APP_DATABASE_URL` to the `school_os_app` one from step 4,
 then redeploy. Update the `PROD_DIRECT_URL` GitHub secret too, or the next
 night's backup silently keeps dumping the old database.
 
+## Restoring one school
+
+A whole-database restore is the tool for genuine disaster recovery. Losing or
+needing to roll back just one school is a smaller, more common problem, and
+`School backup` (`.github/workflows/school-backup.yml`) exists so it doesn't
+require touching every other school's data to fix it. Artifacts are named
+`school-os-schools-<date>-<run-id>` and contain one `<slug>.dump.age` per
+school; **Actions → School backup → a run → Artifacts** lists them, same as
+the whole-database ones. The nightly run covers every school; the admin
+console can also dispatch one for a single school on demand.
+
+**1. Decrypt**, same as above:
+
+```
+age -d -i /path/to/backup-key.txt -o ratmma.dump ratmma.dump.age
+```
+
+**2. The target must already have the right SCHEMA.** This is plain SQL —
+`COPY "Table" (…) FROM stdin;` blocks, one per tenant table, nothing that
+creates a table or a policy. Point it at production itself (after whatever
+wiped the school's rows has been dealt with — a `sql-delete-school` gone to
+the wrong slug, an accidental bulk delete, the school's own mistake), or at
+a fresh target that has already had migrations applied (`npm run
+db:deploy`) and, if you want RLS active there too, row security applied
+(`npm run db:rls`).
+
+**3. The target must NOT already hold rows for this school.** This restore
+inserts; it does not merge or upsert. Restoring on top of existing rows for
+the same school fails on the first primary-key collision. If the school's
+rows are still partially there, clear them first — the platform console's
+own `sql-delete-school` preview is one way to see exactly what a clean
+slate for that school looks like before you restore into one.
+
+**4. Restore, as a role that can set `session_replication_role`** (the
+owner connection can) — the tables in the file are in no particular
+dependency order, so foreign keys are turned off for the duration rather
+than restored in a topological order this file doesn't carry:
+
+```
+psql -v ON_ERROR_STOP=1 -c 'SET session_replication_role = replica;' -f ratmma.dump "$TARGET"
+```
+
+Why not `pg_dump`/`pg_restore` here, the way the whole-database backup
+works: `pg_dump` always emits a bare `COPY tablename TO stdout` internally,
+and Postgres refuses that outright for any row-security table when the
+connecting role is the restricted `school_os_app` rather than the owner —
+"query would be affected by row-level security policy". A query-based
+`COPY (SELECT …) TO` isn't subject to that restriction, which is what this
+file actually is — one block per tenant table, built and proved restorable
+by `scripts/prove-restore-school.sh` every time the backup runs.
+
+**5. Check what you got**, scoped to this one school rather than the whole
+database:
+
+```
+psql -At -v school_id=<the school's id> -f scripts/table-counts-school.sql "$TARGET"
+```
+
+Compare against the counts printed in that school's backup run log — the
+nightly job (and the on-demand one from the admin console) asserts exactly
+this comparison for every school, every time.
+
 ## Setting it up (once)
 
 ```
@@ -102,6 +164,18 @@ in Settings → Secrets and variables → Actions → **Variables**, as
 
 Without that variable the workflow fails rather than writing a plaintext dump of
 every pupil record and guardian phone number into an artifact.
+
+`School backup` additionally needs `PROD_APP_DIRECT_URL` — the `school_os_app`
+role's **session-pooler** connection string (port 5432, not the pgbouncer
+6543 one `APP_DATABASE_URL` uses): the per-school filtering is Postgres's own
+row security doing the work, keyed on a GUC set for the session, and
+transaction-mode pooling can hop a session across backend connections
+mid-dump and drop that GUC partway through. Same host as `PROD_DIRECT_URL`,
+different role and port. If `school_os_app`'s password isn't known (Vercel's
+copy may be type Secret, which can't be revealed again), regenerate it —
+`APP_DB_PASSWORD=<new> npm run db:rls` against production, then update
+`APP_DATABASE_URL` in Vercel to match, same as provisioning that role the
+first time.
 
 Then decrypt one backup by hand. The workflow proves the ciphertext is well
 formed, but it cannot prove *your* key opens it — a valid-but-wrong public key

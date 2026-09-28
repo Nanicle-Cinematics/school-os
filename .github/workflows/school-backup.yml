@@ -1,0 +1,240 @@
+name: School backup
+
+# Nightly (staggered after the whole-database Backup workflow), and
+# dispatchable with a single school's slug — which is what the admin
+# console's "back up this school now" button calls into.
+#
+# Same self-test discipline as backup.yml, for the same reason: this must be
+# proved against data that definitely exists before it is trusted against
+# production, and the failure modes (a bad restore, a target that already
+# holds rows, a school with nothing to back up) must be forced and asserted
+# every run rather than assumed to still work.
+on:
+  schedule:
+    # 03:15 UTC — after the whole-database Backup workflow (02:30) has had
+    # time to finish, so the two never contend for PROD_DIRECT_URL at once.
+    - cron: "15 3 * * *"
+  workflow_dispatch:
+    inputs:
+      school:
+        description: One school's slug to back up. Leave blank for every school.
+        required: false
+        default: ""
+  pull_request:
+    paths:
+      - ".github/workflows/school-backup.yml"
+      - "scripts/prove-restore-school.sh"
+      - "scripts/table-counts-school.sql"
+
+concurrency:
+  group: school-backup
+  cancel-in-progress: false
+
+jobs:
+  school-backup:
+    name: Dump one school at a time, and prove each restores
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      SCRATCH: postgresql://postgres:postgres@localhost:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same package as backup.yml, for consistency — but this workflow only
+      # ever uses psql, not pg_dump/pg_restore (see prove-restore-school.sh
+      # for why: pg_dump cannot touch a row-security table as a non-owner
+      # role, no matter the server version), so the strict version match
+      # that script needs does not apply here.
+      - name: Postgres 17 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17 age
+          echo /usr/lib/postgresql/17/bin >> "$GITHUB_PATH"
+          export PATH=/usr/lib/postgresql/17/bin:$PATH
+          psql --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      # ── 1. Self-test: dump a real school out of a seeded database ──────────
+      #
+      # Same reason as backup.yml's self-test: proving the machinery against
+      # data that definitely exists, rather than trusting a green run that
+      # might just mean production held nothing to disagree about.
+      - name: Seed a database, and give it row security
+        run: |
+          psql -q "$SCRATCH/postgres" -c 'create database selftest'
+          cat > .env <<'ENV'
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/selftest"
+          DIRECT_URL="postgresql://postgres:postgres@localhost:5432/selftest"
+          DB_RLS="off"
+          ALLOW_UNSCOPED_DB="1"
+          APP_URL="http://localhost:3000"
+          SESSION_SECRET="backup-not-a-real-secret"
+          ENV
+          npm run db:deploy
+          npm run db:seed
+          # A known password, not the random default apply-rls.mjs would
+          # otherwise generate — this step needs to know it to build the
+          # school_os_app connection string below, not scrape it from a log.
+          APP_DB_PASSWORD=selftest-app-password npm run db:rls
+          echo "APP_URL_SELFTEST=postgresql://school_os_app:selftest-app-password@localhost:5432/selftest" >> "$GITHUB_ENV"
+
+      - name: Which school, and where does its restore land?
+        id: selftest_school
+        run: |
+          school_id=$(psql -At "$SCRATCH/selftest" -c "select id from \"School\" where slug = 'hope-demo'")
+          echo "id=$school_id" >> "$GITHUB_OUTPUT"
+          psql -q "$SCRATCH/postgres" -c 'create database selftest_restored'
+          DATABASE_URL="$SCRATCH/selftest_restored" DIRECT_URL="$SCRATCH/selftest_restored" \
+            npx prisma migrate deploy
+
+      - name: Does a school's dump restore, row for row?
+        run: |
+          scripts/prove-restore-school.sh \
+            "$APP_URL_SELFTEST" "$SCRATCH/selftest" "$SCRATCH/selftest_restored" \
+            /tmp/selftest-school.dump "${{ steps.selftest_school.outputs.id }}"
+
+      # ── 1b. Does the comparison fail when it should? ──────────────────────
+      - name: Do the comparisons actually fail when they should?
+        run: |
+          expect() {
+            local want=$1; shift
+            set +e; "$@" > /tmp/red.log 2>&1; local got=$?; set -e
+            if [ "$got" != "$want" ]; then
+              echo "::error::expected exit $want, got $got"
+              cat /tmp/red.log
+              exit 1
+            fi
+            echo "  ok  exit $want — $(tail -n 2 /tmp/red.log | head -n 1)"
+          }
+
+          echo "A target that already holds this school's rows (reusing the one just populated):"
+          expect 2 scripts/prove-restore-school.sh \
+            "$APP_URL_SELFTEST" "$SCRATCH/selftest" "$SCRATCH/selftest_restored" \
+            /tmp/red-reuse.dump "${{ steps.selftest_school.outputs.id }}"
+
+          echo "A restore that does not match its source:"
+          psql -q "$SCRATCH/postgres" -c 'create database selftest_restored_mismatch'
+          DATABASE_URL="$SCRATCH/selftest_restored_mismatch" DIRECT_URL="$SCRATCH/selftest_restored_mismatch" \
+            npx prisma migrate deploy
+          export PROVE_RESTORE_SCHOOL_SABOTAGE=1
+          expect 1 scripts/prove-restore-school.sh \
+            "$APP_URL_SELFTEST" "$SCRATCH/selftest" "$SCRATCH/selftest_restored_mismatch" \
+            /tmp/red-mismatch.dump "${{ steps.selftest_school.outputs.id }}"
+          unset PROVE_RESTORE_SCHOOL_SABOTAGE
+
+          echo "A school id with nothing to back up:"
+          psql -q "$SCRATCH/postgres" -c 'create database selftest_restored_empty'
+          DATABASE_URL="$SCRATCH/selftest_restored_empty" DIRECT_URL="$SCRATCH/selftest_restored_empty" \
+            npx prisma migrate deploy
+          expect 3 scripts/prove-restore-school.sh \
+            "$APP_URL_SELFTEST" "$SCRATCH/selftest" "$SCRATCH/selftest_restored_empty" \
+            /tmp/red-empty.dump "not-a-real-school-id"
+
+      # ── 2. Production, one school at a time ─────────────────────────────
+      - name: Back up each school in production
+        id: prod
+        env:
+          OWNER_URL: ${{ secrets.PROD_DIRECT_URL }}
+          APP_URL: ${{ secrets.PROD_APP_DIRECT_URL }}
+          ONE_SCHOOL: ${{ github.event.inputs.school }}
+          RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
+        run: |
+          if [ -z "$OWNER_URL" ] || [ -z "$APP_URL" ]; then
+            echo "PROD_DIRECT_URL and PROD_APP_DIRECT_URL must both be set."
+            echo "Add the missing one under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ -z "$RECIPIENT" ]; then
+            echo "No BACKUP_AGE_RECIPIENT variable set, so these backups would be stored in the clear."
+            exit 1
+          fi
+
+          mkdir -p /tmp/schools
+          echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$ONE_SCHOOL" ]; then
+            filter="where slug = '$ONE_SCHOOL'"
+          else
+            filter=""
+          fi
+          # slug and id, one pair per line, tab-separated.
+          psql -At -F $'\t' "$OWNER_URL" -c "select slug, id from \"School\" $filter order by slug" \
+            > /tmp/schools/list.tsv
+
+          if [ ! -s /tmp/schools/list.tsv ]; then
+            echo "::error::No school matched — check the slug."
+            exit 1
+          fi
+
+          psql -q "$SCRATCH/postgres" -c 'create database prod_school_restored'
+
+          while IFS=$'\t' read -r slug id; do
+            echo "── $slug ──"
+            # A fresh schema each time, not a truncate between schools — the
+            # same "drop schema, then deploy" reset prove-restore.sh uses for
+            # the whole database, scoped to one throwaway target instead of
+            # one shared across every school in the loop. Simpler than
+            # tracking what the previous school left behind, and it cannot
+            # drift from what a real restore target actually needs.
+            psql -q -c 'drop schema if exists public cascade' "$SCRATCH/prod_school_restored"
+            DATABASE_URL="$SCRATCH/prod_school_restored" DIRECT_URL="$SCRATCH/prod_school_restored" \
+              npx prisma migrate deploy
+
+            dump="/tmp/schools/$slug.dump"
+            set +e
+            scripts/prove-restore-school.sh "$APP_URL" "$OWNER_URL" "$SCRATCH/prod_school_restored" "$dump" "$id"
+            code=$?
+            set -e
+            # 3 is "this school holds no rows" — true of a school that has
+            # just onboarded, and not a reason to fail the whole run. The
+            # dump is still taken and kept.
+            if [ "$code" = "3" ]; then
+              echo "::warning::$slug holds no rows — the dump was taken, but its restore proves nothing yet."
+            elif [ "$code" != "0" ]; then
+              exit "$code"
+            fi
+
+            age -r "$RECIPIENT" -o "$dump.age" "$dump"
+            rm -f "$dump"
+          done < /tmp/schools/list.tsv
+
+      - name: Keep it
+        uses: actions/upload-artifact@v4
+        with:
+          name: school-os-schools-${{ steps.prod.outputs.date }}-${{ github.run_id }}
+          path: /tmp/schools/*.dump.age
+          retention-days: 30
+          if-no-files-found: error

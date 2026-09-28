@@ -44,3 +44,4 @@ next-env.d.ts
 
 # Design canvases — working files for mockups, not part of the app.
 .design/
+.new-app-database-url.txt
