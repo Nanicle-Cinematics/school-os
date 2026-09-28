@@ -107,7 +107,39 @@ function assertTenantContext(model: string) {
   }
 }
 
+/**
+ * The Supabase project a connection string actually points at, from its
+ * pooler username (`school_os_app.<ref>` / `postgres.<ref>`).
+ */
+function supabaseRef(url: string | undefined): string | null {
+  return url?.match(/^postgresql:\/\/[^.:]+\.([a-z0-9]+):/)?.[1] ?? null;
+}
+
 function createPrismaClient() {
+  /**
+   * ⚠️ APP_DATABASE_URL and DATABASE_URL disagreeing on WHICH PROJECT is a
+   * silent wrong-database connection, not a config nuance — and it already
+   * happened once. A script run as `tsx --env-file=.env.prod` had Node set
+   * DATABASE_URL to production correctly, but `.env.prod` deliberately has
+   * no APP_DATABASE_URL (Vercel supplies that one), and something in the
+   * loading chain filled the gap from dev's plain `.env` — which DOES set
+   * it. `??` below then picked the leaked dev value over the correct prod
+   * one, and a "production" check quietly read dev's demo school instead,
+   * nearly triggering a real restore-over-production based on a phantom
+   * data-loss alarm. Refusing to start on a mismatch turns that into a
+   * loud failure at the first query instead of a wrong answer nobody
+   * questioned.
+   */
+  const appRef = supabaseRef(process.env.APP_DATABASE_URL);
+  const ownerRef = supabaseRef(process.env.DATABASE_URL);
+  if (appRef && ownerRef && appRef !== ownerRef) {
+    throw new Error(
+      `APP_DATABASE_URL and DATABASE_URL point at different Supabase projects ` +
+        `(${appRef} vs ${ownerRef}). One of them leaked in from the wrong .env file ` +
+        `— do not proceed on a guess about which is right. Fix the environment first.`,
+    );
+  }
+
   // The running app connects as the restricted role (no BYPASSRLS, owns
   // nothing), so the policies in scripts/apply-rls.mjs actually bind to it.
   // DATABASE_URL stays the owner connection for the Prisma CLI, the seed and
