@@ -49,7 +49,7 @@ export default async function ExportPage({ searchParams }: PageProps<"/export">)
           {terms.length > 0 ? (
             <form className="mt-3 flex flex-wrap items-center gap-2">
               <label className="text-sm text-slate-600" htmlFor="term">
-                Term, for invoices, payments and results
+                Term, for invoices, payments, expenses and results
               </label>
               <select id="term" name="term" defaultValue={selectedTerm} className={filterClass}>
                 {terms.map((term) => (

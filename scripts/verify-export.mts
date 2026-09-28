@@ -124,6 +124,7 @@ check(
   "an ACCOUNTANT gets the money and NOT the children",
   canAccess(["ACCOUNTANT"], DATASETS.invoices.roles) &&
     canAccess(["ACCOUNTANT"], DATASETS.payments.roles) &&
+    canAccess(["ACCOUNTANT"], DATASETS.expenses.roles) &&
     !canAccess(["ACCOUNTANT"], DATASETS.students.roles) &&
     !canAccess(["ACCOUNTANT"], DATASETS.results.roles),
 );
@@ -165,7 +166,9 @@ check(
 );
 check(
   "the money datasets are FINANCE",
-  DATASETS.invoices.roles === FINANCE && DATASETS.payments.roles === FINANCE,
+  DATASETS.invoices.roles === FINANCE &&
+    DATASETS.payments.roles === FINANCE &&
+    DATASETS.expenses.roles === FINANCE,
 );
 check("the people datasets are OFFICE", DATASETS.students.roles === OFFICE);
 
