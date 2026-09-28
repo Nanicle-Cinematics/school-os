@@ -107,3 +107,50 @@ export async function getTermCashPosition(termId: string) {
   const outgoing = spent._sum.amount ?? new Prisma.Decimal(0);
   return { income, outgoing, net: income.sub(outgoing) };
 }
+
+/**
+ * The Income & Expenditure Statement — the one document a proprietor can
+ * print and hand to a board meeting or an auditor, rather than reading the
+ * same numbers off three different screens.
+ *
+ * Deliberately reuses `getTermCashPosition` for income/expenditure/net rather
+ * than re-deriving them: this statement can never disagree with the number
+ * already shown on the cash-book dashboard, because it is the same query.
+ * Income stays ONE line — "fees collected" — rather than broken out by fee
+ * category, because a payment is allocated to an INVOICE, not to a category
+ * within it, so any category split on the income side would be an invented
+ * apportionment, not a recorded fact. Expenditure has no such problem: every
+ * voucher already carries its own category.
+ */
+export async function getIncomeExpenditureStatement(termId: string) {
+  const term = await prisma.term.findUniqueOrThrow({
+    where: { id: termId },
+    include: { academicYear: { select: { name: true } } },
+  });
+  const position = await getTermCashPosition(termId);
+  const byCategory = await prisma.expense.groupBy({
+    by: ["categoryId"],
+    where: { termId, ...COUNTED },
+    _sum: { amount: true },
+  });
+  const categories = await prisma.expenseCategory.findMany({
+    orderBy: { order: "asc" },
+  });
+  const categoryName = new Map(categories.map((c) => [c.id, c.name]));
+
+  const expenditureByCategory = byCategory
+    .map((row) => ({
+      categoryId: row.categoryId,
+      name: row.categoryId ? (categoryName.get(row.categoryId) ?? "Uncategorised") : "Uncategorised",
+      total: row._sum.amount ?? new Prisma.Decimal(0),
+    }))
+    .sort((a, b) => Number(b.total) - Number(a.total));
+
+  return {
+    term,
+    income: position.income,
+    expenditureByCategory,
+    expenditure: position.outgoing,
+    net: position.net,
+  };
+}
