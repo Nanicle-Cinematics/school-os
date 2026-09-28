@@ -371,6 +371,63 @@ export const DATASETS = {
   },
 
   /**
+   * Every voucher for the term — the mirror of `payments`, so a school can
+   * hand an accountant both halves of its cash book instead of only the
+   * income side. Not filtered by status: a CANCELLED voucher is exactly the
+   * kind of thing an auditor wants to see, not have silently dropped.
+   */
+  expenses: {
+    label: "Expenses",
+    description:
+      "Every voucher for the term — what was spent, on what, and who approved it.",
+    roles: FINANCE,
+    needsTerm: true,
+    headers: [
+      "voucher_no",
+      "spent_at",
+      "category",
+      "description",
+      "amount",
+      "payee",
+      "method",
+      "reference",
+      "status",
+      "recorded_by",
+      "approved_by",
+      "approved_at",
+      "receipt_url",
+    ],
+    textColumns: ["voucher_no", "reference"],
+    load: async (termId) => {
+      const expenses = await prisma.expense.findMany({
+        where: { termId: termId ?? undefined },
+        orderBy: [{ spentAt: "asc" }],
+        include: {
+          category: { select: { name: true } },
+          recordedBy: { select: { name: true } },
+          approvedBy: { select: { name: true } },
+        },
+      });
+
+      return expenses.map((expense) => [
+        expense.voucherNo,
+        isoDate(expense.spentAt),
+        expense.category?.name ?? "",
+        expense.description,
+        amount(expense.amount),
+        expense.payee,
+        paymentSource(expense.method, expense.momoNetwork),
+        expense.reference,
+        expense.status,
+        expense.recordedBy?.name ?? "",
+        expense.approvedBy?.name ?? "",
+        expense.approvedAt ? isoDate(expense.approvedAt) : "",
+        expense.receiptUrl ?? "",
+      ]);
+    },
+  },
+
+  /**
    * Results, one row per student per subject.
    *
    * Long rather than wide on purpose: a broadsheet with a column per subject is
