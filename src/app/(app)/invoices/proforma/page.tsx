@@ -143,6 +143,7 @@ export default async function ProformaPage({ searchParams }: PageProps<"/invoice
           school={school}
           term={term}
           proforma={row}
+          printedBy={auth.name}
           breakAfter={index < priced.length - 1}
         />
       ))}

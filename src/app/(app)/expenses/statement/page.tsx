@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getIncomeExpenditureStatement } from "@/lib/expense-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { formatCedis } from "@/lib/money";
+import { printedByLine } from "@/lib/paper";
 import { PageHeader, Card, filterClass } from "../../ui";
 import { buttonClass } from "../../button-style";
 import { PrintButton } from "./print-button";
@@ -139,6 +140,10 @@ export default async function IncomeExpenditureStatementPage({
           </div>
         </Card>
       )}
+
+      {statement ? (
+        <p className="text-[10px] text-slate-400">{printedByLine(auth.name)}</p>
+      ) : null}
 
       <p className="text-xs text-slate-400 print:hidden">
         Cash basis: income is fees actually collected against this term&rsquo;s invoices, and
