@@ -87,11 +87,19 @@ export default async function ExpensesPage({
             : "School cash book"
         }
         action={
-          <ExpenseForm
-            categories={data.categories}
-            terms={data.terms}
-            currentTermId={currentTerm?.id}
-          />
+          <div className="flex items-center gap-3">
+            <Link
+              href="/expenses/statement"
+              className="text-sm font-medium text-slate-500 hover:text-slate-900"
+            >
+              Income &amp; Expenditure Statement →
+            </Link>
+            <ExpenseForm
+              categories={data.categories}
+              terms={data.terms}
+              currentTermId={currentTerm?.id}
+            />
+          </div>
         }
       />
 
