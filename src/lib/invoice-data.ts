@@ -4,7 +4,13 @@ import { Prisma } from "@prisma/client";
 import type { InvoiceStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PLAN_SELECT, keepingToPlan } from "@/lib/report-access";
-import { AGE_BUCKETS, ageFilterWhere, statusFilterWhere, type AgeBucket } from "@/lib/invoice-engine";
+import {
+  AGE_BUCKETS,
+  ageBucket,
+  ageFilterWhere,
+  statusFilterWhere,
+  type AgeBucket,
+} from "@/lib/invoice-engine";
 import {
   chooseFeeStructure,
   explainNoStructure,
@@ -146,6 +152,79 @@ export async function getDebtorAgeing(termId?: string) {
     });
   }
   return rows;
+}
+
+export type DebtorRow = {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  admissionNo: string;
+  className: string | null;
+  totalOwed: number;
+  invoiceCount: number;
+  oldestBucket: AgeBucket;
+  onKeptPlan: boolean;
+};
+
+/**
+ * "Owing (debtors)" on /invoices is one row per INVOICE, which is right for
+ * chasing a specific bill but wrong for a bursar's debtors list — a family
+ * with two terms of arrears reads as two rows instead of one debt. This
+ * groups the same underlying query (`getInvoiceList`, `invoicesOnKeptPlans`)
+ * per STUDENT, so the two screens cannot disagree about who owes what.
+ *
+ * `oldestBucket` takes the worst bucket across a student's owed invoices —
+ * AGE_BUCKETS is already ordered CURRENT → D90_PLUS, so an index comparison
+ * is enough. `onKeptPlan` is true only when EVERY owed invoice for that
+ * student is covered — a plan on one term does not excuse arrears on another.
+ */
+export async function getDebtorsByStudent(filters: {
+  termId?: string;
+  classGroupId?: string;
+  age?: AgeBucket;
+  q?: string;
+}): Promise<{ debtors: DebtorRow[]; totalOwed: number }> {
+  const [{ invoices }, plans] = await Promise.all([
+    getInvoiceList({ ...filters, status: "DEBTORS" }),
+    invoicesOnKeptPlans(filters.termId),
+  ]);
+
+  const now = new Date();
+  const byStudent = new Map<string, DebtorRow>();
+
+  for (const invoice of invoices) {
+    const bucket = ageBucket(invoice, now);
+    const onKept = plans.kept.has(invoice.id);
+    const existing = byStudent.get(invoice.studentId);
+
+    if (existing) {
+      existing.totalOwed += Number(invoice.balance);
+      existing.invoiceCount += 1;
+      existing.onKeptPlan = existing.onKeptPlan && onKept;
+      if (AGE_BUCKETS.indexOf(bucket) > AGE_BUCKETS.indexOf(existing.oldestBucket)) {
+        existing.oldestBucket = bucket;
+      }
+      continue;
+    }
+
+    byStudent.set(invoice.studentId, {
+      studentId: invoice.studentId,
+      firstName: invoice.student.firstName,
+      lastName: invoice.student.lastName,
+      admissionNo: invoice.student.admissionNo,
+      className: invoice.student.currentClassGroup
+        ? `${invoice.student.currentClassGroup.level.name} ${invoice.student.currentClassGroup.name}`
+        : null,
+      totalOwed: Number(invoice.balance),
+      invoiceCount: 1,
+      oldestBucket: bucket,
+      onKeptPlan: onKept,
+    });
+  }
+
+  const debtors = [...byStudent.values()].sort((a, b) => b.totalOwed - a.totalOwed);
+  const totalOwed = debtors.reduce((sum, d) => sum + d.totalOwed, 0);
+  return { debtors, totalOwed };
 }
 
 export const BILL_INCLUDE = {
