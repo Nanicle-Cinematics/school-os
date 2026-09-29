@@ -126,6 +126,7 @@ export type NavIcon =
   | "payments"
   | "expenses"
   | "debtors"
+  | "creditors"
   | "billCodes"
   | "accountsInformation"
   | "chartOfAccounts"
@@ -192,6 +193,7 @@ export const NAV: NavSection[] = [
       { href: "/payments", label: "Payments", icon: "payments", roles: FINANCE },
       { href: "/expenses", label: "Expenses", icon: "expenses", roles: FINANCE },
       { href: "/debtors", label: "Debtors", icon: "debtors", roles: FINANCE },
+      { href: "/creditors", label: "Creditors", icon: "creditors", roles: FINANCE },
       {
         href: "/chart-of-accounts",
         label: "Chart of accounts",

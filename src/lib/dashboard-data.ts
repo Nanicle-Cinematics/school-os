@@ -583,6 +583,31 @@ const ACTIVITY: Record<
     title: () => "An account was removed from the chart of accounts",
     detail: "Fees",
   },
+  "bill.record": {
+    kind: "money",
+    title: (a) => `A bill of ${money(a.amount)} was recorded`,
+    detail: "Expenses",
+  },
+  "bill.approve": {
+    kind: "money",
+    title: (a) => `A bill of ${money(a.amount)} was approved`,
+    detail: "Expenses",
+  },
+  "bill.cancel": {
+    kind: "money",
+    title: () => "A vendor bill was cancelled",
+    detail: "Expenses",
+  },
+  "billPayment.record": {
+    kind: "money",
+    title: (a) => `A vendor was paid ${money(a.amount)}`,
+    detail: "Expenses",
+  },
+  "billPayment.reverse": {
+    kind: "money",
+    title: () => "A vendor payment was reversed",
+    detail: "Expenses",
+  },
   "guardian.login.create": {
     kind: "people",
     title: (a) => `${text(a.guardianName) ?? "A guardian"} was given a parent portal login`,
