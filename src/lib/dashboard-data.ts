@@ -541,6 +541,27 @@ const ACTIVITY: Record<
     title: () => "A fee structure was removed",
     detail: "Fees",
   },
+  "billCode.create": {
+    kind: "money",
+    title: (a) => {
+      const name = text(a.name);
+      return name ? `“${name}” was added as a bill code` : "A bill code was added";
+    },
+    detail: "Fees",
+  },
+  "billCode.update": {
+    kind: "money",
+    title: (a) => {
+      const name = text(a.name);
+      return name ? `The “${name}” bill code was changed` : "A bill code was changed";
+    },
+    detail: "Fees",
+  },
+  "billCode.delete": {
+    kind: "money",
+    title: () => "A bill code was removed",
+    detail: "Fees",
+  },
   "guardian.login.create": {
     kind: "people",
     title: (a) => `${text(a.guardianName) ?? "A guardian"} was given a parent portal login`,
