@@ -1,11 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import {
-  triggerAllSchoolsBackup,
-  SCHOOL_BACKUP_RUNS_URL,
-  type BackupState,
-} from "@/lib/platform-backup-actions";
+import { triggerAllSchoolsBackup, type BackupState } from "@/lib/platform-backup-actions";
+import { SCHOOL_BACKUP_RUNS_URL } from "@/lib/platform-backup-constants";
 
 export function AllSchoolsBackupButton() {
   const [state, action] = useActionState<BackupState, FormData>(triggerAllSchoolsBackup, {});

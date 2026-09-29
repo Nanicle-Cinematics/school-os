@@ -2,11 +2,8 @@
 
 import { useActionState } from "react";
 import { buttonClass } from "../../(app)/button-style";
-import {
-  triggerSchoolBackup,
-  SCHOOL_BACKUP_RUNS_URL,
-  type BackupState,
-} from "@/lib/platform-backup-actions";
+import { triggerSchoolBackup, type BackupState } from "@/lib/platform-backup-actions";
+import { SCHOOL_BACKUP_RUNS_URL } from "@/lib/platform-backup-constants";
 
 /**
  * One school's own backup, on demand — the nightly run covers every school
