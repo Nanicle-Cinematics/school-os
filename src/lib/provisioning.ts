@@ -5,6 +5,7 @@ import type { TenantTx } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
 import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
+import { applyDefaultBillCodes } from "@/lib/billcode-defaults";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 import { schoolYearFor, splitIntoTerms } from "@/lib/academic-year";
 import { PLANS, TRIAL_DAYS, nextDueDate } from "@/lib/subscription";
@@ -135,6 +136,10 @@ export async function provisionSchool(tx: TenantTx, input: ProvisionInput) {
   // And on a working bill: a fee structure is priced per item, so a school with
   // no fee items cannot enter an amount anywhere.
   await applyDefaultFinanceCategories(tx, school.id);
+
+  // And on a bill CODE — generateInvoicesForTerm stamps TERMBILL onto every
+  // invoice it creates, so it must exist before this school's first term bill.
+  await applyDefaultBillCodes(tx, school.id);
 
   // And on a working mark sheet: without components a teacher builds
   // "Class Test 1" by hand for every subject in every class.

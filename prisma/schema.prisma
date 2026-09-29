@@ -124,6 +124,7 @@ model School {
   feeCategories      FeeCategory[]
   feeStructures      FeeStructure[]
   feeStructureItems  FeeStructureItem[]
+  billCodes          BillCode[]
   invoices           Invoice[]
   invoiceItems       InvoiceItem[]
   discounts          Discount[]
@@ -1426,6 +1427,32 @@ enum InvoiceStatus {
   CANCELLED
 }
 
+/**
+ * What KIND of bill this is — Term Fees, PTA Levy, a Trip — as distinct from
+ * the FeeCategory lines an invoice is made of. A fee category is one row on a
+ * bill; a bill code is the bill itself, which is what an accountant reaches
+ * for when asked "how much did the Trip Bill raise this year" across every
+ * fee category it happened to include.
+ */
+model BillCode {
+  id          String  @id @default(cuid())
+  schoolId    String
+  school      School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name        String // Term Fees Bill, PTA Bill, Trip/Excursion Bill, Uniform Bill
+  code        String
+  description String?
+  order       Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices Invoice[]
+
+  @@unique([schoolId, code])
+  @@index([schoolId])
+}
+
 model Invoice {
   id        String  @id @default(cuid())
   schoolId  String
@@ -1434,6 +1461,11 @@ model Invoice {
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   termId    String
   term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
+  // Which BILL this is, not which fee lines it carries. Nullable and SetNull,
+  // matching FeeCategory/ExpenseCategory: a deleted bill code must never take
+  // a real invoice's history with it.
+  billCodeId String?
+  billCode   BillCode? @relation(fields: [billCodeId], references: [id], onDelete: SetNull)
 
   invoiceNo String
   issueDate DateTime  @default(now())

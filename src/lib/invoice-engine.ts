@@ -496,6 +496,14 @@ export async function generateInvoicesForTerm(
   const dueDate = new Date(term.startDate);
   dueDate.setDate(dueDate.getDate() + dueDays);
 
+  // A school provisioned before bill codes existed may not have TERMBILL yet —
+  // generation must not fail over a missing classification, so this stays
+  // optional rather than throwing when it's absent.
+  const termBillCode = await tx.billCode.findUnique({
+    where: { schoolId_code: { schoolId, code: "TERMBILL" } },
+    select: { id: true },
+  });
+
   const result: GenerationResult = { created: 0, skipped: 0, noStructure: [] };
 
   for (const student of students) {
@@ -546,6 +554,7 @@ export async function generateInvoicesForTerm(
         schoolId,
         studentId: student.id,
         termId,
+        billCodeId: termBillCode?.id,
         invoiceNo,
         issueDate: new Date(),
         dueDate,
