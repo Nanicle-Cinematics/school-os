@@ -61,6 +61,7 @@ model School {
   region          String? // Ghanaian region
   gpsAddress      String? // GhanaPost GPS digital address
   accreditationNo String? // GES / Ministry registration number
+  tin             String? // Ghana Revenue Authority Tax Identification Number, printed on bills
 
   headName         String?
   headSignatureUrl String?

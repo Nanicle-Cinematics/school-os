@@ -215,6 +215,8 @@ export function InvoiceBill({
         <p className="mt-3 text-xs text-slate-600">{school.settings.invoiceNote}</p>
       ) : null}
 
+      {school.tin ? <p className="mt-1 text-xs text-slate-400">TIN: {school.tin}</p> : null}
+
       <div className="mt-5 flex items-end justify-between gap-6 text-xs text-slate-600">
         <div>
           <div className="h-8 w-44 border-b border-slate-400" />

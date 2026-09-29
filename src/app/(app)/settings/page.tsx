@@ -305,8 +305,6 @@ export default async function SettingsPage() {
             // it does not want approvals, and 0 would read as "approve
             // everything".
             expenseApprovalThreshold: settings?.expenseApprovalThreshold?.toString() ?? "",
-            paymentInstructions: settings?.paymentInstructions ?? "",
-            invoiceNote: settings?.invoiceNote ?? "",
           }}
         />
       </Card>

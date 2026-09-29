@@ -280,6 +280,7 @@ export async function getBillSchool(schoolId: string) {
       email: true,
       website: true,
       headName: true,
+      tin: true,
       settings: { select: { paymentInstructions: true, invoiceNote: true } },
     },
   });

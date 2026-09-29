@@ -156,16 +156,6 @@ export async function saveFeesPolicy(
     return { error: "Days until due must be zero or more." };
   }
 
-  const paymentInstructions = String(formData.get("paymentInstructions") ?? "").trim();
-  const invoiceNote = String(formData.get("invoiceNote") ?? "").trim();
-
-  if (paymentInstructions.length > 600) {
-    return { error: "Keep the payment details under 600 characters — they share a page with the bill." };
-  }
-  if (invoiceNote.length > 200) {
-    return { error: "Keep the note under 200 characters — it prints as one line." };
-  }
-
   /**
    * Blank means "we do not want approvals", which is NOT the same as zero.
    * Zero would hold every voucher in the school, chalk included, and the first
@@ -183,9 +173,6 @@ export async function saveFeesPolicy(
     invoiceDueDays: Math.trunc(invoiceDueDays),
     blockReportOnArrears: formData.get("blockReportOnArrears") === "on",
     expenseApprovalThreshold,
-    // Empty means "print nothing", not "an empty box".
-    paymentInstructions: paymentInstructions || null,
-    invoiceNote: invoiceNote || null,
   });
 
   revalidatePath("/settings");
