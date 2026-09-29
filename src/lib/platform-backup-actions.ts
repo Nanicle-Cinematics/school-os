@@ -9,7 +9,6 @@ export type BackupState = { error?: string; ok?: string };
 
 const REPO = "Nanicle-Cinematics/school-os";
 const WORKFLOW = "school-backup.yml";
-const RUNS_URL = `https://github.com/${REPO}/actions/workflows/${WORKFLOW}`;
 
 /**
  * Trigger the same GitHub Actions job the nightly per-school backup runs —
@@ -48,9 +47,6 @@ async function dispatch(school: string | null): Promise<BackupState> {
 
   return { ok: "Triggered — the run should appear on GitHub within a few seconds." };
 }
-
-/** So the GUI's "view on GitHub" link can never drift from where dispatch() posts to. */
-export const SCHOOL_BACKUP_RUNS_URL = RUNS_URL;
 
 export async function triggerSchoolBackup(
   _prev: BackupState,
