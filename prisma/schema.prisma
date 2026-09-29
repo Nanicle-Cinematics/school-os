@@ -151,6 +151,8 @@ model School {
   planInstalments   PaymentPlanInstalment[]
   statementLines    StatementLine[]
   ledgerAccounts    LedgerAccount[]
+  journalEntries    JournalEntry[]
+  journalLines      JournalLine[]
 
   @@index([plan, subscriptionStatus])
 }
@@ -364,6 +366,25 @@ model SchoolSettings {
   // Printed under the total, e.g. "Fees are payable in full by the third week."
   invoiceNote              String?
 
+  /// The school's own core accounts — where the posting engine (ledger-engine.ts)
+  /// looks up which LedgerAccount to debit/credit for a cash movement. All five
+  /// are optional and SetNull: a school that has not finished setting up its
+  /// chart of accounts keeps billing, paying and spending exactly as before —
+  /// see the "additive, best-effort" rule in ledger-engine.ts. Introduced
+  /// alongside the posting engine itself, deliberately not earlier: a field
+  /// nothing yet reads is the dead-switch bug this app has already shipped four
+  /// times (see "Changing the schema" / verify:settings).
+  cashAccountId       String?
+  cashAccount         LedgerAccount? @relation("SettingsCashAccount", fields: [cashAccountId], references: [id], onDelete: SetNull)
+  bankAccountId       String?
+  bankAccount         LedgerAccount? @relation("SettingsBankAccount", fields: [bankAccountId], references: [id], onDelete: SetNull)
+  momoAccountId       String?
+  momoAccount         LedgerAccount? @relation("SettingsMomoAccount", fields: [momoAccountId], references: [id], onDelete: SetNull)
+  receivableAccountId String?
+  receivableAccount   LedgerAccount? @relation("SettingsReceivableAccount", fields: [receivableAccountId], references: [id], onDelete: SetNull)
+  payableAccountId    String?
+  payableAccount      LedgerAccount? @relation("SettingsPayableAccount", fields: [payableAccountId], references: [id], onDelete: SetNull)
+
   // SMS
   smsProvider           SmsProvider?
   smsSenderId           String?
@@ -458,6 +479,7 @@ model User {
   recordedVendorBills    VendorBill[]      @relation("VendorBillRecordedBy")
   approvedVendorBills    VendorBill[]      @relation("VendorBillApprovedBy")
   recordedVendorPayments VendorPayment[]   @relation("VendorPaymentRecordedBy")
+  postedJournalEntries   JournalEntry[]    @relation("JournalEntryPostedBy")
 
   @@index([schoolId])
 }
@@ -1390,9 +1412,80 @@ model LedgerAccount {
 
   feeCategoriesAsIncome      FeeCategory[]     @relation("FeeCategoryIncomeAccount")
   expenseCategoriesAsExpense ExpenseCategory[] @relation("ExpenseCategoryExpenseAccount")
+  journalLines               JournalLine[]
+  settingsAsCash             SchoolSettings[]  @relation("SettingsCashAccount")
+  settingsAsBank             SchoolSettings[]  @relation("SettingsBankAccount")
+  settingsAsMomo             SchoolSettings[]  @relation("SettingsMomoAccount")
+  settingsAsReceivable       SchoolSettings[]  @relation("SettingsReceivableAccount")
+  settingsAsPayable          SchoolSettings[]  @relation("SettingsPayableAccount")
 
   @@unique([schoolId, code])
   @@index([schoolId, type])
+}
+
+/**
+ * Which live event a journal entry records — so a reversal can find the
+ * original by (sourceType, sourceId) without a separate pointer column on
+ * every source table.
+ */
+enum JournalSourceType {
+  INVOICE
+  PAYMENT
+  EXPENSE
+  VENDOR_BILL
+  VENDOR_PAYMENT
+}
+
+/**
+ * The posting engine's own record, entirely separate from what it posts
+ * about. Nothing here is read by `recalcInvoice`, `recalcVendorBill` or any
+ * invoice/payment/expense total — those stay the source of truth they always
+ * were, and this is a PARALLEL record for the accountant, not a dependency of
+ * the money already working. See ledger-engine.ts for the one rule this
+ * implies: posting is additive and best-effort, and a missing account mapping
+ * skips a posting, never blocks the invoice/payment/expense it is about.
+ */
+model JournalEntry {
+  id         String            @id @default(cuid())
+  schoolId   String
+  school     School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  entryNo    String
+  date       DateTime          @default(now())
+  memo       String
+  sourceType JournalSourceType
+  sourceId   String
+
+  postedByUserId String?
+  postedBy       User?   @relation("JournalEntryPostedBy", fields: [postedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  lines JournalLine[]
+
+  @@unique([schoolId, entryNo])
+  @@index([schoolId, sourceType, sourceId])
+}
+
+model JournalLine {
+  id             String        @id @default(cuid())
+  schoolId       String
+  school         School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  journalEntryId String
+  journalEntry   JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  // Restrict, not SetNull: a line with no account is not a line, it is a
+  // silent hole in a set of numbers that has to sum to zero. An account with
+  // postings against it must stay in the chart, exactly like a billed
+  // FeeCategory must stay biller-side — see deleteLedgerAccount's refusal.
+  accountId      String
+  account        LedgerAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  debit          Decimal       @default(0) @db.Decimal(12, 2)
+  credit         Decimal       @default(0) @db.Decimal(12, 2)
+  description    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId])
+  @@index([accountId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1719,9 +1812,14 @@ model PaymentAllocation {
 // ─────────────────────────────────────────────────────────────────────────────
 // EXPENDITURE
 //
-// A bursar's running cash book, not full double-entry accounting. Enough to
-// answer "what came in, what went out, what's left" per term. Payroll,
-// requisitions and budgets are deliberately out of scope for now.
+// A bursar's running cash book — "what came in, what went out, what's left"
+// per term — that ALSO posts to a real chart of accounts once one is set up
+// (see the CHART OF ACCOUNTS section and ledger-engine.ts). The cash book is
+// never a dependency of the ledger or the other way round: Expense.balance
+// answers the bursar's question whether or not the accounts are mapped, and
+// a JournalEntry is a parallel record for the accountant, not a second
+// source of truth. Payroll and requisitions are still deliberately out of
+// scope for now.
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ExpenseCategory {

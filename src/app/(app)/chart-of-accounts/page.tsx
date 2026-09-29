@@ -1,16 +1,25 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
-import { getLedgerAccounts, getCategoryAccountMappings } from "@/lib/ledger-data";
+import {
+  getLedgerAccounts,
+  getCategoryAccountMappings,
+  getCoreAccountSettings,
+} from "@/lib/ledger-data";
 import { PageHeader, Card } from "../ui";
 import { LedgerAccountSection } from "./ledger-account-items";
 import { CategoryMappings } from "./category-mappings";
+import { CoreAccountsForm } from "./core-accounts-form";
 
 export const metadata: Metadata = { title: "Chart of accounts · School OS" };
 
 export default async function ChartOfAccountsPage() {
   await requireRole(FINANCE);
-  const [accounts, mappings] = await Promise.all([getLedgerAccounts(), getCategoryAccountMappings()]);
+  const [accounts, mappings, coreAccounts] = await Promise.all([
+    getLedgerAccounts(),
+    getCategoryAccountMappings(),
+    getCoreAccountSettings(),
+  ]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -22,6 +31,19 @@ export default async function ChartOfAccountsPage() {
       <Card title={`Accounts · ${accounts.length}`}>
         <LedgerAccountSection accounts={accounts} />
       </Card>
+
+      {coreAccounts.assetAccounts.length > 0 || coreAccounts.liabilityAccounts.length > 0 ? (
+        <Card
+          title="Default postings"
+          action={<span className="text-xs text-slate-400">What every payment, bill and invoice posts to</span>}
+        >
+          <CoreAccountsForm
+            values={coreAccounts}
+            assetAccounts={coreAccounts.assetAccounts}
+            liabilityAccounts={coreAccounts.liabilityAccounts}
+          />
+        </Card>
+      ) : null}
 
       {mappings.feeCategories.length > 0 || mappings.expenseCategories.length > 0 ? (
         <Card

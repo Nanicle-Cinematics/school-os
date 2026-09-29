@@ -38,7 +38,7 @@ export async function generateInvoices(
   // Generous timeout: this walks every active student and writes an invoice
   // plus its lines for each, and the database is a continent away.
   const result = await tenantTransaction(auth.schoolId, async (tx) => {
-      const generated = await generateInvoicesForTerm(tx, auth.schoolId, termId, dueDays);
+      const generated = await generateInvoicesForTerm(tx, auth.schoolId, termId, dueDays, auth.userId);
       await writeAudit(tx, {
         schoolId: auth.schoolId,
         actorUserId: auth.userId,

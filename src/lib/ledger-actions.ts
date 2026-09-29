@@ -119,17 +119,37 @@ export async function deleteLedgerAccount(formData: FormData): Promise<void> {
       where: { id },
       include: {
         _count: {
-          select: { feeCategoriesAsIncome: true, expenseCategoriesAsExpense: true, children: true },
+          select: {
+            feeCategoriesAsIncome: true,
+            expenseCategoriesAsExpense: true,
+            children: true,
+            journalLines: true,
+            settingsAsCash: true,
+            settingsAsBank: true,
+            settingsAsMomo: true,
+            settingsAsReceivable: true,
+            settingsAsPayable: true,
+          },
         },
       },
     });
     if (!existing) {
       return;
     }
+    // Once postings exist, this is the real "in use" — a category or a core
+    // account setting is refused for the same reason a fee item already
+    // billed is: deleting the account must never silently break the school's
+    // own live posting, or the postings already made.
     const inUse =
       existing._count.feeCategoriesAsIncome > 0 ||
       existing._count.expenseCategoriesAsExpense > 0 ||
-      existing._count.children > 0;
+      existing._count.children > 0 ||
+      existing._count.journalLines > 0 ||
+      existing._count.settingsAsCash > 0 ||
+      existing._count.settingsAsBank > 0 ||
+      existing._count.settingsAsMomo > 0 ||
+      existing._count.settingsAsReceivable > 0 ||
+      existing._count.settingsAsPayable > 0;
     if (inUse) {
       return;
     }
@@ -200,4 +220,39 @@ export async function setExpenseCategoryAccount(formData: FormData): Promise<voi
     data: { expenseAccountId },
   });
   revalidatePath("/chart-of-accounts");
+}
+
+/**
+ * The school's own core accounts — where the posting engine looks up which
+ * account to debit/credit for a cash movement. All five optional: a school
+ * that clears one simply stops posting the entries that need it, exactly
+ * like leaving a fee item unmapped.
+ */
+export async function saveCoreAccounts(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const auth = await requireRole(FINANCE);
+  setTenantContext({ schoolId: auth.schoolId });
+
+  const field = (key: string) => String(formData.get(key) ?? "") || null;
+
+  await prisma.schoolSettings.upsert({
+    where: { schoolId: auth.schoolId },
+    create: {
+      schoolId: auth.schoolId,
+      cashAccountId: field("cashAccountId"),
+      bankAccountId: field("bankAccountId"),
+      momoAccountId: field("momoAccountId"),
+      receivableAccountId: field("receivableAccountId"),
+      payableAccountId: field("payableAccountId"),
+    },
+    update: {
+      cashAccountId: field("cashAccountId"),
+      bankAccountId: field("bankAccountId"),
+      momoAccountId: field("momoAccountId"),
+      receivableAccountId: field("receivableAccountId"),
+      payableAccountId: field("payableAccountId"),
+    },
+  });
+
+  revalidatePath("/chart-of-accounts");
+  return { ok: "Default postings saved." };
 }
