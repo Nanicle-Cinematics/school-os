@@ -11,6 +11,7 @@ import {
   type SettingsState,
   type TestSmsState,
 } from "@/lib/settings-actions";
+import Link from "next/link";
 import { SubmitButton } from "../submit-button";
 import { Alert, Field, filterClass, inputClass } from "../ui";
 
@@ -309,8 +310,6 @@ export function FeesForm({
     invoiceDueDays: number;
     blockReportOnArrears: boolean;
     expenseApprovalThreshold: string;
-    paymentInstructions: string;
-    invoiceNote: string;
   };
 }) {
   const [state, formAction] = useActionState<SettingsState, FormData>(saveFeesPolicy, {});
@@ -356,33 +355,15 @@ export function FeesForm({
         </Field>
       </div>
 
-      <div className="mt-3 grid gap-3">
-        <Field
-          label="How to pay"
-          hint="Printed on every invoice. Momo number and merchant name, bank account, or where to pay at the school."
-        >
-          <textarea
-            name="paymentInstructions"
-            rows={4}
-            defaultValue={values.paymentInstructions}
-            placeholder={"MTN MoMo: 024 000 0000 (Nanicle Academy)\nBank: GCB 1234567890123, Adum Branch\nOr pay at the bursar's office, 8am–3pm."}
-            className={inputClass}
-          />
-        </Field>
-
-        <Field label="Note under the total" hint="One line, e.g. a deadline or a late-payment rule.">
-          <input
-            type="text"
-            name="invoiceNote"
-            maxLength={200}
-            defaultValue={values.invoiceNote}
-            placeholder="Fees are payable in full by the third week of term."
-            className={inputClass}
-          />
-        </Field>
-      </div>
-
       <Feedback state={state} />
+
+      <p className="mt-3 text-xs text-slate-400">
+        How to pay, the note under the total, and the school&rsquo;s TIN moved to{" "}
+        <Link href="/accounts-information" className="underline hover:text-slate-600">
+          Finance → Accounts information
+        </Link>
+        .
+      </p>
 
       <div className="mt-4">
         <SubmitButton pendingLabel="Saving…">Save fees policy</SubmitButton>
