@@ -6,6 +6,7 @@ import { getSchoolForPlatform } from "@/lib/platform-data";
 import { subscriptionState, PLANS, STATUS_LABELS } from "@/lib/subscription";
 import { formatCedis } from "@/lib/money";
 import { SubscriptionForm } from "./subscription-form";
+import { SchoolBackupButton } from "./backup-button";
 
 export const metadata: Metadata = { title: "School · Nanicle console" };
 
@@ -149,6 +150,13 @@ export default async function PlatformSchoolPage({ params }: PageProps<"/admin/[
             Subscription
           </p>
           <SubscriptionForm school={school} />
+        </div>
+
+        <div className="overflow-hidden rounded-card border border-hairline bg-surface shadow-card">
+          <p className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+            Backups
+          </p>
+          <SchoolBackupButton schoolId={school.id} />
         </div>
       </div>
     </main>

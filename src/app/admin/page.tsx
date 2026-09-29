@@ -20,6 +20,7 @@ import {
 import { formatCedis } from "@/lib/money";
 import { logout } from "@/lib/auth-actions";
 import { NewSchoolForm } from "./school-form";
+import { AllSchoolsBackupButton } from "./all-schools-backup-button";
 
 const COLUMNS: Column[] = [
   { label: "School" },
@@ -300,7 +301,12 @@ export default async function AdminPage() {
         <PageHeader
           title="Schools"
           subtitle="Every tenant on the platform. This console sits outside them all."
-          action={<NewSchoolForm />}
+          action={
+            <div className="flex flex-col items-end gap-2">
+              <AllSchoolsBackupButton />
+              <NewSchoolForm />
+            </div>
+          }
         />
         <DataTable
           columns={COLUMNS}
