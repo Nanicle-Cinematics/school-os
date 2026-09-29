@@ -146,6 +146,7 @@ model School {
   paymentPlans      PaymentPlan[]
   planInstalments   PaymentPlanInstalment[]
   statementLines    StatementLine[]
+  ledgerAccounts    LedgerAccount[]
 
   @@index([plan, subscriptionStatus])
 }
@@ -1341,6 +1342,53 @@ model AttendanceEntry {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CHART OF ACCOUNTS
+//
+// A real chart of accounts — codes classified Asset/Liability/Equity/Income/
+// Expense — for the accountant who wants proper books, not just a cash book.
+// FeeCategory/ExpenseCategory optionally point at one, and SchoolSettings
+// names the school's core accounts (cash, bank, momo, receivable, payable).
+//
+// Foundation only: nothing posts to these accounts yet. That is deliberate —
+// the posting engine is grafted onto already-live invoice/payment/expense
+// code in a later, isolated change, once these accounts exist to post to.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+model LedgerAccount {
+  id       String          @id @default(cuid())
+  schoolId String
+  school   School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  code     String
+  name     String
+  type     AccountType
+  // Optional grouping (e.g. every fee-item income account under "Fees
+  // Income"). SetNull, not Cascade: a parent's removal must not orphan-delete
+  // its children, only ungroup them.
+  parentId String?
+  parent   LedgerAccount?  @relation("LedgerAccountParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children LedgerAccount[] @relation("LedgerAccountParent")
+  isActive Boolean         @default(true)
+  order    Int             @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  feeCategoriesAsIncome      FeeCategory[]     @relation("FeeCategoryIncomeAccount")
+  expenseCategoriesAsExpense ExpenseCategory[] @relation("ExpenseCategoryExpenseAccount")
+
+  @@unique([schoolId, code])
+  @@index([schoolId, type])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FEES & PAYMENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1353,6 +1401,13 @@ model FeeCategory {
   description String?
   isMandatory Boolean @default(true)
   order       Int     @default(0)
+
+  // Which income account this fee line posts to, once posting exists.
+  // Optional + SetNull: a school that has not set up its chart of accounts
+  // yet must still be able to bill fees, and deleting an account must never
+  // delete spend history — same rule as every other category FK here.
+  incomeAccountId String?
+  incomeAccount   LedgerAccount? @relation("FeeCategoryIncomeAccount", fields: [incomeAccountId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1455,13 +1510,13 @@ model BillCode {
 }
 
 model Invoice {
-  id        String  @id @default(cuid())
-  schoolId  String
-  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  studentId String
-  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  termId    String
-  term      Term    @relation(fields: [termId], references: [id], onDelete: Cascade)
+  id         String    @id @default(cuid())
+  schoolId   String
+  school     School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  termId     String
+  term       Term      @relation(fields: [termId], references: [id], onDelete: Cascade)
   // Which BILL this is, not which fee lines it carries. Nullable and SetNull,
   // matching FeeCategory/ExpenseCategory: a deleted bill code must never take
   // a real invoice's history with it.
@@ -1671,6 +1726,11 @@ model ExpenseCategory {
   description String?
   order       Int     @default(0)
   isActive    Boolean @default(true)
+
+  // Which expense account this heading posts to, once posting exists. See
+  // FeeCategory.incomeAccountId for why this is optional and SetNull.
+  expenseAccountId String?
+  expenseAccount   LedgerAccount? @relation("ExpenseCategoryExpenseAccount", fields: [expenseAccountId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

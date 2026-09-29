@@ -562,6 +562,27 @@ const ACTIVITY: Record<
     title: () => "A bill code was removed",
     detail: "Fees",
   },
+  "ledgerAccount.create": {
+    kind: "money",
+    title: (a) => {
+      const name = text(a.name);
+      return name ? `“${name}” was added to the chart of accounts` : "An account was added";
+    },
+    detail: "Fees",
+  },
+  "ledgerAccount.update": {
+    kind: "money",
+    title: (a) => {
+      const name = text(a.name);
+      return name ? `The “${name}” account was renamed` : "An account was renamed";
+    },
+    detail: "Fees",
+  },
+  "ledgerAccount.delete": {
+    kind: "money",
+    title: () => "An account was removed from the chart of accounts",
+    detail: "Fees",
+  },
   "guardian.login.create": {
     kind: "people",
     title: (a) => `${text(a.guardianName) ?? "A guardian"} was given a parent portal login`,
