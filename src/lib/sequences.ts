@@ -2,7 +2,14 @@ import "server-only";
 
 import type { TenantTx } from "@/lib/prisma";
 
-export type SequenceKey = "ADMISSION" | "STAFF" | "INVOICE" | "RECEIPT" | "VOUCHER";
+export type SequenceKey =
+  | "ADMISSION"
+  | "STAFF"
+  | "INVOICE"
+  | "RECEIPT"
+  | "VOUCHER"
+  | "BILL"
+  | "BILLPMT";
 
 const DEFAULTS: Record<SequenceKey, { prefix: string; padding: number }> = {
   ADMISSION: { prefix: "ADM/", padding: 4 },
@@ -10,6 +17,8 @@ const DEFAULTS: Record<SequenceKey, { prefix: string; padding: number }> = {
   INVOICE: { prefix: "INV-", padding: 5 },
   RECEIPT: { prefix: "RCT-", padding: 5 },
   VOUCHER: { prefix: "PV-", padding: 5 },
+  BILL: { prefix: "BILL-", padding: 5 },
+  BILLPMT: { prefix: "BPV-", padding: 5 },
 };
 
 type Tx = TenantTx;
@@ -70,4 +79,8 @@ export const takenProbes = {
     (await tx.expense.count({ where: { schoolId, voucherNo } })) > 0,
   admission: (tx: Tx, schoolId: string) => async (admissionNo: string) =>
     (await tx.student.count({ where: { schoolId, admissionNo } })) > 0,
+  bill: (tx: Tx, schoolId: string) => async (billNo: string) =>
+    (await tx.vendorBill.count({ where: { schoolId, billNo } })) > 0,
+  billPayment: (tx: Tx, schoolId: string) => async (paymentNo: string) =>
+    (await tx.vendorPayment.count({ where: { schoolId, paymentNo } })) > 0,
 };

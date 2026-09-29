@@ -122,18 +122,22 @@ model School {
   subjectResults SubjectResult[]
   termResults    TermResult[]
 
-  feeCategories      FeeCategory[]
-  feeStructures      FeeStructure[]
-  feeStructureItems  FeeStructureItem[]
-  billCodes          BillCode[]
-  invoices           Invoice[]
-  invoiceItems       InvoiceItem[]
-  discounts          Discount[]
-  studentDiscounts   StudentDiscount[]
-  payments           Payment[]
-  paymentAllocations PaymentAllocation[]
-  expenseCategories  ExpenseCategory[]
-  expenses           Expense[]
+  feeCategories            FeeCategory[]
+  feeStructures            FeeStructure[]
+  feeStructureItems        FeeStructureItem[]
+  billCodes                BillCode[]
+  invoices                 Invoice[]
+  invoiceItems             InvoiceItem[]
+  discounts                Discount[]
+  studentDiscounts         StudentDiscount[]
+  payments                 Payment[]
+  paymentAllocations       PaymentAllocation[]
+  expenseCategories        ExpenseCategory[]
+  expenses                 Expense[]
+  vendors                  Vendor[]
+  vendorBills              VendorBill[]
+  vendorPayments           VendorPayment[]
+  vendorPaymentAllocations VendorPaymentAllocation[]
 
   messageTemplates MessageTemplate[]
   campaigns        MessageCampaign[]
@@ -444,13 +448,16 @@ model User {
   passwordResets PasswordReset[]
   auditLogs      AuditLog[]
 
-  recordedPayments  Payment[]         @relation("PaymentRecordedBy")
-  approvedDiscounts StudentDiscount[] @relation("DiscountApprovedBy")
-  createdCampaigns  MessageCampaign[]
-  recordedExpenses  Expense[]         @relation("ExpenseRecordedBy")
-  approvedExpenses  Expense[]         @relation("ExpenseApprovedBy")
-  budgetsSet        Budget[]          @relation("BudgetSetBy")
-  plansAgreed       PaymentPlan[]     @relation("PlanAgreedBy")
+  recordedPayments       Payment[]         @relation("PaymentRecordedBy")
+  approvedDiscounts      StudentDiscount[] @relation("DiscountApprovedBy")
+  createdCampaigns       MessageCampaign[]
+  recordedExpenses       Expense[]         @relation("ExpenseRecordedBy")
+  approvedExpenses       Expense[]         @relation("ExpenseApprovedBy")
+  budgetsSet             Budget[]          @relation("BudgetSetBy")
+  plansAgreed            PaymentPlan[]     @relation("PlanAgreedBy")
+  recordedVendorBills    VendorBill[]      @relation("VendorBillRecordedBy")
+  approvedVendorBills    VendorBill[]      @relation("VendorBillApprovedBy")
+  recordedVendorPayments VendorPayment[]   @relation("VendorPaymentRecordedBy")
 
   @@index([schoolId])
 }
@@ -1735,8 +1742,9 @@ model ExpenseCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  expenses Expense[]
-  budgets  Budget[]
+  expenses    Expense[]
+  budgets     Budget[]
+  vendorBills VendorBill[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -1788,6 +1796,135 @@ model Expense {
   @@index([schoolId, spentAt])
   @@index([schoolId, categoryId])
   @@index([schoolId, termId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CREDITORS — ACCOUNTS PAYABLE
+//
+// What the school owes a VENDOR, as distinct from an ordinary Expense (a
+// vendor bill is owed before it is paid, and can be paid in instalments; an
+// Expense is a single cash-book line recorded once, usually already paid).
+// Mirrors Invoice/Payment/PaymentAllocation's shape deliberately: a bill has
+// a balance recalculated from its allocations, a payment can be FIFO-spread
+// across a vendor's oldest unpaid bills, same as a parent's payment against a
+// student's invoices.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Vendor {
+  id            String  @id @default(cuid())
+  schoolId      String
+  school        School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  name          String
+  contactPerson String?
+  phone         String?
+  note          String?
+  isActive      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bills    VendorBill[]
+  payments VendorPayment[]
+
+  @@unique([schoolId, name])
+  @@index([schoolId])
+}
+
+enum VendorBillStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+model VendorBill {
+  id         String           @id @default(cuid())
+  schoolId   String
+  school     School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  vendorId   String
+  vendor     Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  // Optional + SetNull, matching Expense.categoryId: deleting an expense
+  // heading must never delete spend history.
+  categoryId String?
+  category   ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  billNo      String
+  description String
+  billDate    DateTime  @default(now())
+  dueDate     DateTime?
+
+  amount     Decimal @default(0) @db.Decimal(12, 2)
+  amountPaid Decimal @default(0) @db.Decimal(12, 2)
+  balance    Decimal @default(0) @db.Decimal(12, 2)
+
+  status VendorBillStatus @default(DRAFT)
+  note   String?
+
+  recordedByUserId String?
+  recordedBy       User?     @relation("VendorBillRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  approvedByUserId String?
+  approvedBy       User?     @relation("VendorBillApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  approvedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations VendorPaymentAllocation[]
+
+  @@unique([schoolId, billNo])
+  @@index([schoolId, status])
+  @@index([schoolId, vendorId])
+  @@index([schoolId, categoryId])
+}
+
+model VendorPayment {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  vendorId String
+  vendor   Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  paymentNo   String
+  amount      Decimal       @db.Decimal(12, 2)
+  method      PaymentMethod
+  momoNetwork MomoNetwork?
+  reference   String?
+  paidAt      DateTime      @default(now())
+  note        String?
+
+  recordedByUserId String?
+  recordedBy       User?   @relation("VendorPaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  reversedAt     DateTime?
+  reversalReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  allocations VendorPaymentAllocation[]
+
+  @@unique([schoolId, paymentNo])
+  @@index([schoolId, paidAt])
+  @@index([schoolId, vendorId])
+}
+
+// A vendor payment can settle several bills (FIFO), same as PaymentAllocation.
+model VendorPaymentAllocation {
+  id              String        @id @default(cuid())
+  schoolId        String
+  school          School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  vendorPaymentId String
+  vendorPayment   VendorPayment @relation(fields: [vendorPaymentId], references: [id], onDelete: Cascade)
+  vendorBillId    String
+  vendorBill      VendorBill    @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+  amount          Decimal       @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@unique([vendorPaymentId, vendorBillId])
+  @@index([schoolId])
+  @@index([vendorBillId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
