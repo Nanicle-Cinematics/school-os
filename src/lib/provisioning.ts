@@ -6,6 +6,7 @@ import { writeAudit } from "@/lib/audit";
 import { applyGesCurriculum } from "@/lib/ges-curriculum";
 import { applyDefaultFinanceCategories } from "@/lib/finance-defaults";
 import { applyDefaultBillCodes } from "@/lib/billcode-defaults";
+import { applyDefaultChartOfAccounts } from "@/lib/ledger-defaults";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 import { schoolYearFor, splitIntoTerms } from "@/lib/academic-year";
 import { PLANS, TRIAL_DAYS, nextDueDate } from "@/lib/subscription";
@@ -136,6 +137,10 @@ export async function provisionSchool(tx: TenantTx, input: ProvisionInput) {
   // And on a working bill: a fee structure is priced per item, so a school with
   // no fee items cannot enter an amount anywhere.
   await applyDefaultFinanceCategories(tx, school.id);
+
+  // And a chart of accounts, linked to the fee items and expense headings
+  // just created — foundation for double-entry posting, added later.
+  await applyDefaultChartOfAccounts(tx, school.id);
 
   // And on a bill CODE — generateInvoicesForTerm stamps TERMBILL onto every
   // invoice it creates, so it must exist before this school's first term bill.
