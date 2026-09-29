@@ -124,11 +124,6 @@ export async function deleteLedgerAccount(formData: FormData): Promise<void> {
             expenseCategoriesAsExpense: true,
             children: true,
             journalLines: true,
-            settingsAsCash: true,
-            settingsAsBank: true,
-            settingsAsMomo: true,
-            settingsAsReceivable: true,
-            settingsAsPayable: true,
           },
         },
       },
@@ -136,6 +131,21 @@ export async function deleteLedgerAccount(formData: FormData): Promise<void> {
     if (!existing) {
       return;
     }
+    // The core-account settings are plain ids, not a Prisma relation (see the
+    // schema comment on SchoolSettings), so checking them is a manual query
+    // rather than a _count include.
+    const settingsUsing = await tx.schoolSettings.count({
+      where: {
+        schoolId: auth.schoolId,
+        OR: [
+          { cashAccountId: id },
+          { bankAccountId: id },
+          { momoAccountId: id },
+          { receivableAccountId: id },
+          { payableAccountId: id },
+        ],
+      },
+    });
     // Once postings exist, this is the real "in use" — a category or a core
     // account setting is refused for the same reason a fee item already
     // billed is: deleting the account must never silently break the school's
@@ -145,11 +155,7 @@ export async function deleteLedgerAccount(formData: FormData): Promise<void> {
       existing._count.expenseCategoriesAsExpense > 0 ||
       existing._count.children > 0 ||
       existing._count.journalLines > 0 ||
-      existing._count.settingsAsCash > 0 ||
-      existing._count.settingsAsBank > 0 ||
-      existing._count.settingsAsMomo > 0 ||
-      existing._count.settingsAsReceivable > 0 ||
-      existing._count.settingsAsPayable > 0;
+      settingsUsing > 0;
     if (inUse) {
       return;
     }

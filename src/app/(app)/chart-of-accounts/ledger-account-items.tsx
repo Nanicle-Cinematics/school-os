@@ -19,15 +19,11 @@ export type LedgerAccountRow = {
   type: AccountType;
   order: number;
   balance: number;
+  isCoreAccount: boolean;
   _count: {
     feeCategoriesAsIncome: number;
     expenseCategoriesAsExpense: number;
     journalLines: number;
-    settingsAsCash: number;
-    settingsAsBank: number;
-    settingsAsMomo: number;
-    settingsAsReceivable: number;
-    settingsAsPayable: number;
   };
 };
 
@@ -59,11 +55,7 @@ function AccountRow({ account }: { account: LedgerAccountRow }) {
     account._count.feeCategoriesAsIncome +
     account._count.expenseCategoriesAsExpense +
     account._count.journalLines +
-    account._count.settingsAsCash +
-    account._count.settingsAsBank +
-    account._count.settingsAsMomo +
-    account._count.settingsAsReceivable +
-    account._count.settingsAsPayable;
+    (account.isCoreAccount ? 1 : 0);
 
   return (
     <li className="border-t border-slate-100 p-4">

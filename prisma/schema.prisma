@@ -368,22 +368,22 @@ model SchoolSettings {
 
   /// The school's own core accounts — where the posting engine (ledger-engine.ts)
   /// looks up which LedgerAccount to debit/credit for a cash movement. All five
-  /// are optional and SetNull: a school that has not finished setting up its
-  /// chart of accounts keeps billing, paying and spending exactly as before —
-  /// see the "additive, best-effort" rule in ledger-engine.ts. Introduced
-  /// alongside the posting engine itself, deliberately not earlier: a field
-  /// nothing yet reads is the dead-switch bug this app has already shipped four
-  /// times (see "Changing the schema" / verify:settings).
+  /// are optional: a school that has not finished setting up its chart of
+  /// accounts keeps billing, paying and spending exactly as before — see the
+  /// "additive, best-effort" rule in ledger-engine.ts.
+  ///
+  /// Plain ids, not a Prisma relation, matching `defaultGradingScaleId` right
+  /// above: this app's convention for a "soft" cross-reference the READING
+  /// code resolves itself, not one the database enforces. A declared relation
+  /// field here would sit unread by name (code reaches these only as `…Id`)
+  /// and become exactly the dead field verify:settings exists to catch —
+  /// caught by forcing this guard against a fresh database rather than
+  /// assumed, per this repo's own rule for trusting a check.
   cashAccountId       String?
-  cashAccount         LedgerAccount? @relation("SettingsCashAccount", fields: [cashAccountId], references: [id], onDelete: SetNull)
   bankAccountId       String?
-  bankAccount         LedgerAccount? @relation("SettingsBankAccount", fields: [bankAccountId], references: [id], onDelete: SetNull)
   momoAccountId       String?
-  momoAccount         LedgerAccount? @relation("SettingsMomoAccount", fields: [momoAccountId], references: [id], onDelete: SetNull)
   receivableAccountId String?
-  receivableAccount   LedgerAccount? @relation("SettingsReceivableAccount", fields: [receivableAccountId], references: [id], onDelete: SetNull)
   payableAccountId    String?
-  payableAccount      LedgerAccount? @relation("SettingsPayableAccount", fields: [payableAccountId], references: [id], onDelete: SetNull)
 
   // SMS
   smsProvider           SmsProvider?
@@ -1413,11 +1413,6 @@ model LedgerAccount {
   feeCategoriesAsIncome      FeeCategory[]     @relation("FeeCategoryIncomeAccount")
   expenseCategoriesAsExpense ExpenseCategory[] @relation("ExpenseCategoryExpenseAccount")
   journalLines               JournalLine[]
-  settingsAsCash             SchoolSettings[]  @relation("SettingsCashAccount")
-  settingsAsBank             SchoolSettings[]  @relation("SettingsBankAccount")
-  settingsAsMomo             SchoolSettings[]  @relation("SettingsMomoAccount")
-  settingsAsReceivable       SchoolSettings[]  @relation("SettingsReceivableAccount")
-  settingsAsPayable          SchoolSettings[]  @relation("SettingsPayableAccount")
 
   @@unique([schoolId, code])
   @@index([schoolId, type])
