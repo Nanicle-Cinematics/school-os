@@ -10,6 +10,7 @@ import {
 } from "@/lib/ledger-actions";
 import { SubmitButton } from "../submit-button";
 import { Alert, inputClass } from "../ui";
+import { formatCedis } from "@/lib/money";
 
 export type LedgerAccountRow = {
   id: string;
@@ -17,7 +18,13 @@ export type LedgerAccountRow = {
   code: string;
   type: AccountType;
   order: number;
-  _count: { feeCategoriesAsIncome: number; expenseCategoriesAsExpense: number };
+  balance: number;
+  isCoreAccount: boolean;
+  _count: {
+    feeCategoriesAsIncome: number;
+    expenseCategoriesAsExpense: number;
+    journalLines: number;
+  };
 };
 
 const TYPE_LABEL: Record<AccountType, string> = {
@@ -44,7 +51,11 @@ function Feedback({ state }: { state: ActionState }) {
 
 function AccountRow({ account }: { account: LedgerAccountRow }) {
   const [state, formAction] = useActionState<ActionState, FormData>(saveLedgerAccount, {});
-  const inUse = account._count.feeCategoriesAsIncome + account._count.expenseCategoriesAsExpense;
+  const inUse =
+    account._count.feeCategoriesAsIncome +
+    account._count.expenseCategoriesAsExpense +
+    account._count.journalLines +
+    (account.isCoreAccount ? 1 : 0);
 
   return (
     <li className="border-t border-slate-100 p-4">
@@ -64,6 +75,10 @@ function AccountRow({ account }: { account: LedgerAccountRow }) {
             Save
           </SubmitButton>
         </form>
+
+        <span className="self-center font-mono text-sm tabular-nums text-slate-700">
+          {formatCedis(account.balance)}
+        </span>
 
         {inUse > 0 ? (
           <p className="self-center text-xs text-slate-400" title="In use by a fee item or expense heading.">

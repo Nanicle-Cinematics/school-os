@@ -8,10 +8,58 @@ import { FINANCE, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
+import {
+  cashAccountIdForMethod,
+  findJournalEntryForSource,
+  getCoreAccounts,
+  postJournalEntry,
+  reverseJournalEntry,
+} from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
 import { readAttachment, storeAttachment } from "@/lib/attachments";
+import type { TenantTx } from "@/lib/prisma";
+import type { PaymentMethod, Prisma } from "@prisma/client";
 
 export type ExpenseState = { error?: string; ok?: string };
+
+/**
+ * Dr the expense account (via its category) / Cr the cash-like account for
+ * the method paid — only when both are mapped. Called at the one moment an
+ * expense actually counts as spent: creation with no approval needed, or
+ * approval of one that was held. See ledger-engine.ts's additive rule.
+ */
+async function postExpenseIfMapped(
+  tx: TenantTx,
+  schoolId: string,
+  expense: { id: string; voucherNo: string; amount: Prisma.Decimal; method: PaymentMethod; categoryId: string | null },
+  actorUserId: string,
+) {
+  if (!expense.categoryId) {
+    return;
+  }
+  const category = await tx.expenseCategory.findUnique({
+    where: { id: expense.categoryId },
+    select: { expenseAccountId: true },
+  });
+  if (!category?.expenseAccountId) {
+    return;
+  }
+  const core = await getCoreAccounts(tx, schoolId);
+  const cashLikeAccountId = cashAccountIdForMethod(core, expense.method);
+  if (!cashLikeAccountId) {
+    return;
+  }
+  await postJournalEntry(tx, schoolId, {
+    sourceType: "EXPENSE",
+    sourceId: expense.id,
+    memo: `Expense ${expense.voucherNo}`,
+    actorUserId,
+    lines: [
+      { accountId: category.expenseAccountId, debit: expense.amount },
+      { accountId: cashLikeAccountId, credit: expense.amount },
+    ],
+  });
+}
 
 export async function recordExpense(
   _prev: ExpenseState,
@@ -104,6 +152,10 @@ export async function recordExpense(
       },
     });
 
+    if (!needsApproval) {
+      await postExpenseIfMapped(tx, auth.schoolId, expense, auth.userId);
+    }
+
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,
@@ -152,7 +204,15 @@ export async function approveExpense(formData: FormData): Promise<void> {
   await tenantTransaction(auth.schoolId, async (tx) => {
     const expense = await tx.expense.findUnique({
       where: { id },
-      select: { id: true, status: true, voucherNo: true, amount: true, recordedByUserId: true },
+      select: {
+        id: true,
+        status: true,
+        voucherNo: true,
+        amount: true,
+        recordedByUserId: true,
+        method: true,
+        categoryId: true,
+      },
     });
     if (!expense) {
       redirect("/expenses?error=missing");
@@ -170,6 +230,10 @@ export async function approveExpense(formData: FormData): Promise<void> {
       where: { id },
       data: { status: "PAID", approvedByUserId: auth.userId, approvedAt: new Date() },
     });
+
+    // Only posted now — a DRAFT expense held for approval never counted in
+    // the cash book, so it never posted either.
+    await postExpenseIfMapped(tx, auth.schoolId, expense, auth.userId);
 
     await writeAudit(tx, {
       schoolId: auth.schoolId,
@@ -201,6 +265,18 @@ export async function cancelExpense(formData: FormData): Promise<void> {
     }
     // Cancel, never delete — spend history has to stay auditable.
     await tx.expense.update({ where: { id: expenseId }, data: { status: "CANCELLED" } });
+
+    // Only a PAID expense could have posted — a DRAFT one never did.
+    if (expense.status === "PAID") {
+      const originalEntry = await findJournalEntryForSource(tx, auth.schoolId, "EXPENSE", expenseId);
+      if (originalEntry) {
+        await reverseJournalEntry(tx, auth.schoolId, originalEntry.id, {
+          memo: `Reversal of ${expense.voucherNo}`,
+          actorUserId: auth.userId,
+        });
+      }
+    }
+
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,

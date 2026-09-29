@@ -608,6 +608,16 @@ const ACTIVITY: Record<
     title: () => "A vendor payment was reversed",
     detail: "Expenses",
   },
+  "journal.post": {
+    kind: "money",
+    title: () => "A journal entry was posted",
+    detail: "Fees",
+  },
+  "journal.reverse": {
+    kind: "money",
+    title: () => "A journal entry was reversed",
+    detail: "Fees",
+  },
   "guardian.login.create": {
     kind: "people",
     title: (a) => `${text(a.guardianName) ?? "A guardian"} was given a parent portal login`,

@@ -231,6 +231,11 @@ jobs:
       - name: Finance — receipts, ageing and the approval hold
         run: npm run verify:finance
 
+      # The posting engine's own invariant: every journal entry balances, and
+      # postJournalEntry refuses one that would not.
+      - name: Ledger — every journal entry balances
+        run: npm run verify:ledger
+
       # A table with a schoolId has NO row security until `npm run db:rls` is
       # re-run, and nothing runs it for you. That is how AssessmentTemplate
       # (2026-08-28) and then SchoolAsset (2026-09-07) both reached production

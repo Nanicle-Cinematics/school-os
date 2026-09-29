@@ -10,6 +10,13 @@ import { prisma, tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import { allocateFifo, recalcInvoice } from "@/lib/invoice-engine";
+import {
+  cashAccountIdForMethod,
+  findJournalEntryForSource,
+  getCoreAccounts,
+  postJournalEntry,
+  reverseJournalEntry,
+} from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
 import { readAttachment, storeAttachment } from "@/lib/attachments";
 import { queueTransactionalSms } from "@/lib/transactional-sms";
@@ -121,6 +128,25 @@ export async function recordPayment(
         new Prisma.Decimal(0),
       );
 
+      // Dr the account the method lands in / Cr Accounts Receivable, for the
+      // FULL amount received — not just what was allocated. An overpayment
+      // still reduced what the family is short by; this app has no separate
+      // "customer deposit" liability to park the unallocated slice in.
+      const core = await getCoreAccounts(tx, auth.schoolId);
+      const cashLikeAccountId = cashAccountIdForMethod(core, payment.method);
+      if (cashLikeAccountId && core.receivableAccountId) {
+        await postJournalEntry(tx, auth.schoolId, {
+          sourceType: "PAYMENT",
+          sourceId: payment.id,
+          memo: `Receipt ${receipt}`,
+          actorUserId: auth.userId,
+          lines: [
+            { accountId: cashLikeAccountId, debit: amount },
+            { accountId: core.receivableAccountId, credit: amount },
+          ],
+        });
+      }
+
       await writeAudit(tx, {
         schoolId: auth.schoolId,
         actorUserId: auth.userId,
@@ -229,6 +255,16 @@ export async function reversePayment(formData: FormData): Promise<void> {
     });
     for (const invoiceId of invoiceIds) {
       await recalcInvoice(tx, invoiceId);
+    }
+
+    // Best-effort: there is one only if the accounts were mapped when the
+    // payment was originally recorded.
+    const originalEntry = await findJournalEntryForSource(tx, auth.schoolId, "PAYMENT", paymentId);
+    if (originalEntry) {
+      await reverseJournalEntry(tx, auth.schoolId, originalEntry.id, {
+        memo: `Reversal of ${payment.receiptNo}`,
+        actorUserId: auth.userId,
+      });
     }
 
     await writeAudit(tx, {

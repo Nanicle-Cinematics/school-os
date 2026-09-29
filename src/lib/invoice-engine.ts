@@ -5,6 +5,7 @@ import type { Invoice, InvoiceStatus, Student } from "@prisma/client";
 import { money } from "@/lib/money";
 import type { TenantTx } from "@/lib/prisma";
 import { nextNumber, takenProbes } from "@/lib/sequences";
+import { getCoreAccounts, postJournalEntry } from "@/lib/ledger-engine";
 
 type Tx = TenantTx;
 
@@ -454,6 +455,7 @@ export async function generateInvoicesForTerm(
   schoolId: string,
   termId: string,
   dueDays: number,
+  actorUserId?: string | null,
 ): Promise<GenerationResult> {
   const term = await tx.term.findUniqueOrThrow({
     where: { id: termId },
@@ -504,6 +506,14 @@ export async function generateInvoicesForTerm(
     select: { id: true },
   });
 
+  // Ledger posting is additive and best-effort — a school that hasn't set up
+  // its chart of accounts yet still generates invoices exactly as before.
+  // See ledger-engine.ts.
+  const core = await getCoreAccounts(tx, schoolId);
+  const incomeAccountByFeeCategory = new Map(
+    structures.flatMap((s) => s.items.map((item) => [item.feeCategoryId, item.feeCategory.incomeAccountId])),
+  );
+
   const result: GenerationResult = { created: 0, skipped: 0, noStructure: [] };
 
   for (const student of students) {
@@ -549,7 +559,7 @@ export async function generateInvoicesForTerm(
 
     const invoiceNo = await nextNumber(tx, schoolId, "INVOICE", takenProbes.invoice(tx, schoolId));
 
-    await tx.invoice.create({
+    const invoice = await tx.invoice.create({
       data: {
         schoolId,
         studentId: student.id,
@@ -568,6 +578,35 @@ export async function generateInvoicesForTerm(
         items: { create: lines },
       },
     });
+
+    // Dr Accounts Receivable / Cr each line's income account, net of its
+    // discount — only for the slice of the bill that IS mapped, so a
+    // partially-configured chart of accounts posts a smaller, still-balanced
+    // entry rather than an incomplete one. broughtForward is deliberately
+    // excluded: that arrears was already posted when the PRIOR invoice was
+    // raised, and posting it again would double it.
+    if (core.receivableAccountId) {
+      const creditByAccount = new Map<string, Prisma.Decimal>();
+      for (const line of lines) {
+        const incomeAccountId = incomeAccountByFeeCategory.get(line.feeCategoryId);
+        if (!incomeAccountId) continue;
+        const net = line.amount.sub(line.discount);
+        creditByAccount.set(incomeAccountId, (creditByAccount.get(incomeAccountId) ?? new Prisma.Decimal(0)).add(net));
+      }
+      const mappedTotal = [...creditByAccount.values()].reduce((a, b) => a.add(b), new Prisma.Decimal(0));
+      if (mappedTotal.greaterThan(0)) {
+        await postJournalEntry(tx, schoolId, {
+          sourceType: "INVOICE",
+          sourceId: invoice.id,
+          memo: `Invoice ${invoiceNo}`,
+          actorUserId,
+          lines: [
+            { accountId: core.receivableAccountId, debit: mappedTotal },
+            ...[...creditByAccount.entries()].map(([accountId, credit]) => ({ accountId, credit })),
+          ],
+        });
+      }
+    }
 
     result.created += 1;
   }

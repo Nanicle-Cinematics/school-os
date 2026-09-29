@@ -56,6 +56,7 @@
     "verify:finance": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-finance.mts",
     "verify:it-admin": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-it-admin.mts",
     "verify:logins": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-logins.mts",
+    "verify:ledger": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-ledger.mts",
     "db:seed:fullyear": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/seed-fullyear.mts"
   },
   "prisma": {
