@@ -1,6 +1,17 @@
+import Link from "next/link";
 import type { Collections } from "@/lib/dashboard-data";
 import { formatCedis } from "@/lib/dashboard-data";
 import { Card } from "../ui";
+
+/** The card's own "see more" — every week of the term, not just the last dozen. */
+const FullReportLink = () => (
+  <Link
+    href="/payments/collections"
+    className="text-xs font-medium text-slate-500 hover:text-slate-900"
+  >
+    Full report →
+  </Link>
+);
 
 /** Plot height in pixels — see the note on the bars below. */
 const PLOT = 148;
@@ -42,7 +53,7 @@ export function CollectionsChart({
    */
   if (weeks.length === 0) {
     return (
-      <Card title="Fees collected by week">
+      <Card title="Fees collected by week" action={<FullReportLink />}>
         <p className="px-4 py-8 text-center text-sm text-slate-500">
           Nothing collected yet this term. Bars appear as payments are recorded.
         </p>
@@ -66,7 +77,7 @@ export function CollectionsChart({
   if (weeks.length < 3) {
     const pct = billed > 0 ? Math.min(100, (total / billed) * 100) : 0;
     return (
-      <Card title="Fees collected by week">
+      <Card title="Fees collected by week" action={<FullReportLink />}>
         <div className="px-4.5 pb-5 pt-4">
           <p className="font-heading text-[30px] leading-none tabular-nums text-slate-900">
             {formatCedis(total)}
@@ -105,7 +116,7 @@ export function CollectionsChart({
 
 
   return (
-    <Card title="Fees collected by week">
+    <Card title="Fees collected by week" action={<FullReportLink />}>
       <div className="px-4 pb-4 pt-3">
         <p className="mb-4 text-xs text-slate-500">
           {currentWeek > 0 && termWeeks > 0 ? (

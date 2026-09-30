@@ -363,6 +363,11 @@ export async function getCollections(
   schoolId: string,
   term: { id: string; startDate: Date; endDate: Date } | null,
   now = new Date(),
+  // The dashboard card only has room for the last dozen weeks; the full report
+  // at /collections wants every week the term has had, so it passes Infinity
+  // rather than the widget's own limit — `slice(-Infinity)` clamps to 0 and
+  // returns the whole array.
+  { limit = 12 }: { limit?: number } = {},
 ): Promise<Collections> {
   if (!term) {
     return { weeks: [], total: 0, best: 0, termWeeks: 0, currentWeek: 0 };
@@ -424,7 +429,7 @@ export async function getCollections(
   // because inventing future rows here is what makes a running term look like a
   // collapse in collections, and `verify:collections` pins that shape.
   return {
-    weeks: weeks.slice(-12),
+    weeks: weeks.slice(-limit),
     total,
     best,
     termWeeks,
