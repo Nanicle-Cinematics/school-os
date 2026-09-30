@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState, type FormEvent } from "react";
 import { recordPayment, type PaymentState } from "@/lib/payment-actions";
+import { MAX_ATTACHMENT_BYTES } from "@/lib/attachment-constants";
 import { SubmitButton } from "../submit-button";
 import { Alert, Field, inputClass } from "../ui";
 
@@ -49,6 +50,24 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
   const [studentId, setStudentId] = useState("");
   const [method, setMethod] = useState("CASH");
   const [query, setQuery] = useState("");
+  const slipRef = useRef<HTMLInputElement>(null);
+  // Caught before the request goes out. Server Actions cap the request body
+  // well above MAX_ATTACHMENT_BYTES (see next.config.ts), but a photo
+  // straight off a phone clears even that routinely — without this, an
+  // oversized slip fails at the platform level instead of with a reason.
+  const [slipError, setSlipError] = useState<string | undefined>(undefined);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    const file = slipRef.current?.files?.[0];
+    if (file && file.size > MAX_ATTACHMENT_BYTES) {
+      event.preventDefault();
+      setSlipError(
+        `That file is ${Math.round(file.size / 1024 / 1024)} MB. Keep it under ${
+          MAX_ATTACHMENT_BYTES / 1024 / 1024
+        } MB.`,
+      );
+    }
+  }
 
   const filtered = query.trim()
     ? students.filter((s) =>
@@ -62,6 +81,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
   return (
     <form
       action={formAction}
+      onSubmit={handleSubmit}
       encType="multipart/form-data"
       className="rounded-card border border-hairline bg-surface p-4 lg:p-5"
     >
@@ -180,11 +200,13 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
 
         {/* The bank slip or momo screenshot. Optional — cash across the counter
             has no slip — but it is what makes a payment reconcilable later. */}
-        <Field label="Bank slip" hint="Photo or PDF. Optional.">
+        <Field label="Bank slip" hint="Photo or PDF. Optional." error={slipError}>
           <input
+            ref={slipRef}
             type="file"
             name="slip"
             accept="image/png,image/jpeg,image/webp,image/heic,application/pdf"
+            onChange={() => setSlipError(undefined)}
             className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
           />
         </Field>
