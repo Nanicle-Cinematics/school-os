@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { TenantTx } from "@/lib/prisma";
+import {
+  ACCEPTED_ATTACHMENT_TYPES as ACCEPTED_ATTACHMENTS,
+  MAX_ATTACHMENT_BYTES,
+} from "@/lib/attachment-constants";
 
 /**
  * A photographed bank slip or expense receipt, attached to the voucher it
@@ -11,20 +15,6 @@ import type { TenantTx } from "@/lib/prisma";
  * the crest refuses it: it is a document format that executes script, and these
  * files are served back to staff browsers.
  */
-export const ACCEPTED_ATTACHMENTS: Record<string, string> = {
-  "image/png": "PNG",
-  "image/jpeg": "JPEG",
-  "image/webp": "WebP",
-  "image/heic": "HEIC",
-  "application/pdf": "PDF",
-};
-
-/**
- * 4 MB. A photo straight off a phone is 2–4 MB and a bursar will not resize it
- * — the crest's 512 KB ceiling is right for a crest chosen once and wrong for
- * paper photographed in a hurry.
- */
-export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 
 export type AttachmentRead =
   | { ok: true; bytes: Uint8Array<ArrayBuffer>; mimeType: string; byteSize: number }

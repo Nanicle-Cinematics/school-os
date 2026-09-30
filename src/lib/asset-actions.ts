@@ -7,24 +7,9 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
+import { ACCEPTED_ASSET_TYPES as ACCEPTED, MAX_ASSET_BYTES as MAX_BYTES } from "@/lib/asset-constants";
 
 export type AssetState = { error?: string; ok?: string };
-
-/**
- * A crest, a logo or the head's signature.
- *
- * SVG is deliberately not accepted. It is a document format that executes
- * script, and this file is served back to every parent who opens a report card;
- * a raster format cannot carry that.
- */
-const ACCEPTED: Record<string, string> = {
-  "image/png": "PNG",
-  "image/jpeg": "JPEG",
-  "image/webp": "WebP",
-};
-
-/** Enough for a crest at print resolution, small enough to sit in a row. */
-const MAX_BYTES = 512 * 1024;
 
 const KINDS: SchoolAssetKind[] = ["CREST", "LOGO", "HEAD_SIGNATURE"];
 
@@ -41,6 +26,13 @@ const LABEL: Record<SchoolAssetKind, string> = {
   HEAD_SIGNATURE: "signature",
 };
 
+/**
+ * A crest, a logo or the head's signature.
+ *
+ * SVG is deliberately not accepted. It is a document format that executes
+ * script, and this file is served back to every parent who opens a report card;
+ * a raster format cannot carry that.
+ */
 export async function uploadSchoolAsset(
   _prev: AssetState,
   formData: FormData,

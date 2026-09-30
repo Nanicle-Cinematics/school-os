@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useRef, useState, type FormEvent } from "react";
 import { uploadSchoolAsset, removeSchoolAsset, type AssetState } from "@/lib/asset-actions";
+import { MAX_ASSET_BYTES } from "@/lib/asset-constants";
 import { SubmitButton } from "../../submit-button";
 import { Alert } from "../../ui";
 
@@ -44,7 +45,24 @@ function Preview({ slot }: { slot: AssetSlot }) {
 export function AssetForm({ slot }: { slot: AssetSlot }) {
   const [state, formAction] = useActionState<AssetState, FormData>(uploadSchoolAsset, {});
   const [chosen, setChosen] = useState<string | null>(null);
+  // Caught before the request ever goes out. Server Actions cap the request
+  // body well above MAX_ASSET_BYTES (see next.config.ts), but a phone photo
+  // clears even that routinely — and without this check the person would
+  // wait for a round trip just to get a platform-level failure instead of a
+  // clear reason. Independent of `state.error`: this fires pre-submission,
+  // before useActionState has anything to report.
+  const [clientError, setClientError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    const file = inputRef.current?.files?.[0];
+    if (file && file.size > MAX_ASSET_BYTES) {
+      event.preventDefault();
+      setClientError(
+        `That file is ${Math.round(file.size / 1024)} KB. Keep it under ${MAX_ASSET_BYTES / 1024} KB — a crest does not need more.`,
+      );
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:gap-5">
@@ -54,18 +72,26 @@ export function AssetForm({ slot }: { slot: AssetSlot }) {
         <h3 className="text-sm font-semibold text-slate-900">{slot.title}</h3>
         <p className="mt-0.5 text-xs text-slate-500">{slot.blurb}</p>
 
-        {state.error ? (
+        {clientError ? (
+          <div className="mt-2">
+            <Alert tone="error">{clientError}</Alert>
+          </div>
+        ) : state.error ? (
           <div className="mt-2">
             <Alert tone="error">{state.error}</Alert>
           </div>
         ) : null}
-        {state.ok ? (
+        {!clientError && state.ok ? (
           <div className="mt-2">
             <Alert tone="success">{state.ok}</Alert>
           </div>
         ) : null}
 
-        <form action={formAction} className="mt-3 flex flex-wrap items-center gap-2">
+        <form
+          action={formAction}
+          onSubmit={handleSubmit}
+          className="mt-3 flex flex-wrap items-center gap-2"
+        >
           <input type="hidden" name="kind" value={slot.kind} />
           <input
             ref={inputRef}
@@ -73,7 +99,10 @@ export function AssetForm({ slot }: { slot: AssetSlot }) {
             name="file"
             accept="image/png,image/jpeg,image/webp"
             required
-            onChange={(event) => setChosen(event.target.files?.[0]?.name ?? null)}
+            onChange={(event) => {
+              setClientError(null);
+              setChosen(event.target.files?.[0]?.name ?? null);
+            }}
             className="block w-full max-w-xs text-xs text-slate-600 file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-surface file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-50"
           />
           <SubmitButton>{slot.url ? "Replace" : "Upload"}</SubmitButton>
