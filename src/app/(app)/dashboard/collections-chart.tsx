@@ -53,7 +53,7 @@ export function CollectionsChart({
    */
   if (weeks.length === 0) {
     return (
-      <Card title="Fees collected by week">
+      <Card title="Fees collected by week" action={<FullReportLink />}>
         <p className="px-4 py-8 text-center text-sm text-slate-500">
           Nothing collected yet this term. Bars appear as payments are recorded.
         </p>
@@ -77,7 +77,7 @@ export function CollectionsChart({
   if (weeks.length < 3) {
     const pct = billed > 0 ? Math.min(100, (total / billed) * 100) : 0;
     return (
-      <Card title="Fees collected by week">
+      <Card title="Fees collected by week" action={<FullReportLink />}>
         <div className="px-4.5 pb-5 pt-4">
           <p className="font-heading text-[30px] leading-none tabular-nums text-slate-900">
             {formatCedis(total)}
