@@ -360,7 +360,7 @@ export function FeesForm({
       <p className="mt-3 text-xs text-slate-400">
         How to pay, the note under the total, and the school&rsquo;s TIN moved to{" "}
         <Link href="/accounts-information" className="underline hover:text-slate-600">
-          Finance → Accounts information
+          Finance → Billing details
         </Link>
         .
       </p>

@@ -203,7 +203,7 @@ export const NAV: NavSection[] = [
       { href: "/bill-codes", label: "Bill codes", icon: "billCodes", roles: FINANCE },
       {
         href: "/accounts-information",
-        label: "Accounts information",
+        label: "Billing details",
         icon: "accountsInformation",
         roles: FINANCE,
       },

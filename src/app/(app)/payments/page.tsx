@@ -83,9 +83,13 @@ export default async function PaymentsPage({
     <div className="mx-auto max-w-6xl space-y-5">
       <PageHeader title="Payments" subtitle={`${data.count} recorded`} />
 
-      {/* Reconciliation lives one click from the payments list, because it is
-          the same person's job on the same afternoon. */}
-      <div className="flex justify-end print:hidden">
+      {/* Reconciliation and the weekly breakdown live one click from the
+          payments list, because they are the same person's job on the same
+          afternoon. */}
+      <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 print:hidden">
+        <Link href="/payments/collections" className="text-sm text-slate-500 hover:text-slate-900">
+          Weekly collections →
+        </Link>
         <Link href="/payments/reconcile" className="text-sm text-slate-500 hover:text-slate-900">
           Reconcile a statement →
         </Link>

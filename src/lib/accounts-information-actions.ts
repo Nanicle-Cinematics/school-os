@@ -57,5 +57,5 @@ export async function saveAccountsInformation(
   revalidatePath("/accounts-information");
   revalidatePath("/invoices");
   revalidatePath("/expenses");
-  return { ok: "Accounts information saved." };
+  return { ok: "Billing details saved." };
 }
