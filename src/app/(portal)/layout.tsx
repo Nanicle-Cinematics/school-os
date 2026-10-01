@@ -29,7 +29,7 @@ import { schoolIconUrls } from "@/lib/manifest-data";
  */
 export async function generateMetadata(): Promise<Metadata> {
   const ctx = await requireGuardian();
-  const icons = schoolIconUrls(ctx.schoolCrestUrl);
+  const icons = schoolIconUrls(ctx.schoolId, ctx.schoolCrestUrl);
   if (!icons) {
     return {};
   }
