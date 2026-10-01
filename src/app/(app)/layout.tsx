@@ -23,7 +23,7 @@ import { Sidebar, MobileNav, SectionTint, type RailTerm } from "./nav";
  */
 export async function generateMetadata(): Promise<Metadata> {
   const auth = await requireAuth();
-  const icons = schoolIconUrls(auth.schoolCrestUrl);
+  const icons = schoolIconUrls(auth.schoolId, auth.schoolCrestUrl);
   if (!icons) {
     return {};
   }

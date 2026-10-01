@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 
   setTenantContext({ schoolId });
   const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true } });
-  const icons = schoolIconUrls(school?.crestUrl ?? null);
+  const icons = schoolIconUrls(schoolId, school?.crestUrl ?? null);
   if (!icons) {
     return fallback();
   }
