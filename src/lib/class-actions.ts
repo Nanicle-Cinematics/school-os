@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { prisma, tenantTransaction } from "@/lib/prisma";
 
 export type ClassState = { error?: string; ok?: string };
 
@@ -166,27 +166,24 @@ export async function saveClassAssignments(
     return { ok: "Nothing to change." };
   }
 
-  await prisma.$transaction(
-    async (tx) => {
-      if (remove.length > 0) {
-        await tx.teachingAssignment.deleteMany({
-          where: { id: { in: remove.map((row) => row.id) } },
-        });
-      }
-      if (add.length > 0) {
-        await tx.teachingAssignment.createMany({
-          data: add.map(([subjectId, staffId]) => ({
-            schoolId: auth.schoolId,
-            academicYearId: year.id,
-            classGroupId,
-            subjectId,
-            staffId,
-          })),
-        });
-      }
-    },
-    { timeout: 30_000, maxWait: 15_000 },
-  );
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    if (remove.length > 0) {
+      await tx.teachingAssignment.deleteMany({
+        where: { id: { in: remove.map((row) => row.id) } },
+      });
+    }
+    if (add.length > 0) {
+      await tx.teachingAssignment.createMany({
+        data: add.map(([subjectId, staffId]) => ({
+          schoolId: auth.schoolId,
+          academicYearId: year.id,
+          classGroupId,
+          subjectId,
+          staffId,
+        })),
+      });
+    }
+  });
 
   revalidatePath(`/classes/${classGroupId}`);
   revalidatePath("/staff");
