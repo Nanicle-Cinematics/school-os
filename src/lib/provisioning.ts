@@ -114,6 +114,7 @@ export async function provisionSchool(tx: TenantTx, input: ProvisionInput) {
       // The console hands the proprietor a temporary password too, so the same
       // rule applies to the very first login a school ever has.
       mustChangePassword: true,
+      passwordIssuedAt: new Date(),
       schoolId: school.id,
     },
   });

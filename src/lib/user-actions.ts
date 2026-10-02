@@ -144,6 +144,7 @@ export async function createUserAccount(
               phone: phoneNormalised,
               passwordHash,
               mustChangePassword: true,
+              passwordIssuedAt: new Date(),
               schoolId: auth.schoolId,
             },
           })
@@ -155,6 +156,7 @@ export async function createUserAccount(
               passwordHash,
               // Temporary: the layouts divert this login to /account/password.
               mustChangePassword: true,
+              passwordIssuedAt: new Date(),
               schoolId: auth.schoolId,
             },
           });
@@ -377,7 +379,7 @@ export async function resetUserPassword(
     // applies: it gets the account in once, then must be replaced.
     await tx.user.update({
       where: { id: userId },
-      data: { passwordHash, mustChangePassword: true },
+      data: { passwordHash, mustChangePassword: true, passwordIssuedAt: new Date() },
     });
     // Every existing session is invalidated — a reset is usually a response to
     // a lost or shared password, and leaving old sessions alive defeats it.

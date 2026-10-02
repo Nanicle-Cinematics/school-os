@@ -14,6 +14,8 @@ export type LoginState = { error?: string };
 
 /** Wrong passwords before the identifier is locked out. */
 const MAX_LOGIN_ATTEMPTS = 8;
+/** Days an unused temporary password keeps working. */
+const TEMP_PASSWORD_DAYS = 14;
 /** How long a bucket stays full once exhausted. */
 const LOCKOUT_MINUTES = 15;
 
@@ -107,6 +109,27 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (!(await verifyPassword(password, user.passwordHash))) {
     return invalid;
   }
+  /**
+   * A temporary password is good for 14 days, not for ever.
+   *
+   * The office reads it down a phone or texts it to a number nobody has verified,
+   * and until now it stayed valid until first use — so one sent to the wrong
+   * number, or never collected, was a standing way into a school. Checked AFTER
+   * the password is proven right (so it tells nobody anything about a wrong
+   * guess) and before a session exists. The office issues another from /users or
+   * the guardian's page.
+   */
+  if (
+    user.mustChangePassword &&
+    user.passwordIssuedAt &&
+    Date.now() - user.passwordIssuedAt.getTime() > TEMP_PASSWORD_DAYS * 24 * 60 * 60 * 1000
+  ) {
+    return {
+      error:
+        "That temporary password has expired. Ask the school office to issue you a new one.",
+    };
+  }
+
   // A correct password clears what this person's own typos built up. The shared
   // per-address bucket is left to expire: it is not theirs to reset.
   const k = keys(lockKey, ip);

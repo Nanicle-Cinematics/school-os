@@ -272,6 +272,7 @@ export async function createGuardianLogin(
           passwordHash,
           // Temporary: the portal diverts this login to /account/password.
           mustChangePassword: true,
+          passwordIssuedAt: new Date(),
           schoolId: auth.schoolId,
         },
       });
