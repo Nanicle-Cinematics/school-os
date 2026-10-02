@@ -100,6 +100,12 @@ export default async function IncomeExpenditureStatementPage({
                   {formatCedis(statement.income)}
                 </span>
               </div>
+              {Number(statement.unapplied) > 0 ? (
+                <div className="mt-1 flex items-center justify-between text-sm text-slate-500">
+                  <span>Received but not yet applied to a bill (not income)</span>
+                  <span className="tabular-nums">{formatCedis(statement.unapplied)}</span>
+                </div>
+              ) : null}
             </div>
 
             <div className="px-4 py-3">

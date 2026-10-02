@@ -59,7 +59,10 @@ export async function runPromotion(
   }
 
   const roll = await prisma.enrollment.findMany({
-    where: { classGroupId, academicYearId: sourceYearId, status: "ACTIVE" },
+    // The same set the plan page offers: everyone who finished the year here, whether
+    // still marked ACTIVE or already promoted/repeated by an earlier run (re-running
+    // corrects a placement). Withdrawn pupils are not part of the class any more.
+    where: { classGroupId, academicYearId: sourceYearId, status: { not: "WITHDRAWN" } },
     select: { studentId: true },
   });
   const onRoll = new Set(roll.map((row) => row.studentId));

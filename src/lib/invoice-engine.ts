@@ -275,6 +275,57 @@ export async function recalcInvoice(tx: Tx, invoiceId: string) {
  * neither the students' actual situation nor the screen that fixes it — the
  * bursar is left to guess which of four things is wrong.
  */
+/**
+ * Keep each invoice's "brought forward" equal to what the PREVIOUS invoice still
+ * owes, as it stands NOW.
+ *
+ * ⚠️ `broughtForward` used to be a snapshot taken when the newer invoice was
+ * generated. Payments are allocated oldest-first, so a payment of arrears reduced
+ * the OLD invoice and left the snapshot inside the newer one untouched: a family
+ * owing 500 arrears and 1,000 fees who paid 1,500 cleared the old invoice and was
+ * still shown 500 owing on the new one — held report cards, debtor lists and the
+ * dashboard all said so. Making the carry live fixes every one of those at once.
+ *
+ * The chain is the pupil's non-cancelled invoices in term order (year start, then
+ * term). The first has nothing before it and carries nothing; each later one
+ * carries the balance of the one before. A reversal that puts money back onto an old
+ * invoice therefore flows forward the same way. Call this AFTER any change to an
+ * invoice's allocations, status or existence.
+ *
+ * Ledger entries are untouched: arrears was posted when it was first billed and
+ * `netOutstanding` already subtracts it, so what the school charged is unchanged.
+ */
+export async function syncCarriedForward(tx: Tx, studentId: string) {
+  const rows = await tx.invoice.findMany({
+    where: { studentId, status: { not: "CANCELLED" } },
+    select: {
+      id: true,
+      broughtForward: true,
+      balance: true,
+      term: { select: { sequence: true, academicYear: { select: { startDate: true } } } },
+    },
+  });
+  rows.sort(
+    (a, b) =>
+      a.term.academicYear.startDate.getTime() - b.term.academicYear.startDate.getTime() ||
+      a.term.sequence - b.term.sequence,
+  );
+
+  // Nothing precedes the first one, so it carries nothing — which is also what
+  // makes cancelling the invoice BEFORE it drop the arrears it was carrying.
+  let carry = new Prisma.Decimal(0);
+  for (let i = 0; i < rows.length; i += 1) {
+    const expected = carry.greaterThan(0) ? carry : new Prisma.Decimal(0);
+    if (rows[i].broughtForward.equals(expected)) {
+      carry = rows[i].balance;
+      continue;
+    }
+    await tx.invoice.update({ where: { id: rows[i].id }, data: { broughtForward: expected } });
+    const updated = await recalcInvoice(tx, rows[i].id);
+    carry = updated.balance;
+  }
+}
+
 export type SkipReason =
   | { kind: "NO_CLASS" }
   | { kind: "NO_STRUCTURE_FOR_LEVEL"; level: string }
@@ -480,20 +531,46 @@ export async function generateInvoicesForTerm(
     include: { items: { include: { feeCategory: true } } },
   });
 
-  // Previous term's unpaid balance rolls into this invoice as broughtForward.
-  const previousTerm = await tx.term.findFirst({
-    where: { schoolId, academicYearId: term.academicYearId, sequence: term.sequence - 1 },
+  /**
+   * What each pupil still owed from before this term.
+   *
+   * The pupil's most recent EARLIER invoice, wherever it falls: the previous term
+   * of the same year, or — for term 1 — the last term of the year before. The
+   * old lookup only ever looked for `sequence - 1` in the SAME year, so arrears
+   * stopped at the new year's door and the new bill silently omitted them.
+   * One earlier invoice is enough because it already carries everything before
+   * it (see syncCarriedForward).
+   */
+  const earlier = await tx.invoice.findMany({
+    where: {
+      schoolId,
+      termId: { not: termId },
+      status: { not: "CANCELLED" },
+      studentId: { in: students.map((student) => student.id) },
+    },
+    select: {
+      studentId: true,
+      balance: true,
+      term: { select: { sequence: true, academicYear: { select: { startDate: true } } } },
+    },
   });
-  const previousBalances = previousTerm
-    ? new Map(
-        (
-          await tx.invoice.findMany({
-            where: { schoolId, termId: previousTerm.id, status: { not: "CANCELLED" } },
-            select: { studentId: true, balance: true },
-          })
-        ).map((row) => [row.studentId, row.balance]),
-      )
-    : new Map<string, Prisma.Decimal>();
+  const thisStart = term.academicYear.startDate.getTime();
+  const latestBefore = new Map<string, { at: [number, number]; balance: Prisma.Decimal }>();
+  for (const row of earlier) {
+    const at: [number, number] = [row.term.academicYear.startDate.getTime(), row.term.sequence];
+    const isEarlier = at[0] < thisStart || (at[0] === thisStart && at[1] < term.sequence);
+    if (!isEarlier) continue;
+    const seen = latestBefore.get(row.studentId);
+    if (!seen || at[0] > seen.at[0] || (at[0] === seen.at[0] && at[1] > seen.at[1])) {
+      latestBefore.set(row.studentId, { at, balance: row.balance });
+    }
+  }
+  const previousBalances = new Map(
+    [...latestBefore].map(([studentId, row]) => [
+      studentId,
+      row.balance.greaterThan(0) ? row.balance : new Prisma.Decimal(0),
+    ]),
+  );
 
   const dueDate = new Date(term.startDate);
   dueDate.setDate(dueDate.getDate() + dueDays);
@@ -607,6 +684,9 @@ export async function generateInvoicesForTerm(
         });
       }
     }
+
+    // Generating an EARLIER term after later ones exist must still re-link them.
+    await syncCarriedForward(tx, student.id);
 
     result.created += 1;
   }

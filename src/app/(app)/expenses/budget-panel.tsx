@@ -73,7 +73,7 @@ export function BudgetPanel({
                 )}
               </div>
 
-              {mayEdit ? (
+              {mayEdit && row.categoryId ? (
                 <form action={formAction} className="flex shrink-0 items-center gap-2">
                   <input type="hidden" name="termId" value={termId} />
                   <input type="hidden" name="categoryId" value={row.categoryId} />

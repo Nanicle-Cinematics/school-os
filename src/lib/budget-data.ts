@@ -52,7 +52,7 @@ export async function getBudgetVsActual(termId: string): Promise<BudgetRow[]> {
     spent.map((row) => [row.categoryId ?? "", Number(row._sum.amount ?? 0)]),
   );
 
-  return categories.map((category) => {
+  const rows = categories.map((category) => {
     const budget = budgetBy.has(category.id) ? (budgetBy.get(category.id) as number) : null;
     const actual = spentBy.get(category.id) ?? 0;
     return {
@@ -66,6 +66,23 @@ export async function getBudgetVsActual(termId: string): Promise<BudgetRow[]> {
       usedPct: budget === null ? null : budget === 0 ? (actual > 0 ? 100 : 0) : (actual / budget) * 100,
     };
   });
+
+  // Spending with no category belongs in the totals too. It used to be dropped
+  // (it matched no category row), so a school could overspend without a budget
+  // line ever showing it.
+  const uncategorised = spentBy.get("") ?? 0;
+  if (uncategorised > 0) {
+    rows.push({
+      categoryId: "",
+      name: "Uncategorised",
+      budget: null,
+      actual: uncategorised,
+      variance: null,
+      usedPct: null,
+    });
+  }
+
+  return rows;
 }
 
 /** The one-line summary the proprietor reads first. */

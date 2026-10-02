@@ -36,7 +36,7 @@ export async function getDashboard(schoolId: string) {
   const invoiceTotals = term
     ? await prisma.invoice.aggregate({
         where: { schoolId, termId: term.id, status: { not: "CANCELLED" } },
-        _sum: { total: true, amountPaid: true, balance: true },
+        _sum: { subtotal: true, discountTotal: true, amountPaid: true, balance: true },
       })
     : null;
 
@@ -55,7 +55,10 @@ export async function getDashboard(schoolId: string) {
     ? await prisma.invoice.count({ where: { schoolId, termId: term.id, balance: { gt: 0 } } })
     : 0;
 
-  const billed = Number(invoiceTotals?._sum.total ?? 0);
+  // What this term CHARGED (fees less discounts), not `total`: that also holds the
+  // arrears brought forward, which was billed in an earlier term, so counting it
+  // here billed the same money twice and made the collection rate meaningless.
+  const billed = Number(invoiceTotals?._sum.subtotal ?? 0) - Number(invoiceTotals?._sum.discountTotal ?? 0);
   const collected = Number(invoiceTotals?._sum.amountPaid ?? 0);
   const outstanding = Number(invoiceTotals?._sum.balance ?? 0);
   const spent = Number(expenseTotal?._sum.amount ?? 0);

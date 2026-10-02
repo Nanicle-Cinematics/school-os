@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Prisma, StudentStatus } from "@prisma/client";
+import { StudentStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { netOutstanding } from "@/lib/invoice-engine";
 
@@ -23,7 +23,9 @@ export async function getStudentList(filters: StudentFilters) {
   const where: Prisma.StudentWhereInput = {
     deletedAt: null,
     ...(filters.classGroupId ? { currentClassGroupId: filters.classGroupId } : {}),
-    ...(filters.status ? { status: filters.status as StudentStatus } : {}),
+    ...(filters.status && filters.status in StudentStatus
+      ? { status: filters.status as StudentStatus }
+      : {}),
     ...(query
       ? {
           OR: [
@@ -142,7 +144,13 @@ export async function getStudent(id: string) {
     where: { studentId: id, reversedAt: null, status: "CONFIRMED" },
     select: { amount: true },
   });
-  const outstanding = netOutstanding(invoices, payments);
+  // Every invoice, not the six shown: this is a lifetime figure set against ALL
+  // payments, and totalling only the latest few charged less than was paid.
+  const charged = await prisma.invoice.findMany({
+    where: { studentId: id, status: { not: "CANCELLED" } },
+    select: { total: true, broughtForward: true },
+  });
+  const outstanding = netOutstanding(charged, payments);
 
   // Candidates for linking: the mirror of getGuardian's "students not already
   // tied to this guardian" — guardians not already tied to THIS student.

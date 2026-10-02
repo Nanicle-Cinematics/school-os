@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { buttonClass } from "../button-style";
 import { Banknote, CircleAlert, FileText } from "lucide-react";
 import Link from "next/link";
-import type { InvoiceStatus } from "@prisma/client";
+import { InvoiceStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { FINANCE } from "@/lib/permissions";
 import {
@@ -71,7 +71,10 @@ export default async function InvoicesPage({
     getInvoiceList({
       termId,
       classGroupId,
-      status: status as InvoiceStatus | "DEBTORS" | undefined,
+      status:
+        status === "DEBTORS" || (status && status in InvoiceStatus)
+          ? (status as InvoiceStatus | "DEBTORS")
+          : undefined,
       age,
       q,
     }),

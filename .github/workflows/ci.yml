@@ -227,6 +227,9 @@ jobs:
       - name: Invoicing — fee-structure matching and why a student was skipped
         run: npm run verify:invoicing
 
+      - name: Arrears carried forward follow the old invoice, not a frozen snapshot
+        run: npm run verify:carry-forward
+
       # Ageing boundaries, the amount in words on a receipt, and the hold that
       # keeps unapproved spending out of the cash book. The approval check
       # WRITES a DRAFT expense and removes it — its first version asserted the

@@ -29,7 +29,18 @@ export type InvoiceFilters = {
   q?: string;
 };
 
-export async function getInvoiceList(filters: InvoiceFilters) {
+/** The invoice list's visible page; the debtors view needs every row, not the top 200. */
+const LIST_PAGE = 200;
+
+/** Later term = larger. Year start first, then the term's place in the year. */
+function termOrder(term: { sequence: number; academicYear: { startDate: Date } }) {
+  return term.academicYear.startDate.getTime() * 100 + term.sequence;
+}
+
+export async function getInvoiceList(
+  filters: InvoiceFilters,
+  opts: { take?: number | null } = {},
+) {
   const where: Prisma.InvoiceWhereInput = {
     ...(filters.termId ? { termId: filters.termId } : {}),
     // Built by statusFilterWhere, which lives in invoice-engine so it can be
@@ -56,7 +67,7 @@ export async function getInvoiceList(filters: InvoiceFilters) {
     prisma.invoice.findMany({
       where,
       orderBy: [{ balance: "desc" }, { invoiceNo: "asc" }],
-      take: 200,
+      ...(opts.take === null ? {} : { take: opts.take ?? LIST_PAGE }),
       include: {
         student: {
           select: {
@@ -67,7 +78,7 @@ export async function getInvoiceList(filters: InvoiceFilters) {
             currentClassGroup: { select: { name: true, level: { select: { name: true } } } },
           },
         },
-        term: { select: { name: true, sequence: true } },
+        term: { select: { name: true, sequence: true, academicYear: { select: { startDate: true } } } },
       },
     }),
     prisma.invoice.aggregate({
@@ -77,12 +88,37 @@ export async function getInvoiceList(filters: InvoiceFilters) {
     }),
   ]);
 
+  // ⚠️ Within ONE term, summing balances is the running figure. Across terms the
+  // balances are a chain — each carries the one before — so adding them counts the
+  // same arrears once per term. With no term chosen, take each pupil's LATEST
+  // matching invoice instead, which already includes everything before it.
+  let outstanding = totals._sum.balance ?? new Prisma.Decimal(0);
+  if (!filters.termId) {
+    const owing = await prisma.invoice.findMany({
+      where: { ...where, balance: { gt: 0 } },
+      select: {
+        studentId: true,
+        balance: true,
+        term: { select: { sequence: true, academicYear: { select: { startDate: true } } } },
+      },
+    });
+    const latest = new Map<string, { order: number; balance: Prisma.Decimal }>();
+    for (const row of owing) {
+      const order = termOrder(row.term);
+      const seen = latest.get(row.studentId);
+      if (!seen || order > seen.order) {
+        latest.set(row.studentId, { order, balance: row.balance });
+      }
+    }
+    outstanding = [...latest.values()].reduce((sum, row) => sum.add(row.balance), new Prisma.Decimal(0));
+  }
+
   return {
     invoices,
     count: totals._count,
     billed: totals._sum.total ?? new Prisma.Decimal(0),
     collected: totals._sum.amountPaid ?? new Prisma.Decimal(0),
-    outstanding: totals._sum.balance ?? new Prisma.Decimal(0),
+    outstanding,
   };
 }
 
@@ -185,20 +221,30 @@ export async function getDebtorsByStudent(filters: {
   q?: string;
 }): Promise<{ debtors: DebtorRow[]; totalOwed: number }> {
   const [{ invoices }, plans] = await Promise.all([
-    getInvoiceList({ ...filters, status: "DEBTORS" }),
+    // No cap: this view adds the rows up, so a page of the top 200 understated the
+    // total and left the smaller debtors off the list entirely.
+    getInvoiceList({ ...filters, status: "DEBTORS" }, { take: null }),
     invoicesOnKeptPlans(filters.termId),
   ]);
 
   const now = new Date();
   const byStudent = new Map<string, DebtorRow>();
+  const latestOrder = new Map<string, number>();
 
   for (const invoice of invoices) {
     const bucket = ageBucket(invoice, now);
     const onKept = plans.kept.has(invoice.id);
     const existing = byStudent.get(invoice.studentId);
 
+    const order = termOrder(invoice.term);
+
     if (existing) {
-      existing.totalOwed += Number(invoice.balance);
+      // The pupil owes what their LATEST invoice says; earlier ones are already
+      // inside it (carried forward), so adding them would count arrears twice.
+      if (order > latestOrder.get(invoice.studentId)!) {
+        existing.totalOwed = Number(invoice.balance);
+        latestOrder.set(invoice.studentId, order);
+      }
       existing.invoiceCount += 1;
       existing.onKeptPlan = existing.onKeptPlan && onKept;
       if (AGE_BUCKETS.indexOf(bucket) > AGE_BUCKETS.indexOf(existing.oldestBucket)) {
@@ -207,6 +253,7 @@ export async function getDebtorsByStudent(filters: {
       continue;
     }
 
+    latestOrder.set(invoice.studentId, order);
     byStudent.set(invoice.studentId, {
       studentId: invoice.studentId,
       firstName: invoice.student.firstName,
