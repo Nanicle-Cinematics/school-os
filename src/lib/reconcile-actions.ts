@@ -43,6 +43,10 @@ export async function reconcileStatement(
     return { error: "Paste the statement lines first." };
   }
 
+  if (text.length > 200_000) {
+    return { error: "That statement is too long to paste in one go. Split it by month." };
+  }
+
   const { rows, skipped } = parseStatement(text);
   if (rows.length === 0) {
     return {
@@ -69,6 +73,18 @@ export async function reconcileStatement(
 
   await tenantTransaction(auth.schoolId, async (tx) => {
     for (const match of matches) {
+      // Pasting the same statement again must not stack the same line twice.
+      const already = await tx.statementLine.findFirst({
+        where: {
+          paidAt: match.row.paidAt,
+          amount: match.row.amount,
+          reference: match.row.reference,
+        },
+        select: { id: true },
+      });
+      if (already) {
+        continue;
+      }
       await tx.statementLine.create({
         data: {
           schoolId: auth.schoolId,

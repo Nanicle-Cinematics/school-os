@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
@@ -12,6 +13,8 @@ import {
   type BlockedGroup,
 } from "@/lib/invoice-engine";
 import { writeAudit } from "@/lib/audit";
+import { lockOn } from "@/lib/locks";
+import { findJournalEntryForSource, reverseJournalEntry } from "@/lib/ledger-engine";
 
 export type GenerateState = {
   error?: string;
@@ -37,7 +40,9 @@ export async function generateInvoices(
 
   // Generous timeout: this walks every active student and writes an invoice
   // plus its lines for each, and the database is a continent away.
-  const result = await tenantTransaction(auth.schoolId, async (tx) => {
+  let result;
+  try {
+  result = await tenantTransaction(auth.schoolId, async (tx) => {
       const generated = await generateInvoicesForTerm(tx, auth.schoolId, termId, dueDays, auth.userId);
       await writeAudit(tx, {
         schoolId: auth.schoolId,
@@ -51,6 +56,13 @@ export async function generateInvoices(
     },
     { timeout: 120_000, maxWait: 20_000 },
   );
+  } catch (error) {
+    // Two presses at once: the other run created them first. Nothing was lost.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: "Invoices for that term are already being generated. Reload the page to see them." };
+    }
+    throw error;
+  }
 
   revalidatePath("/invoices");
   revalidatePath("/dashboard");
@@ -77,11 +89,12 @@ export async function cancelInvoice(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    await lockOn(tx, `invoice:${invoiceId}`);
     const invoice = await tx.invoice.findUnique({
       where: { id: invoiceId },
       include: { allocations: true },
     });
-    if (!invoice) {
+    if (!invoice || invoice.status === "CANCELLED") {
       return;
     }
     // Refuse to cancel an invoice that has money against it — that needs a
@@ -91,6 +104,18 @@ export async function cancelInvoice(formData: FormData): Promise<void> {
     }
 
     await tx.invoice.update({ where: { id: invoiceId }, data: { status: "CANCELLED" } });
+
+    // Generating the invoice posted Dr receivables / Cr income. Cancelling it
+    // has to take that back, or the ledger keeps a debt and a revenue the
+    // invoice list no longer shows. Best-effort like every posting: a school
+    // that had not mapped its accounts has no entry to reverse.
+    const posted = await findJournalEntryForSource(tx, auth.schoolId, "INVOICE", invoiceId);
+    if (posted) {
+      await reverseJournalEntry(tx, auth.schoolId, posted.id, {
+        memo: `Reversal of ${invoice.invoiceNo}`,
+        actorUserId: auth.userId,
+      });
+    }
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,

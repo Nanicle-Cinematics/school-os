@@ -1,6 +1,8 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import type { Role } from "@prisma/client";
+import { canAccess, FINANCE, OFFICE } from "@/lib/permissions";
 
 const cedis = new Intl.NumberFormat("en-GH", {
   style: "currency",
@@ -686,6 +688,15 @@ const ACTIVITY: Record<
   "student.admit": { kind: "people", title: () => "A pupil was admitted", detail: "Students" },
   "student.enrol": { kind: "people", title: () => "A pupil was placed in a class", detail: "Students" },
   "student.withdraw": { kind: "people", title: () => "A pupil was withdrawn", detail: "Students" },
+  "student.delete": { kind: "people", title: () => "A pupil record was removed", detail: "Students" },
+  "staff.remove": {
+    kind: "people",
+    title: (a) =>
+      Number(a.loginsRemoved) > 0
+        ? "A staff member was removed, and their login with them"
+        : "A staff member was removed",
+    detail: "Staff",
+  },
   "student.import": {
     kind: "people",
     title: (a) => `${count(a.created)} ${plural(a.created, "pupil")} imported`,
@@ -717,6 +728,7 @@ const ACTIVITY: Record<
   "user.roles": { kind: "admin", title: () => "Someone's roles changed", detail: "Users" },
   "term.update": { kind: "admin", title: () => "Term dates changed", detail: "Settings" },
   "settings.academic": { kind: "admin", title: () => "Academic settings changed", detail: "Settings" },
+  "settings.fees": { kind: "money", title: () => "Fees policy changed", detail: "Settings" },
   "school.asset.upload": { kind: "admin", title: () => "The crest or signature was updated", detail: "Settings" },
   "school.asset.remove": { kind: "admin", title: () => "The crest or signature was removed", detail: "Settings" },
   "school.provision": { kind: "admin", title: () => "The school was set up", detail: "Nanicle" },
@@ -805,7 +817,17 @@ function ago(then: Date, now: Date) {
  */
 export const ACTIVITY_ACTIONS = Object.keys(ACTIVITY);
 
-export async function getActivity(schoolId: string, take = 6, now = new Date()) {
+export async function getActivity(
+  schoolId: string,
+  roles: Role[],
+  take = 6,
+  now = new Date(),
+) {
+  // The feed is built from the audit log, which records amounts. Every role that
+  // reaches the dashboard sees it, including ones the money tiles are hidden
+  // from — so what it lists is filtered to what the viewer could read anyway.
+  const seesMoney = canAccess(roles, FINANCE);
+  const seesAdmin = canAccess(roles, OFFICE);
   // Read deeper than we display, because identical entries are folded below and
   // a term's results being published across eleven classes would otherwise fill
   // the whole feed with one event.
@@ -822,7 +844,18 @@ export async function getActivity(schoolId: string, take = 6, now = new Date()) 
     },
   });
 
-  const items = rows.map((row): ActivityItem => {
+  const visible = rows.filter((row) => {
+    const kind = ACTIVITY[row.action]?.kind;
+    if (kind === "money" || /^(payment|expense|bill|billPayment|budget|plan|statement|invoice|journal|ledgerAccount|settings\.fees)/.test(row.action)) {
+      return seesMoney;
+    }
+    if (/^(user\.|data\.|school\.|guardian\.login|settings\.)/.test(row.action)) {
+      return seesAdmin;
+    }
+    return true;
+  });
+
+  const items = visible.map((row): ActivityItem => {
     const spec = ACTIVITY[row.action];
     const payload = (row.after ?? {}) as Record<string, unknown>;
     const who = row.actor?.name;

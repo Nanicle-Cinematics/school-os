@@ -5,7 +5,7 @@ import type { SmsProvider } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { parseAmount } from "@/lib/money";
 import { setTenantContext } from "@/lib/tenant-context";
-import { OFFICE } from "@/lib/permissions";
+import { FINANCE, LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
@@ -70,6 +70,12 @@ export async function saveAcademicPolicy(
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });
+
+  // The weights and the pass mark decide every grade and every promotion in the
+  // school. The page stays open to the office, but changing them is leadership's.
+  if (!canAccess(auth.roles, LEADERSHIP)) {
+    return { error: "Only a proprietor or head can change how marks are weighted and what counts as a pass." };
+  }
 
   const classScoreWeight = Number(formData.get("classScoreWeight"));
   const examScoreWeight = Number(formData.get("examScoreWeight"));
@@ -151,6 +157,12 @@ export async function saveFeesPolicy(
   const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });
 
+  // Money policy. IT admin is kept out of the money everywhere else, and this is
+  // where the expense approval control lives — so it is not theirs to change.
+  if (!canAccess(auth.roles, FINANCE)) {
+    return { error: "Only a finance role, a head or the proprietor can change the fees policy." };
+  }
+
   const invoiceDueDays = Number(formData.get("invoiceDueDays"));
   if (!Number.isFinite(invoiceDueDays) || invoiceDueDays < 0) {
     return { error: "Days until due must be zero or more." };
@@ -169,10 +181,49 @@ export async function saveFeesPolicy(
     return { error: "The approval threshold must be an amount greater than zero, or empty for none." };
   }
 
-  await upsertSettings(auth.schoolId, {
+  const before = await prisma.schoolSettings.findUnique({
+    where: { schoolId: auth.schoolId },
+    select: { invoiceDueDays: true, blockReportOnArrears: true, expenseApprovalThreshold: true },
+  });
+
+  /**
+   * ⚠️ The approval threshold is the control that makes a second signature
+   * necessary, so an accountant — whom it constrains — may not move it. Clearing
+   * it switches approvals off for everyone; raising it hides spending from them.
+   */
+  const thresholdChanged =
+    (before?.expenseApprovalThreshold?.toString() ?? null) !== (expenseApprovalThreshold?.toString() ?? null);
+  if (thresholdChanged && !canAccess(auth.roles, LEADERSHIP)) {
+    return { error: "Only a proprietor or head can change the expense approval threshold." };
+  }
+
+  const next = {
     invoiceDueDays: Math.trunc(invoiceDueDays),
     blockReportOnArrears: formData.get("blockReportOnArrears") === "on",
     expenseApprovalThreshold,
+  };
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.schoolSettings.upsert({
+      where: { schoolId: auth.schoolId },
+      create: { schoolId: auth.schoolId, ...next },
+      update: next,
+    });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "settings.fees",
+      entity: "SchoolSettings",
+      entityId: auth.schoolId,
+      before: before
+        ? {
+            invoiceDueDays: before.invoiceDueDays,
+            blockReportOnArrears: before.blockReportOnArrears,
+            expenseApprovalThreshold: before.expenseApprovalThreshold?.toString() ?? null,
+          }
+        : null,
+      after: { ...next, expenseApprovalThreshold: next.expenseApprovalThreshold?.toString() ?? null },
+    });
   });
 
   revalidatePath("/settings");

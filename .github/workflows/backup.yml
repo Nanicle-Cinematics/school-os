@@ -34,6 +34,10 @@ concurrency:
   group: backup
   cancel-in-progress: false
 
+# Least privilege: nothing here writes to the repository, so the token may only read it.
+permissions:
+  contents: read
+
 jobs:
   backup:
     name: Dump production, and prove a dump restores
@@ -169,6 +173,9 @@ jobs:
 
       # ── 2. Production ─────────────────────────────────────────────────────
       - name: Dump production, and restore it here
+        # Never on a pull request: the production secret must not reach code a branch
+        # can edit (this workflow also runs for changes to its own scripts).
+        if: github.event_name != 'pull_request'
         id: prod
         env:
           PROD_URL: ${{ secrets.PROD_DIRECT_URL }}
@@ -212,6 +219,9 @@ jobs:
       # not quietly produce a plaintext one — the failure mode where the guard's
       # absence looks identical to its success.
       - name: Encrypt
+        # Never on a pull request: the production secret must not reach code a branch
+        # can edit (this workflow also runs for changes to its own scripts).
+        if: github.event_name != 'pull_request'
         env:
           RECIPIENT: ${{ vars.BACKUP_AGE_RECIPIENT }}
         run: |
@@ -236,6 +246,9 @@ jobs:
           rm -f /tmp/production.dump /tmp/roundtrip.age /tmp/roundtrip.dump /tmp/throwaway.txt
 
       - name: Keep it
+        # Never on a pull request: the production secret must not reach code a branch
+        # can edit (this workflow also runs for changes to its own scripts).
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           # Dated, because the first question asked of a backup list is "how old

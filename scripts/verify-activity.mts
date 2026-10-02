@@ -100,7 +100,7 @@ for (const row of rows) {
   created.push(log.id);
 }
 
-const items = await getActivity(school!.id, rows.length, now);
+const items = await getActivity(school!.id, ["OWNER"], rows.length, now);
 for (const row of rows.slice().reverse()) {
   const hit = items.find((i) => row.expect.test(i.title));
   check(`${row.action} → "${row.expect.source}"`, Boolean(hit), hit?.title ?? "(no match)");

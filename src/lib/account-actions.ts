@@ -33,7 +33,12 @@ export async function changePassword(
   formData: FormData,
 ): Promise<PasswordState> {
   const auth = await requireAuth();
-  setTenantContext({ schoolId: auth.schoolId });
+  // readOnly: false, deliberately. An expired trial or unpaid school may not
+  // write school records, but a person must still be able to change their OWN
+  // password — and a temporary-password login is refused everywhere else until
+  // they do, so blocking this here locked them out of a school they could
+  // otherwise still read.
+  setTenantContext({ schoolId: auth.schoolId, readOnly: false });
 
   const current = String(formData.get("current") ?? "");
   const next = String(formData.get("next") ?? "");
