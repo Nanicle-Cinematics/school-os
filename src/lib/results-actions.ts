@@ -149,7 +149,8 @@ export async function saveRemarks(formData: FormData): Promise<void> {
     return;
   }
 
-  const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  // requireRole(LEADERSHIP) above already guarantees this; the head's remark is
+  // written unconditionally.
   const formTeacherRemark = String(formData.get("formTeacherRemark") ?? "").trim();
   const headRemark = String(formData.get("headRemark") ?? "").trim();
   const conduct = String(formData.get("conduct") ?? "").trim();
@@ -158,18 +159,33 @@ export async function saveRemarks(formData: FormData): Promise<void> {
   const daysPresentRaw = String(formData.get("daysPresent") ?? "");
   const daysTotalRaw = String(formData.get("daysTotal") ?? "");
 
+  const daysPresent = daysPresentRaw ? Number(daysPresentRaw) : null;
+  const daysTotal = daysTotalRaw ? Number(daysTotalRaw) : null;
+  const badDays = (n: number | null) => n !== null && (!Number.isInteger(n) || n < 0);
+  if (badDays(daysPresent) || badDays(daysTotal)) {
+    return;
+  }
+  if (daysPresent !== null && daysTotal !== null && daysPresent > daysTotal) {
+    return;
+  }
+
+  // No result row yet (results not computed) is "nothing to write to", not a crash.
+  const exists = await prisma.termResult.count({ where: { termId, studentId } });
+  if (exists === 0) {
+    return;
+  }
+
   await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.termResult.update({
       where: { termId_studentId: { termId, studentId } },
       data: {
         formTeacherRemark: formTeacherRemark || null,
-        // Only leadership writes the head's remark.
-        ...(isLeadership ? { headRemark: headRemark || null } : {}),
+        headRemark: headRemark || null,
         conduct: conduct || null,
         attitude: attitude || null,
         interest: interest || null,
-        daysPresent: daysPresentRaw ? Number(daysPresentRaw) : null,
-        daysTotal: daysTotalRaw ? Number(daysTotalRaw) : null,
+        daysPresent,
+        daysTotal,
       },
     });
 

@@ -219,25 +219,40 @@ export async function completePasswordReset(args: {
     return { kind: "bad-code" };
   }
 
+  /**
+   * Spend an attempt BEFORE comparing, as one conditional UPDATE.
+   *
+   * Reading `attempts`, comparing, then incrementing let a burst of parallel
+   * guesses all see "0 of 5" and all be checked — the cap bound a patient
+   * guesser and nobody else. The database decides who gets one of the five.
+   */
+  const claimed = await withBypass(() =>
+    prisma.passwordReset.updateMany({
+      where: { id: reset.id, consumedAt: null, attempts: { lt: MAX_ATTEMPTS } },
+      data: { attempts: { increment: 1 } },
+    }),
+  );
+  if (claimed.count === 0) {
+    return { kind: "bad-code" };
+  }
   if (reset.codeHash !== hashCode(args.code.trim())) {
-    // Count the miss BEFORE answering, so a caps-lock typo and a brute force are
-    // told apart by the counter rather than by how fast they arrive.
-    await withBypass(() =>
-      prisma.passwordReset.update({
-        where: { id: reset.id },
-        data: { attempts: { increment: 1 } },
-      }),
-    );
     return { kind: "bad-code" };
   }
 
   const passwordHash = await hashPassword(args.password);
 
-  await withBypass(async () => {
-    await prisma.passwordReset.update({
-      where: { id: reset.id },
+  const spent = await withBypass(() =>
+    prisma.passwordReset.updateMany({
+      where: { id: reset.id, consumedAt: null },
       data: { consumedAt: new Date() },
-    });
+    }),
+  );
+  if (spent.count === 0) {
+    // Another request used this code a moment ago; it works once.
+    return { kind: "bad-code" };
+  }
+
+  await withBypass(async () => {
     await prisma.user.update({
       where: { id: user.id },
       data: {

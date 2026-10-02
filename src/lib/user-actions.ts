@@ -322,7 +322,10 @@ export async function setAccountSuspended(formData: FormData): Promise<void> {
 
     // A suspension that leaves the person signed in is not a suspension.
     if (suspend) {
-      await tx.session.deleteMany({ where: { userId } });
+      // Only sessions working in THIS school: the same login may hold another school's.
+      await tx.session.deleteMany({
+        where: { userId, OR: [{ activeSchoolId: auth.schoolId }, { activeSchoolId: null }] },
+      });
     }
 
     await writeAudit(tx, {
@@ -430,7 +433,10 @@ export async function removeUserAccess(formData: FormData): Promise<void> {
     // The User row survives: it may hold access to another school, and it is
     // named as the actor on payments and audit rows here.
     await tx.membership.deleteMany({ where: { schoolId: auth.schoolId, userId } });
-    await tx.session.deleteMany({ where: { userId } });
+    // Only sessions working in THIS school: the same login may hold another school's.
+    await tx.session.deleteMany({
+      where: { userId, OR: [{ activeSchoolId: auth.schoolId }, { activeSchoolId: null }] },
+    });
 
     await writeAudit(tx, {
       schoolId: auth.schoolId,

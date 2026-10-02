@@ -53,10 +53,19 @@ function cell(value: string | null | undefined, asText = false): string {
   if (asText) {
     return `"\t${text.replace(/"/g, '""')}"`;
   }
-  if (/[",\n\r]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
+  /**
+   * ⚠️ Formula injection. A cell opening with = + - or @ is EXECUTED by Excel and
+   * Sheets, and the names, addresses and notes in these exports are typed by
+   * people other than the one who opens the file. A leading apostrophe makes
+   * the spreadsheet show it as text. Plain signed numbers (an amount of -50.00)
+   * are left alone so ledgers still sum.
+   */
+  const isPlainNumber = /^[-+]?\d+(\.\d+)?$/.test(text);
+  const safe = /^[=+\-@]/.test(text) && !isPlainNumber ? `'${text}` : text;
+  if (/[",\n\r]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return text;
+  return safe;
 }
 
 const isoDate = (value: Date | null | undefined) =>
