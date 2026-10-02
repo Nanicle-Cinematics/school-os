@@ -48,6 +48,10 @@ on:
           # and safe to run after any deploy that added a table.
           - rls
 
+# Least privilege: nothing here writes to the repository, so the token may only read it.
+permissions:
+  contents: read
+
 jobs:
   migrate:
     name: ${{ inputs.action }} — production

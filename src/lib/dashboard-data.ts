@@ -1,6 +1,8 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import type { Role } from "@prisma/client";
+import { canAccess, FINANCE, OFFICE } from "@/lib/permissions";
 
 const cedis = new Intl.NumberFormat("en-GH", {
   style: "currency",
@@ -805,7 +807,17 @@ function ago(then: Date, now: Date) {
  */
 export const ACTIVITY_ACTIONS = Object.keys(ACTIVITY);
 
-export async function getActivity(schoolId: string, take = 6, now = new Date()) {
+export async function getActivity(
+  schoolId: string,
+  roles: Role[],
+  take = 6,
+  now = new Date(),
+) {
+  // The feed is built from the audit log, which records amounts. Every role that
+  // reaches the dashboard sees it, including ones the money tiles are hidden
+  // from — so what it lists is filtered to what the viewer could read anyway.
+  const seesMoney = canAccess(roles, FINANCE);
+  const seesAdmin = canAccess(roles, OFFICE);
   // Read deeper than we display, because identical entries are folded below and
   // a term's results being published across eleven classes would otherwise fill
   // the whole feed with one event.
@@ -822,7 +834,18 @@ export async function getActivity(schoolId: string, take = 6, now = new Date()) 
     },
   });
 
-  const items = rows.map((row): ActivityItem => {
+  const visible = rows.filter((row) => {
+    const kind = ACTIVITY[row.action]?.kind;
+    if (kind === "money" || /^(payment|expense|bill|billPayment|budget|plan|statement|invoice|journal|ledgerAccount|settings\.fees)/.test(row.action)) {
+      return seesMoney;
+    }
+    if (/^(user\.|data\.|school\.|guardian\.login|settings\.)/.test(row.action)) {
+      return seesAdmin;
+    }
+    return true;
+  });
+
+  const items = visible.map((row): ActivityItem => {
     const spec = ACTIVITY[row.action];
     const payload = (row.after ?? {}) as Record<string, unknown>;
     const who = row.actor?.name;

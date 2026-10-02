@@ -98,7 +98,7 @@ export default async function DashboardPage() {
       )
     : null;
 
-  const activity = await getActivity(auth.schoolId);
+  const activity = await getActivity(auth.schoolId, auth.roles);
 
   const attention = await getAttention(
     auth.schoolId,

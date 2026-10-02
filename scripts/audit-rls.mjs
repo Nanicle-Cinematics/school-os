@@ -92,6 +92,33 @@ try {
     `,
   );
 
+  /**
+   * The audit trail and the ledger are append-only to the app role — see
+   * apply-rls.mjs. Watched here because Supabase's default privileges re-grant on
+   * every table and a later `grant … on all tables` would quietly undo it.
+   */
+  const appRole = process.env.APP_DB_ROLE ?? "school_os_app";
+  const writable = await prisma.$queryRawUnsafe(
+    `
+    select table_name, string_agg(privilege_type, ',' order by privilege_type) as privileges
+      from information_schema.role_table_grants
+     where table_schema = 'public'
+       and grantee = $1
+       and table_name in ('AuditLog', 'JournalEntry', 'JournalLine')
+       and privilege_type in ('UPDATE', 'DELETE', 'TRUNCATE')
+     group by table_name
+    `,
+    appRole,
+  );
+  if (writable.length > 0) {
+    console.error("\nNOT APPEND-ONLY — the app role can rewrite history here:");
+    for (const row of writable) {
+      console.error(`  ${row.table_name} → ${appRole}: ${row.privileges}`);
+    }
+    console.error("\nFix: node --env-file=<env with DIRECT_URL> scripts/apply-rls.mjs");
+    process.exitCode = 1;
+  }
+
   const gaps = rows.filter((r) => !r.rls || !r.forced || r.policies === 0);
 
   // Count the same way apply-rls.mjs reports it, so the two are comparable and

@@ -20,6 +20,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: nothing here writes to the repository, so the token may only read it.
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Lint, seed and verify the engines

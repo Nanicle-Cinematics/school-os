@@ -24,6 +24,9 @@ const prisma = new PrismaClient({ datasources: { db: { url: adminUrl } } });
 
 const APP_ROLE = process.env.APP_DB_ROLE ?? "school_os_app";
 
+/** Tables the app may add to but never change. See the revoke below. */
+const APPEND_ONLY = ["AuditLog", "JournalEntry", "JournalLine"];
+
 /** Auth tables are deliberately not tenant-scoped: sign-in happens before a
  *  tenant is known, and both are keyed by id/token rather than by school. */
 const UNSCOPED = new Set(["User", "Session", "_prisma_migrations"]);
@@ -63,6 +66,20 @@ async function main() {
   await prisma.$executeRawUnsafe(
     `alter default privileges in schema public grant select, insert, update, delete on tables to "${APP_ROLE}"`,
   );
+
+  /**
+   * Append-only records. The audit trail and the ledger are what an accountant or
+   * a head relies on to say what happened, and the application never edits or
+   * deletes a row of either — corrections are new rows (a reversal is a second
+   * journal entry). So the role the app runs as is not GIVEN the power to, and a
+   * bug, an injection or a stolen app credential cannot rewrite history. Rows
+   * leave only with their school (cascade, run as the owner).
+   */
+  for (const table of APPEND_ONLY) {
+    await prisma.$executeRawUnsafe(
+      `revoke update, delete, truncate on "${table}" from "${APP_ROLE}"`,
+    );
+  }
 
   // 2. Which tables are tenant-owned: anything carrying a schoolId column.
   const tenantTables = await prisma.$queryRawUnsafe(`

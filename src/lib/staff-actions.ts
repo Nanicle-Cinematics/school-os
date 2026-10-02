@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import type { EmploymentType, Gender, StaffStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { OFFICE } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
+import { PRIVILEGED_ROLES, countOwners } from "@/lib/user-data";
+import { writeAudit } from "@/lib/audit";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
 import { nextNumber } from "@/lib/sequences";
 import { normalisePhone } from "@/lib/sms-shared";
@@ -177,9 +179,47 @@ export async function removeStaff(formData: FormData): Promise<void> {
     redirect(`/staff/${id}?error=in-use`);
   }
 
-  await prisma.staff.update({
-    where: { id },
-    data: { deletedAt: new Date(), status: "RESIGNED" },
+  // Removing the person has to remove their way in. The login hangs off a
+  // membership that points at this staff row, and "deleted" staff used to keep
+  // signing in until somebody remembered to remove their access on /users too.
+  const logins = await prisma.membership.findMany({
+    where: { staffId: id },
+    select: { userId: true, role: true },
+  });
+  if (logins.some((m) => m.role === "OWNER")) {
+    const owners = await countOwners(auth.schoolId);
+    if (owners <= 1) {
+      redirect(`/staff/${id}?error=last-owner`);
+    }
+  }
+  if (logins.some((m) => PRIVILEGED_ROLES.includes(m.role)) && !canAccess(auth.roles, LEADERSHIP)) {
+    redirect(`/staff/${id}?error=privileged`);
+  }
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.staff.update({
+      where: { id },
+      data: { deletedAt: new Date(), status: "RESIGNED" },
+    });
+    if (logins.length > 0) {
+      const userIds = [...new Set(logins.map((m) => m.userId))];
+      await tx.membership.deleteMany({ where: { schoolId: auth.schoolId, staffId: id } });
+      // Only sessions working in THIS school; the same login may hold another's.
+      await tx.session.deleteMany({
+        where: {
+          userId: { in: userIds },
+          OR: [{ activeSchoolId: auth.schoolId }, { activeSchoolId: null }],
+        },
+      });
+    }
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "staff.remove",
+      entity: "Staff",
+      entityId: id,
+      after: { loginsRemoved: logins.length },
+    });
   });
   revalidatePath("/staff");
   redirect("/staff");

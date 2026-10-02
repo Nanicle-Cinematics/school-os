@@ -57,6 +57,18 @@ export default async function StaffDetailPage({ params, searchParams }: PageProp
         </p>
       </div>
 
+      {query.error === "last-owner" ? (
+        <Alert tone="error">
+          This member holds the last proprietor login, so it cannot be removed. Give someone else
+          the proprietor role first.
+        </Alert>
+      ) : null}
+      {query.error === "privileged" ? (
+        <Alert tone="error">
+          This member holds a leadership login. Only a proprietor or head can remove them.
+        </Alert>
+      ) : null}
+
       {query.error === "in-use" ? (
         <Alert tone="error">
           This member has entered scores or is a form teacher, so the record stays — a mark sheet

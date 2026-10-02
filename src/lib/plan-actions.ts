@@ -132,6 +132,15 @@ export async function cancelPlan(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    // The plan must belong to the invoice the page said, and a plan already
+    // ended keeps the date it was ended.
+    const plan = await tx.paymentPlan.findFirst({
+      where: { id: planId, invoiceId, cancelledAt: null },
+      select: { id: true },
+    });
+    if (!plan) {
+      return;
+    }
     await tx.paymentPlan.update({
       where: { id: planId },
       data: { cancelledAt: new Date() },

@@ -12,6 +12,38 @@ import { nextNumber, takenProbes } from "@/lib/sequences";
 import { writeAudit } from "@/lib/audit";
 import { normalisePhone } from "@/lib/sms-shared";
 
+/**
+ * Is this the same person as the guardian already on file under that number?
+ *
+ * A phone number alone decides who a child is linked to, and linking is what
+ * lets that guardian's portal login see the child's fees and results. A number
+ * mistyped by one digit therefore silently handed a child to another family. The
+ * names must agree — every word of the shorter one appears in the longer — or
+ * the office is told whose number it is and asked to check.
+ */
+function sameGuardian(typed: string, onFile: string) {
+  const words = (text: string) =>
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+  const a = words(typed);
+  const b = words(onFile);
+  if (a.length === 0 || b.length === 0) {
+    return false;
+  }
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.every((word) => long.includes(word));
+}
+
+function mismatchMessage(phone: string, onFile: string) {
+  return (
+    `${phone} is already on file for ${onFile}, which is not the name you entered. ` +
+    `If that is the same person, enter the name as it is on file; if not, check the number — ` +
+    `a wrong digit would give another family access to this child's fees and results.`
+  );
+}
+
 export type StudentState = { error?: string; ok?: string };
 
 const STATUSES: StudentStatus[] = [
@@ -150,7 +182,9 @@ export async function admitStudent(
     return { error: full };
   }
 
-  const admissionNo = await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {
+  let admissionNo: string;
+  try {
+  admissionNo = await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {
     const allocated = await nextNumber(
       tx,
       auth.schoolId,
@@ -187,9 +221,15 @@ export async function admitStudent(
       const wanted = normalisePhone(guardian.phone);
       const candidates = await tx.guardian.findMany({
         where: { deletedAt: null },
-        select: { id: true, phone: true },
+        select: { id: true, phone: true, firstName: true, lastName: true },
       });
       const existing = candidates.find((c) => normalisePhone(c.phone) === wanted);
+      if (
+        existing &&
+        !sameGuardian(`${guardian.firstName} ${guardian.lastName}`, `${existing.firstName} ${existing.lastName}`)
+      ) {
+        throw new Error(`GUARDIAN_MISMATCH:${existing.firstName} ${existing.lastName}`);
+      }
 
       const guardianId =
         existing?.id ??
@@ -228,6 +268,12 @@ export async function admitStudent(
 
     return allocated;
   });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("GUARDIAN_MISMATCH:") && guardian) {
+      return { error: mismatchMessage(guardian.phone, error.message.slice(18)) };
+    }
+    throw error;
+  }
 
   revalidatePath("/students");
   revalidatePath("/dashboard");
@@ -289,6 +335,7 @@ export async function addGuardianToStudent(
 
   let addedName = `${firstName} ${lastName}`;
 
+  try {
   await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {
     // Siblings share a parent: match on the normalised phone so a second
     // child does not create a second copy of the same mother.
@@ -298,6 +345,9 @@ export async function addGuardianToStudent(
       select: { id: true, phone: true, firstName: true, lastName: true },
     });
     const existing = candidates.find((c) => normalisePhone(c.phone) === wanted);
+    if (existing && !sameGuardian(name, `${existing.firstName} ${existing.lastName}`)) {
+      throw new Error(`GUARDIAN_MISMATCH:${existing.firstName} ${existing.lastName}`);
+    }
 
     const guardianId =
       existing?.id ??
@@ -351,6 +401,12 @@ export async function addGuardianToStudent(
       },
     });
   });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("GUARDIAN_MISMATCH:")) {
+      return { error: mismatchMessage(phone, error.message.slice(18)) };
+    }
+    throw error;
+  }
 
   revalidatePath(`/students/${studentId}`);
   revalidatePath("/students");
@@ -517,7 +573,24 @@ export async function deleteStudent(formData: FormData): Promise<void> {
     redirect(`/students/${studentId}?error=has-money`);
   }
 
-  await prisma.student.update({ where: { id: studentId }, data: { deletedAt: new Date() } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    const student = await tx.student.findUnique({
+      where: { id: studentId },
+      select: { admissionNo: true, firstName: true, lastName: true, deletedAt: true },
+    });
+    if (!student || student.deletedAt) {
+      return;
+    }
+    await tx.student.update({ where: { id: studentId }, data: { deletedAt: new Date() } });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "student.delete",
+      entity: "Student",
+      entityId: studentId,
+      before: { admissionNo: student.admissionNo, name: `${student.firstName} ${student.lastName}` },
+    });
+  });
   revalidatePath("/students");
   redirect("/students");
 }
