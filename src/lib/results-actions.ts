@@ -213,6 +213,14 @@ export async function saveClassRemarks(
     return { error: "Choose a term and class." };
   }
 
+  const term = await prisma.term.findUnique({
+    where: { id: termId },
+    select: { academicYearId: true },
+  });
+  if (!term) {
+    return { error: "That term does not exist." };
+  }
+
   // A teacher may write remarks for a class they teach anything in; leadership
   // for any class. Subject-level assignment is too narrow here — the form
   // teacher writes the remark, and they may not teach every subject.
@@ -220,12 +228,8 @@ export async function saveClassRemarks(
     if (!auth.staffId) {
       return { error: "Your account is not linked to a staff record." };
     }
-    const term = await prisma.term.findUnique({
-      where: { id: termId },
-      select: { academicYearId: true },
-    });
     const teaches = await prisma.teachingAssignment.count({
-      where: { staffId: auth.staffId, classGroupId, academicYearId: term?.academicYearId ?? "" },
+      where: { staffId: auth.staffId, classGroupId, academicYearId: term.academicYearId },
     });
     if (teaches === 0) {
       return { error: "You do not teach in that class." };
@@ -247,9 +251,18 @@ export async function saveClassRemarks(
     return value ? value.slice(0, 300) : null;
   };
 
+  // Only pupils actually on this class's roll — a forged `row:` key must not
+  // reach another class's report card.
+  const roster = await prisma.enrollment.findMany({
+    where: { classGroupId, academicYearId: term.academicYearId, status: "ACTIVE" },
+    select: { studentId: true },
+  });
+  const enrolled = new Set(roster.map((row) => row.studentId));
+
   const studentIds = [...formData.keys()]
     .filter((key) => key.startsWith("row:"))
-    .map((key) => key.slice("row:".length));
+    .map((key) => key.slice("row:".length))
+    .filter((id) => enrolled.has(id));
 
   const rows: Row[] = [];
   for (const studentId of studentIds) {

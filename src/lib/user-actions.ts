@@ -217,7 +217,12 @@ export async function updateUserRoles(_prev: UserState, formData: FormData): Pro
     return { error: "That account has no access to this school." };
   }
 
-  const currentRoles = current.map((membership) => membership.role);
+  // Only roles this screen can assign are edited here. PARENT is not among them
+  // (it is created from the guardian's record), so a proprietor who is also a
+  // parent must keep that membership rather than have it read as "removed".
+  const currentRoles = current
+    .map((membership) => membership.role)
+    .filter((role) => ASSIGNABLE_ROLES.includes(role));
   const added = roles.filter((role) => !currentRoles.includes(role));
   const removed = currentRoles.filter((role) => !roles.includes(role));
 
@@ -250,8 +255,8 @@ export async function updateUserRoles(_prev: UserState, formData: FormData): Pro
           schoolId: auth.schoolId,
           userId,
           role,
-          staffId: current[0].staffId,
-          guardianId: current[0].guardianId,
+          staffId: current.find((m) => m.staffId)?.staffId ?? null,
+          guardianId: current.find((m) => m.guardianId)?.guardianId ?? null,
           status: "ACTIVE" as const,
         })),
       });
@@ -296,6 +301,12 @@ export async function setAccountSuspended(formData: FormData): Promise<void> {
   if (memberships.length === 0) {
     return;
   }
+  if (
+    memberships.some((m) => PRIVILEGED_ROLES.includes(m.role)) &&
+    !canAccess(auth.roles, LEADERSHIP)
+  ) {
+    redirect("/users?error=privileged");
+  }
   if (suspend && memberships.some((m) => m.role === "OWNER")) {
     const owners = await countOwners(auth.schoolId);
     if (owners <= 1) {
@@ -339,13 +350,19 @@ export async function resetUserPassword(
     return { error: "Missing account." };
   }
 
-  const membership = await prisma.membership.findFirst({
+  // EVERY membership, not the first: one user can hold several roles here, and
+  // an unordered findFirst could hand back the harmless one (TEACHER, PARENT)
+  // and let an office role reset a head's or proprietor's password.
+  const memberships = await prisma.membership.findMany({
     where: { schoolId: auth.schoolId, userId },
   });
-  if (!membership) {
+  if (memberships.length === 0) {
     return { error: "That account has no access to this school." };
   }
-  if (PRIVILEGED_ROLES.includes(membership.role) && !canAccess(auth.roles, LEADERSHIP)) {
+  if (
+    memberships.some((m) => PRIVILEGED_ROLES.includes(m.role)) &&
+    !canAccess(auth.roles, LEADERSHIP)
+  ) {
     return { error: "Only a proprietor or head can reset a leadership password." };
   }
 
