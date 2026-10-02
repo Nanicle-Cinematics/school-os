@@ -50,7 +50,7 @@ export type AuthContext = {
  * A redirect thrown on the first call is cached too, which is correct: a session
  * that is missing once is missing for the rest of the request.
  */
-export const requireAuth = cache(async (): Promise<AuthContext> => {
+const loadAuth = cache(async (): Promise<AuthContext> => {
   const result = await getSessionUser();
   if (!result) {
     redirect("/login");
@@ -117,6 +117,31 @@ export const requireAuth = cache(async (): Promise<AuthContext> => {
     isPlatformAdmin: user.isPlatformAdmin,
   };
 });
+
+/**
+ * The signed-in user, EVEN IF they are still on the temporary password.
+ *
+ * Only the change-password page and its action use this — they are where a
+ * temporary password gets replaced, so they cannot refuse it.
+ */
+export const requireAuthEvenIfTemporary = loadAuth;
+
+/**
+ * The single gate every tenant-scoped page, action and route goes through.
+ *
+ * ⚠️ A temporary password is refused HERE, not just in the layouts. The layouts
+ * divert a page load to /account/password, but a server action or an /api route
+ * never renders a layout — so a login still on the password the office read down
+ * the phone could call any action, or download the whole roll from
+ * /api/export, without ever choosing its own.
+ */
+export async function requireAuth(): Promise<AuthContext> {
+  const auth = await loadAuth();
+  if (auth.mustChangePassword) {
+    redirect("/account/password");
+  }
+  return auth;
+}
 
 /** requireAuth plus a role check. Use on pages that only some roles may open. */
 export async function requireRole(allowed: Role[]): Promise<AuthContext> {

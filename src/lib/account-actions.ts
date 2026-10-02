@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { requireAuth } from "@/lib/auth";
+import { requireAuthEvenIfTemporary as requireAuth } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { hashToken } from "@/lib/session";

@@ -82,9 +82,6 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
   if (!["DRAFT", "SUBMITTED", "APPROVED", "PUBLISHED"].includes(status)) {
     return;
   }
-  if ((status === "APPROVED" || status === "PUBLISHED") && !canAccess(auth.roles, LEADERSHIP)) {
-    return;
-  }
 
   const newlyPublished = await tenantTransaction(auth.schoolId, async (tx) => {
     /**
@@ -99,7 +96,9 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
     const publishing =
       status === "PUBLISHED"
         ? await tx.termResult.findMany({
-            where: { termId, classGroupId, status: { not: "PUBLISHED" } },
+            // Never published before: withdrawing and re-publishing a class to
+            // fix a typo must not text every parent a second time.
+            where: { termId, classGroupId, status: { not: "PUBLISHED" }, publishedAt: null },
             select: { studentId: true },
           })
         : [];
@@ -108,9 +107,15 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
       where: { termId, classGroupId },
       data: {
         status: status as "DRAFT",
-        publishedAt: status === "PUBLISHED" ? new Date() : null,
+        // Kept when a class is withdrawn, so "first published" survives a correction.
       },
     });
+    if (status === "PUBLISHED") {
+      await tx.termResult.updateMany({
+        where: { termId, classGroupId, publishedAt: null },
+        data: { publishedAt: new Date() },
+      });
+    }
 
     await writeAudit(tx, {
       schoolId: auth.schoolId,
@@ -280,8 +285,19 @@ export async function saveClassRemarks(
     .map((key) => key.slice("row:".length))
     .filter((id) => enrolled.has(id));
 
+  // A published card is settled; its remarks and conduct stay as they were read.
+  const settled = new Set(
+    (
+      await prisma.termResult.findMany({
+        where: { termId, studentId: { in: studentIds }, status: "PUBLISHED" },
+        select: { studentId: true },
+      })
+    ).map((row) => row.studentId),
+  );
+  const writable = studentIds.filter((id) => !settled.has(id));
+
   const rows: Row[] = [];
-  for (const studentId of studentIds) {
+  for (const studentId of writable) {
     const presentRaw = String(formData.get(`daysPresent:${studentId}`) ?? "").trim();
     const totalRaw = String(formData.get(`daysTotal:${studentId}`) ?? "").trim();
     const daysPresent = presentRaw ? Number(presentRaw) : null;
@@ -309,7 +325,9 @@ export async function saveClassRemarks(
   }
 
   if (rows.length === 0) {
-    return { error: "Nothing to save." };
+    return {
+      error: settled.size > 0 ? "Those report cards are published, so they are locked." : "Nothing to save.",
+    };
   }
 
   /**

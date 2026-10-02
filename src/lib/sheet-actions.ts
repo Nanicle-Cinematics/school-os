@@ -119,6 +119,19 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
     return { error: "This sheet is not open yet." };
   }
 
+  // Marks behind a published report card are frozen. Changing one would leave
+  // the card parents hold out of step with the sheet, and the next recompute
+  // would have to either rewrite the card or contradict it.
+  const published = await prisma.termResult.count({
+    where: { termId, classGroupId, status: "PUBLISHED" },
+  });
+  if (published > 0) {
+    return {
+      error:
+        "This class's results are already published, so the marks are locked. Ask a head or proprietor to withdraw the results first if a correction is needed.",
+    };
+  }
+
   const byId = new Map(assessments.map((a) => [a.id, a]));
 
   // The form is a convenience, not the authority: only pupils on this class's

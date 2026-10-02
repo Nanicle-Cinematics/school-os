@@ -270,6 +270,22 @@ export async function computeClassResults(
     computed.set(subjectId, perStudent);
   }
 
+  /**
+   * Pupils whose report card is PUBLISHED are settled — the term roll-up below
+   * already refuses to touch them, and the subject lines must follow suit. These
+   * rows used to be rewritten regardless, so an edited score plus a recompute
+   * changed the subject marks a parent was reading while the total and position
+   * above them stayed as published: a card that contradicted itself.
+   */
+  const publishedHere = new Set(
+    (
+      await tx.termResult.findMany({
+        where: { termId, studentId: { in: studentIds }, status: "PUBLISHED" },
+        select: { studentId: true },
+      })
+    ).map((row) => row.studentId),
+  );
+
   // Persist SubjectResults with per-subject positions.
   let skipped = 0;
   for (const subjectId of subjectIds) {
@@ -279,6 +295,9 @@ export async function computeClassResults(
     const sized = entries.filter((entry) => entry.total !== null).length;
 
     for (const entry of entries) {
+      if (publishedHere.has(entry.studentId)) {
+        continue;
+      }
       if (entry.total === null) {
         skipped += 1;
         // Remove a stale row rather than leaving last week's number behind.

@@ -18,6 +18,11 @@ import {
   reverseJournalEntry,
 } from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
+import { lockOn } from "@/lib/locks";
+
+const MAX_AMOUNT = new Prisma.Decimal("9999999999.99");
+const METHODS = ["CASH", "BANK_TRANSFER", "BANK_DEPOSIT", "MOBILE_MONEY", "CARD", "CHEQUE"];
+const MOMO_NETWORKS = ["MTN", "TELECEL", "AIRTELTIGO"];
 
 export type ActionState = { error?: string; ok?: string };
 
@@ -90,6 +95,18 @@ export async function recordVendorBill(
   if (!amount) {
     return { error: "Enter a valid amount greater than zero." };
   }
+  if (amount.greaterThan(MAX_AMOUNT)) {
+    return { error: "That amount is too large — check for an extra digit." };
+  }
+  const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+  if (dueDate && Number.isNaN(dueDate.getTime())) {
+    return { error: "That due date is not valid." };
+  }
+
+  const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { isActive: true } });
+  if (!vendor?.isActive) {
+    return { error: "Choose an active vendor." };
+  }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
     const billNo = await nextNumber(tx, auth.schoolId, "BILL", takenProbes.bill(tx, auth.schoolId));
@@ -103,7 +120,7 @@ export async function recordVendorBill(
         description,
         amount,
         balance: amount,
-        dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
+        dueDate,
         status: "DRAFT",
         recordedByUserId: auth.userId,
       },
@@ -134,6 +151,7 @@ export async function approveVendorBill(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    await lockOn(tx, `vendorBill:${id}`);
     const bill = await tx.vendorBill.findUnique({
       where: { id },
       select: {
@@ -208,8 +226,9 @@ export async function cancelVendorBill(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    await lockOn(tx, `vendorBill:${id}`);
     const bill = await tx.vendorBill.findUnique({ where: { id } });
-    if (!bill || bill.amountPaid.greaterThan(0)) {
+    if (!bill || bill.status === "CANCELLED" || bill.amountPaid.greaterThan(0)) {
       return;
     }
     await tx.vendorBill.update({ where: { id }, data: { status: "CANCELLED" } });
@@ -267,12 +286,48 @@ export async function recordVendorPayment(
     return { error: "Mobile money payments need the transaction reference." };
   }
 
+  if (amount.greaterThan(MAX_AMOUNT)) {
+    return { error: "That amount is too large — check for an extra digit." };
+  }
+  if (!METHODS.includes(method)) {
+    return { error: "Choose how the payment was made." };
+  }
+  if (momoNetwork && !MOMO_NETWORKS.includes(momoNetwork)) {
+    return { error: "Choose a valid mobile money network." };
+  }
+
+  try {
   await tenantTransaction(auth.schoolId, async (tx) => {
+    // One payment at a time per vendor: two at once would both read the same
+    // open balances, and could together pay out more than is owed.
+    await lockOn(tx, `vendorPayments:${vendorId}`);
+
+    const vendor = await tx.vendor.findUnique({
+      where: { id: vendorId },
+      select: { isActive: true },
+    });
+    if (!vendor || !vendor.isActive) {
+      throw new Error("VENDOR");
+    }
+
     const bills = await tx.vendorBill.findMany({
       where: { schoolId: auth.schoolId, vendorId, balance: { gt: 0 }, status: { in: ["APPROVED", "PARTIALLY_PAID"] } },
       orderBy: [{ dueDate: "asc" }, { billDate: "asc" }],
       select: { id: true, balance: true },
     });
+
+    /**
+     * ⚠️ A payment may never exceed what leadership has APPROVED the school owes.
+     *
+     * Bills need a second signature precisely so one person cannot move money
+     * alone; this action used to take any amount for any vendor and record the
+     * surplus as unallocated cash out, which walked around that signature
+     * entirely. Cash leaves only against an approved bill.
+     */
+    const owed = bills.reduce((acc, b) => acc.add(b.balance), new Prisma.Decimal(0));
+    if (amount.greaterThan(owed)) {
+      throw new Error(`OVERPAY:${owed.toFixed(2)}`);
+    }
 
     const paymentNo = await nextNumber(
       tx,
@@ -344,6 +399,18 @@ export async function recordVendorPayment(
     });
   });
 
+  } catch (error) {
+    if (error instanceof Error && error.message === "VENDOR") {
+      return { error: "Choose an active vendor." };
+    }
+    if (error instanceof Error && error.message.startsWith("OVERPAY:")) {
+      return {
+        error: `That is more than the approved bills owed to this vendor (GHS ${error.message.slice(8)}). Approve the bill first — a payment can only settle what leadership has signed off.`,
+      };
+    }
+    throw error;
+  }
+
   revalidatePath("/creditors");
   return { ok: "Payment recorded." };
 }
@@ -359,6 +426,7 @@ export async function reverseVendorPayment(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    await lockOn(tx, `vendorPayment:${paymentId}`);
     const payment = await tx.vendorPayment.findUnique({
       where: { id: paymentId },
       include: { allocations: true },

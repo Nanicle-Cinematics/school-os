@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireAuth } from "@/lib/auth";
+import { requireAuthEvenIfTemporary as requireAuth } from "@/lib/auth";
 import { landingFor } from "@/lib/permissions";
 import { PasswordForm } from "./password-form";
 
