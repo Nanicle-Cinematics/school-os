@@ -7,13 +7,14 @@ import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { normalisePhone } from "@/lib/sms-shared";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { clearAttempts, clientIp, takeAttempt } from "@/lib/rate-limit";
 import { createSession, destroySession } from "@/lib/session";
 
 export type LoginState = { error?: string };
 
 /** Wrong passwords before the identifier is locked out. */
 const MAX_LOGIN_ATTEMPTS = 8;
-/** How long a lockout lasts once triggered. */
+/** How long a bucket stays full once exhausted. */
 const LOCKOUT_MINUTES = 15;
 
 /**
@@ -24,44 +25,35 @@ const LOCKOUT_MINUTES = 15;
 const DUMMY_HASH = hashPassword("not-a-real-password");
 
 /**
- * Count this attempt BEFORE the password is looked at, atomically.
+ * Three buckets, all claimed BEFORE the password is looked at, each atomically.
  *
- * It used to read the counter, check the password, then increment on a miss —
- * so a burst of parallel guesses all read "not locked" and all got checked.
- * Incrementing first makes the database the arbiter: only the first
- * MAX_LOGIN_ATTEMPTS requests in a window ever reach verifyPassword, however
- * they are interleaved. A correct password clears the counter afterwards.
+ * Why three: one counter per account lets anyone who knows a phone number lock
+ * its owner out for 15 minutes by guessing wrongly 8 times. So the tight limit
+ * is per (account, address) — the attacker exhausts only THEIR own allowance —
+ * and the per-account ceiling is set well above it, so it still stops a
+ * distributed guesser without an easy way to lock a real person out. The
+ * per-address bucket stops one machine spraying across many accounts.
  */
-async function claimAttempt(identifier: string): Promise<boolean> {
-  const existing = await withBypass(() =>
-    prisma.loginAttempt.findUnique({ where: { identifier } }),
-  );
-  if (existing?.lockedUntil) {
-    if (existing.lockedUntil > new Date()) {
-      return false;
-    }
-    // The lockout ran out: start a fresh count rather than re-locking on the
-    // very next typo because the old total was still sitting there.
-    await withBypass(() => prisma.loginAttempt.deleteMany({ where: { identifier } }));
-  }
+const PAIR_MAX = MAX_LOGIN_ATTEMPTS;
+const ACCOUNT_MAX = 25;
+const ADDRESS_MAX = 40;
+const WINDOW_MS = LOCKOUT_MINUTES * 60 * 1000;
 
-  const attempt = await withBypass(() =>
-    prisma.loginAttempt.upsert({
-      where: { identifier },
-      create: { identifier, attempts: 1 },
-      update: { attempts: { increment: 1 } },
-    }),
-  );
-  if (attempt.attempts > MAX_LOGIN_ATTEMPTS) {
-    await withBypass(() =>
-      prisma.loginAttempt.update({
-        where: { identifier },
-        data: { lockedUntil: new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) },
-      }),
-    );
-    return false;
-  }
-  return true;
+const keys = (account: string, ip: string) => ({
+  pair: `login:${account}|${ip}`,
+  account: `login-acct:${account}`,
+  address: `login-ip:${ip}`,
+});
+
+async function claimAttempt(account: string, ip: string): Promise<boolean> {
+  const k = keys(account, ip);
+  // Every bucket is claimed (no short-circuit) so each keeps counting honestly.
+  const results = await Promise.all([
+    takeAttempt(k.pair, PAIR_MAX, WINDOW_MS),
+    takeAttempt(k.account, ACCOUNT_MAX, WINDOW_MS),
+    takeAttempt(k.address, ADDRESS_MAX, WINDOW_MS),
+  ]);
+  return results.every(Boolean);
 }
 
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
@@ -78,7 +70,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const asPhone = normalisePhone(identifier);
   const lockKey = asPhone ?? identifier;
 
-  if (!(await claimAttempt(lockKey))) {
+  const ip = await clientIp();
+  if (!(await claimAttempt(lockKey, ip))) {
     return { error: `Too many attempts. Try again in ${LOCKOUT_MINUTES} minutes.` };
   }
 
@@ -114,8 +107,10 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (!(await verifyPassword(password, user.passwordHash))) {
     return invalid;
   }
-  // A correct password clears the count building up against this identifier.
-  await withBypass(() => prisma.loginAttempt.deleteMany({ where: { identifier: lockKey } }));
+  // A correct password clears what this person's own typos built up. The shared
+  // per-address bucket is left to expire: it is not theirs to reset.
+  const k = keys(lockKey, ip);
+  await clearAttempts(k.pair, k.account);
 
   // A platform admin deliberately belongs to no school — the Nanicle console
   // sits outside every tenant. Requiring a membership here locked the only

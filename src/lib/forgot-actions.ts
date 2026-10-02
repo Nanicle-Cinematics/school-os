@@ -1,5 +1,6 @@
 "use server";
 
+import { clientIp, takeAttempt } from "@/lib/rate-limit";
 import { requestPasswordReset, completePasswordReset } from "@/lib/password-reset";
 
 /**
@@ -25,8 +26,20 @@ export type ForgotState = {
 const NEUTRAL =
   "If that number has a parent login, a code is on its way. It expires in 15 minutes.";
 
+/** Generous: a whole mobile carrier can share one outward address. */
+const RESET_REQUESTS_PER_IP_HOUR = 20;
+
 export async function askForCode(_prev: ForgotState, formData: FormData): Promise<ForgotState> {
   const phone = String(formData.get("phone") ?? "").trim();
+
+  // Each code costs the school an SMS, so one address may ask for only so many an
+  // hour, whichever numbers it types. Over the limit answers exactly like a sent
+  // code, so the limit itself is not a way to probe who has a login.
+  const ip = await clientIp();
+  if (!(await takeAttempt(`reset-ip:${ip}`, RESET_REQUESTS_PER_IP_HOUR, 60 * 60 * 1000))) {
+    return { sent: true, phone, ok: NEUTRAL };
+  }
+
   const outcome = await requestPasswordReset(phone);
 
   switch (outcome.kind) {

@@ -35,14 +35,14 @@ const FIELD_FOR: { match: RegExp; field: "student" | "amount" | "reference" }[] 
   { match: /transaction reference/i, field: "reference" },
 ];
 
-function fieldError(error: string | undefined, field: string) {
-  if (!error) return undefined;
+function fieldError(error: string | undefined, field: string, duplicate?: boolean) {
+  if (!error || duplicate) return undefined;
   return FIELD_FOR.find((rule) => rule.match.test(error))?.field === field ? error : undefined;
 }
 
 /** True when the message belongs to a field, so the card does not repeat it. */
-function isFieldError(error: string | undefined) {
-  return Boolean(error && FIELD_FOR.some((rule) => rule.match.test(error)));
+function isFieldError(error: string | undefined, duplicate?: boolean) {
+  return Boolean(!duplicate && error && FIELD_FOR.some((rule) => rule.match.test(error)));
 }
 
 export function RecordForm({ students }: { students: StudentOption[] }) {
@@ -103,7 +103,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
           />
         </Field>
 
-        <Field label="Student" error={fieldError(state.error, "student")}>
+        <Field label="Student" error={fieldError(state.error, "student", state.duplicate)}>
           <select
             value={studentId}
             onChange={(event) => setStudentId(event.target.value)}
@@ -136,7 +136,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
       ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Amount (GHS)" error={fieldError(state.error, "amount")}>
+        <Field label="Amount (GHS)" error={fieldError(state.error, "amount", state.duplicate)}>
           <input
             type="text"
             inputMode="decimal"
@@ -179,7 +179,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
         <Field
           label="Reference"
           hint={method === "MOBILE_MONEY" ? "Required for mobile money." : "Slip or cheque number."}
-          error={fieldError(state.error, "reference")}
+          error={fieldError(state.error, "reference", state.duplicate)}
         >
           <input type="text" name="reference" className={inputClass} />
         </Field>
@@ -212,9 +212,16 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
         </Field>
       </div>
 
+      {state.duplicate ? (
+        <label className="mt-4 flex items-start gap-2 text-sm text-slate-700">
+          <input type="checkbox" name="allowDuplicate" className="mt-0.5" />
+          <span>This is a separate payment — record it anyway.</span>
+        </label>
+      ) : null}
+
       {/* Only what no field claimed. A message shown beside the control AND
           repeated in a banner reads as two problems. */}
-      {state.error && !isFieldError(state.error) ? (
+      {state.error && !isFieldError(state.error, state.duplicate) ? (
         <div className="mt-4">
           <Alert tone="error">{state.error}</Alert>
         </div>

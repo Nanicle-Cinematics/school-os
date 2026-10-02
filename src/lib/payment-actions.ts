@@ -23,7 +23,7 @@ import { queueTransactionalSms } from "@/lib/transactional-sms";
 import { TRANSACTIONAL } from "@/lib/message-defaults";
 import { normalisePhone } from "@/lib/sms";
 
-export type PaymentState = { error?: string; ok?: string };
+export type PaymentState = { error?: string; ok?: string; duplicate?: boolean };
 
 const MAX_PAYMENT = new Prisma.Decimal("9999999999.99");
 const METHODS = ["CASH", "BANK_TRANSFER", "BANK_DEPOSIT", "MOBILE_MONEY", "CARD", "CHEQUE"];
@@ -45,6 +45,7 @@ export async function recordPayment(
   const reference = String(formData.get("reference") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
   const paidAtRaw = String(formData.get("paidAt") ?? "");
+  const allowDuplicate = formData.get("allowDuplicate") === "on";
 
   if (!studentId) {
     return { error: "Choose the student this payment is for." };
@@ -114,24 +115,35 @@ export async function recordPayment(
         throw new Error("STUDENT_NOT_FOUND");
       }
 
-      const duplicate = await tx.payment.findFirst({
-        where: {
-          status: "CONFIRMED",
-          OR: [
-            // A transaction id is unique to the school, whoever it was recorded against.
-            ...(method === "MOBILE_MONEY" && reference ? [{ method: "MOBILE_MONEY" as const, reference }] : []),
-            {
-              studentId,
-              amount,
-              method: method as "CASH",
-              createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
-            },
-          ],
-        },
-        select: { receiptNo: true },
-      });
-      if (duplicate) {
-        throw new Error(`DUPLICATE:${duplicate.receiptNo}`);
+      // A transaction id is unique to the school, whoever it was recorded against,
+      // and a second payment with it is never legitimate: no override.
+      if (method === "MOBILE_MONEY" && reference) {
+        const sameReference = await tx.payment.findFirst({
+          where: { status: "CONFIRMED", method: "MOBILE_MONEY", reference },
+          select: { receiptNo: true },
+        });
+        if (sameReference) {
+          throw new Error(`REFERENCE:${sameReference.receiptNo}`);
+        }
+      }
+
+      // Same student, amount and method moments ago is far more often a double
+      // press than a second payment — but two identical fees paid back to back
+      // do happen, so the office can confirm it is deliberate.
+      if (!allowDuplicate) {
+        const recent = await tx.payment.findFirst({
+          where: {
+            studentId,
+            amount,
+            method: method as "CASH",
+            status: "CONFIRMED",
+            createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+          },
+          select: { receiptNo: true },
+        });
+        if (recent) {
+          throw new Error(`DUPLICATE:${recent.receiptNo}`);
+        }
       }
 
       const receipt = await nextNumber(
@@ -220,9 +232,15 @@ export async function recordPayment(
     if (error instanceof Error && error.message === "STUDENT_NOT_FOUND") {
       return { error: "That student no longer exists." };
     }
+    if (error instanceof Error && error.message.startsWith("REFERENCE:")) {
+      return {
+        error: `That mobile money reference was already used for receipt ${error.message.slice(10)}. A transaction can only be recorded once.`,
+      };
+    }
     if (error instanceof Error && error.message.startsWith("DUPLICATE:")) {
       return {
-        error: `This looks like a payment already recorded (${error.message.slice(10)}) — same student and amount a moment ago, or the same mobile money reference. Check Payments before recording it again.`,
+        duplicate: true,
+        error: `The same pupil paid the same sum the same way a moment ago (receipt ${error.message.slice(10)}). If this is a second payment, tick the box below and record it again; if not, it is already saved.`,
       };
     }
     throw error;
