@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { sameGuardian } from "@/lib/guardian-match";
 import { normalisePhone } from "@/lib/sms-shared";
 
 // Queries are sequential rather than Promise.all — see the note in class-data.ts:
@@ -112,12 +113,20 @@ function readGender(value: string): "MALE" | "FEMALE" | null {
 function readDate(value: string): Date | null {
   const v = value.trim();
   if (!v) return null;
-  // dd/mm/yyyy is what a Ghanaian office writes; ISO is what Excel exports.
   const dmy = v.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
   const date = dmy
     ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]))
     : new Date(v);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (Number.isNaN(date.getTime())) return null;
+  // new Date(2010, 1, 31) is quietly 3 March. A day that does not exist is a
+  // typo, and it must say so rather than record a different birthday.
+  if (dmy && (date.getDate() !== Number(dmy[1]) || date.getMonth() !== Number(dmy[2]) - 1)) {
+    return null;
+  }
+  // A child enrolled at a school was born this century and not tomorrow.
+  const year = date.getFullYear();
+  if (year < 1990 || date.getTime() > Date.now()) return null;
+  return date;
 }
 
 export const TEMPLATE_HEADERS = [
@@ -167,6 +176,20 @@ export async function checkImport(text: string): Promise<{
     }
   }
 
+  // Who each number already belongs to — in the school, and so far in this file.
+  // A number that matches a DIFFERENT name is almost always a typo, and linking
+  // the child to that guardian would hand another family their fees and results.
+  const guardianNameByPhone = new Map<string, string>();
+  for (const guardian of await prisma.guardian.findMany({
+    where: { deletedAt: null },
+    select: { phone: true, firstName: true, lastName: true },
+  })) {
+    const key = normalisePhone(guardian.phone);
+    if (key) {
+      guardianNameByPhone.set(key, `${guardian.firstName} ${guardian.lastName}`);
+    }
+  }
+
   const houseByName = new Map(houses.map((house) => [house.name.toLowerCase(), house.id]));
   const takenAdmission = new Set(existing.map((student) => student.admissionNo.toLowerCase()));
   const seenInFile = new Set<string>();
@@ -179,12 +202,16 @@ export async function checkImport(text: string): Promise<{
     const lastName = pick(raw, "last_name", "lastname", "surname");
     const middleName = pick(raw, "middle_name", "middlename") || null;
     const gender = readGender(pick(raw, "gender", "sex"));
-    const dateOfBirth = readDate(pick(raw, "date_of_birth", "dob", "birth_date"));
+    const dobRaw = pick(raw, "date_of_birth", "dob", "birth_date");
+    const dateOfBirth = readDate(dobRaw);
     const className = pick(raw, "class", "class_name", "classroom");
     const admissionRaw = pick(raw, "admission_no", "admission_number", "admissionno");
     const houseName = pick(raw, "house");
     const residencyRaw = pick(raw, "residency", "boarding").toLowerCase();
 
+    if (dobRaw && !dateOfBirth) {
+      warnings.push(`date of birth "${dobRaw}" is not a real date — left blank`);
+    }
     if (!firstName) errors.push("no first name");
     if (!lastName) errors.push("no surname");
     if (!gender) errors.push("gender must be M or F");
@@ -227,6 +254,15 @@ export async function checkImport(text: string): Promise<{
       } else if (!normalisePhone(guardianPhone)) {
         warnings.push("guardian phone is not a Ghanaian mobile — guardian skipped");
       } else {
+        const phoneKey = normalisePhone(guardianPhone) as string;
+        const onFile = guardianNameByPhone.get(phoneKey);
+        if (onFile && !sameGuardian(guardianName, onFile)) {
+          errors.push(
+            `phone ${guardianPhone.trim()} is already on file for ${onFile}, not ${guardianName.trim()} — check the number`,
+          );
+        } else if (!onFile) {
+          guardianNameByPhone.set(phoneKey, guardianName.trim());
+        }
         const parts = guardianName.trim().split(/\s+/);
         guardian = {
           firstName: parts[0],

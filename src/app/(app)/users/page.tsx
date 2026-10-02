@@ -111,12 +111,12 @@ export default async function UsersPage({ searchParams }: PageProps<"/users">) {
                           className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                             suspended
                               ? "bg-danger-tint text-danger-ink"
-                              : entry.user.passwordHash
+                              : entry.user.hasPassword
                                 ? "bg-success-tint text-success-ink"
                                 : "bg-warning-tint text-warning-ink"
                           }`}
                         >
-                          {suspended ? "suspended" : entry.user.passwordHash ? "active" : "no password"}
+                          {suspended ? "suspended" : entry.user.hasPassword ? "active" : "no password"}
                         </span>
                       </td>
                     </Row>

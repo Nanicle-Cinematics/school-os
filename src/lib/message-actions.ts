@@ -80,7 +80,12 @@ export async function previewCampaign(
   );
 
   if (recipients.length === 0) {
-    return { error: "No recipients match that audience — nobody has a usable phone number." };
+    return {
+      error:
+        audienceType === "CLASS" || audienceType === "LEVEL"
+          ? "Choose at least one class or level to send to."
+          : "No recipients match that audience — nobody has a usable phone number.",
+    };
   }
 
   const rendered = recipients.slice(0, 3).map((recipient) => ({
@@ -158,7 +163,12 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
   const recipients = await resolveAudience(auth.schoolId, audienceType, filter, auth.schoolName);
 
   if (recipients.length === 0) {
-    return { error: "No recipients match that audience." };
+    return {
+      error:
+        audienceType === "CLASS" || audienceType === "LEVEL"
+          ? "Choose at least one class or level to send to."
+          : "No recipients match that audience.",
+    };
   }
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);

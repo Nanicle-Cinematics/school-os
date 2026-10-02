@@ -82,6 +82,16 @@ export async function resolveAudience(
     );
   }
 
+  // ⚠️ "Class" or "Level" with nothing ticked means NOBODY, not everybody. The
+  // filters below only apply when ids were given, so an empty selection used to
+  // fall through to every active pupil and text the whole school.
+  if (type === "CLASS" && !filter.classGroupIds?.length) {
+    return [];
+  }
+  if (type === "LEVEL" && !filter.levelIds?.length) {
+    return [];
+  }
+
   const students = await prisma.student.findMany({
     where: {
       status: "ACTIVE",
