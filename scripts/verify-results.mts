@@ -8,7 +8,7 @@
  * code that is otherwise RSC-only.
  */
 import { PrismaClient, Prisma } from "@prisma/client";
-import { computeClassResults, computeSubjectScore, rank, ordinal } from "@/lib/results-engine";
+import { computeClassResults, computeSubjectScore, gradeFor, rank, ordinal } from "@/lib/results-engine";
 
 const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
 
@@ -65,6 +65,18 @@ const d = (n: number) => new Prisma.Decimal(n);
   const positions = rank(items, (i) => i.v);
   const got = items.map((i) => positions.get(i));
   assert("ties share a position and the next skips", JSON.stringify(got) === "[1,2,2,4]", got.join(","));
+}
+
+{
+  // Custom bands with a gap between them: a score inside the gap used to get no grade.
+  const bands = [
+    { grade: "A", minScore: d(80), maxScore: d(100), points: 1, remark: "", isPass: true },
+    { grade: "B", minScore: d(70), maxScore: d(79), points: 2, remark: "", isPass: true },
+    { grade: "C", minScore: d(60), maxScore: d(69), points: 3, remark: "", isPass: true },
+  ];
+  assert("a score in a band gap takes the band it reached", gradeFor(bands, d(79.5))?.grade === "B");
+  assert("an exact edge still matches its band", gradeFor(bands, d(80))?.grade === "A");
+  assert("a score below every band has no grade", gradeFor(bands, d(40)) === null);
 }
 
 assert("ordinals", ordinal(1) === "1st" && ordinal(2) === "2nd" && ordinal(11) === "11th" && ordinal(23) === "23rd");

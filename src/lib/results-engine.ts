@@ -98,10 +98,19 @@ export function gradeFor(bands: Band[], score: Prisma.Decimal | null) {
   if (score === null) {
     return null;
   }
+  const exact = bands.find(
+    (band) => score.greaterThanOrEqualTo(band.minScore) && score.lessThanOrEqualTo(band.maxScore),
+  );
+  if (exact) {
+    return exact;
+  }
+  // A score between two bands — 79.5 with bands 70–79 and 80–100, which a school
+  // can enter and nothing checks — used to get no grade at all. It takes the band
+  // it has reached: the highest one whose minimum it clears.
   return (
-    bands.find(
-      (band) => score.greaterThanOrEqualTo(band.minScore) && score.lessThanOrEqualTo(band.maxScore),
-    ) ?? null
+    bands
+      .filter((band) => score.greaterThanOrEqualTo(band.minScore))
+      .sort((a, b) => b.minScore.comparedTo(a.minScore))[0] ?? null
   );
 }
 
@@ -392,19 +401,22 @@ export async function computeClassResults(
       };
     }
 
+    // Summing 2-decimal scores in floating point leaves noise in the last digits,
+    // and two pupils on the same marks then ranked a place apart. Round the sum.
+    const exactTotal = Math.round(totalMarks * 100) / 100;
     const possibleMarks = counted.size * 100;
-    const percentage = (totalMarks / possibleMarks) * 100;
+    const percentage = (exactTotal / possibleMarks) * 100;
 
     return {
       studentId,
       subjectsCount: marked,
       subjectsOffered: counted.size,
       possibleMarks,
-      totalMarks,
+      totalMarks: exactTotal,
       // The average is per OFFERED subject, so it agrees with the total above
       // it on the card: 624 of 900 is an average of 69.3, not the 78 that
       // dividing by the eight marked subjects would print beside it.
-      average: totalMarks / counted.size,
+      average: exactTotal / counted.size,
       percentage,
       aggregate: aggregateOf(aggregatePoints, aggregateSubjects),
     };

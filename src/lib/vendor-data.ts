@@ -15,7 +15,9 @@ export async function getVendors(filters: { q?: string } = {}) {
     orderBy: { name: "asc" },
     include: {
       bills: {
-        where: { status: { not: "CANCELLED" } },
+        // Approved bills only. A DRAFT is awaiting a second signature: the school
+        // does not owe it yet, and payments cannot be made against it.
+        where: { status: { in: ["APPROVED", "PARTIALLY_PAID", "PAID"] } },
         select: { balance: true },
       },
     },

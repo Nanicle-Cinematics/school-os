@@ -105,7 +105,33 @@ export async function getTermCashPosition(termId: string) {
 
   const income = collected._sum.amountPaid ?? new Prisma.Decimal(0);
   const outgoing = spent._sum.amount ?? new Prisma.Decimal(0);
-  return { income, outgoing, net: income.sub(outgoing) };
+
+  /**
+   * Cash that arrived this term but is not applied to ANY bill — an advance, or
+   * the part of a payment beyond what was owed. It is not income yet (nothing has
+   * been earned against it), so it stays out of `income`, but leaving it out of
+   * the statement altogether made money the school holds invisible.
+   */
+  const term = await prisma.term.findUnique({
+    where: { id: termId },
+    select: { startDate: true, endDate: true },
+  });
+  let unapplied = new Prisma.Decimal(0);
+  if (term?.startDate && term?.endDate) {
+    const received = await prisma.payment.findMany({
+      where: { status: "CONFIRMED", paidAt: { gte: term.startDate, lte: term.endDate } },
+      select: { amount: true, allocations: { select: { amount: true } } },
+    });
+    for (const payment of received) {
+      const applied = payment.allocations.reduce((sum, a) => sum.add(a.amount), new Prisma.Decimal(0));
+      const left = payment.amount.sub(applied);
+      if (left.greaterThan(0)) {
+        unapplied = unapplied.add(left);
+      }
+    }
+  }
+
+  return { income, outgoing, net: income.sub(outgoing), unapplied };
 }
 
 /**
@@ -152,5 +178,6 @@ export async function getIncomeExpenditureStatement(termId: string) {
     expenditureByCategory,
     expenditure: position.outgoing,
     net: position.net,
+    unapplied: position.unapplied,
   };
 }

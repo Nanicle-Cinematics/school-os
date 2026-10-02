@@ -10,6 +10,7 @@ import {
   generateInvoicesForTerm,
   groupSkipped,
   recalcInvoice,
+  syncCarriedForward,
   type BlockedGroup,
 } from "@/lib/invoice-engine";
 import { writeAudit } from "@/lib/audit";
@@ -116,6 +117,9 @@ export async function cancelInvoice(formData: FormData): Promise<void> {
         actorUserId: auth.userId,
       });
     }
+    // A cancelled invoice stops being carried into the next one.
+    await syncCarriedForward(tx, invoice.studentId);
+
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,
@@ -138,6 +142,9 @@ export async function recomputeInvoice(formData: FormData): Promise<void> {
   if (!invoiceId) {
     return;
   }
-  await tenantTransaction(auth.schoolId, (tx) => recalcInvoice(tx, invoiceId));
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    const invoice = await recalcInvoice(tx, invoiceId);
+    await syncCarriedForward(tx, invoice.studentId);
+  });
   revalidatePath(`/invoices/${invoiceId}`);
 }

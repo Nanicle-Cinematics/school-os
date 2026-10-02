@@ -107,7 +107,7 @@ export function billAgeBucket(bill: Dateable, now = new Date()): AgeBucket {
 
 export function billAgeFilterWhere(bucket: AgeBucket | undefined, now = new Date()) {
   if (!bucket) return {};
-  const owed = { balance: { gt: 0 }, status: { not: "CANCELLED" as const } };
+  const owed = { balance: { gt: 0 }, status: { in: ["APPROVED" as const, "PARTIALLY_PAID" as const] } };
   const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
   switch (bucket) {
     case "CURRENT":

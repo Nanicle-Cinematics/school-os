@@ -95,7 +95,9 @@ export async function getPromotionPlan(
   const defaultDestination = sameStream?.id ?? destinationClasses[0]?.id ?? null;
 
   const roster = await prisma.enrollment.findMany({
-    where: { classGroupId, academicYearId: sourceYearId },
+    // Withdrawn pupils left the class; offering them here promoted them into next
+    // year as ACTIVE.
+    where: { classGroupId, academicYearId: sourceYearId, status: { not: "WITHDRAWN" } },
     include: {
       student: {
         select: { id: true, admissionNo: true, firstName: true, lastName: true, status: true },

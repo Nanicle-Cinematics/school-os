@@ -9,7 +9,7 @@ import { FINANCE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
-import { allocateFifo, recalcInvoice } from "@/lib/invoice-engine";
+import { allocateFifo, recalcInvoice, syncCarriedForward } from "@/lib/invoice-engine";
 import {
   cashAccountIdForMethod,
   findJournalEntryForSource,
@@ -185,6 +185,9 @@ export async function recordPayment(
         await recalcInvoice(tx, allocation.invoiceId);
       }
 
+      // Paying off an old invoice shrinks what the newer ones carry forward.
+      await syncCarriedForward(tx, studentId);
+
       const allocated = allocations.reduce(
         (acc, a) => acc.add(a.amount),
         new Prisma.Decimal(0),
@@ -332,6 +335,7 @@ export async function reversePayment(formData: FormData): Promise<void> {
     for (const invoiceId of invoiceIds) {
       await recalcInvoice(tx, invoiceId);
     }
+    await syncCarriedForward(tx, payment.studentId);
 
     // Best-effort: there is one only if the accounts were mapped when the
     // payment was originally recorded.

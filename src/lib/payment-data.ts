@@ -1,11 +1,14 @@
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, PaymentMethod } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export async function getPaymentList(filters: { q?: string; method?: string }) {
   const where: Prisma.PaymentWhereInput = {
-    ...(filters.method ? { method: filters.method as Prisma.EnumPaymentMethodFilter["equals"] } : {}),
+    // From the URL: an unknown value is ignored rather than crashing the page.
+    ...(filters.method && filters.method in PaymentMethod
+      ? { method: filters.method as PaymentMethod }
+      : {}),
     ...(filters.q
       ? {
           OR: [
