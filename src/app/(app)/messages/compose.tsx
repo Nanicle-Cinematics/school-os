@@ -23,12 +23,16 @@ export function Compose({
   templates,
   classGroups,
   levels,
-  smsEnabled,
+  canSend,
+  gatewayConfigured,
 }: {
   templates: Template[];
   classGroups: ClassOption[];
   levels: LevelOption[];
-  smsEnabled: boolean;
+  /** SMS is switched on AND a provider is chosen for this school — what Send requires. */
+  canSend: boolean;
+  /** The platform has gateway credentials; without them a send is recorded as a dry run. */
+  gatewayConfigured: boolean;
 }) {
   const [preview, previewAction] = useActionState<PreviewState, FormData>(previewCampaign, {});
   const [send, sendAction] = useActionState<SendState, FormData>(sendCampaign, {});
@@ -49,10 +53,15 @@ export function Compose({
     <div className="rounded-card border border-hairline bg-surface p-4 lg:p-5">
       <h2 className="text-sm font-semibold text-slate-900">Compose message</h2>
 
-      {!smsEnabled ? (
+      {!canSend ? (
         <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-ink">
-          SMS is switched off in Settings, and no gateway credentials are configured. You can still
-          compose and preview — messages will be recorded as a dry run and nothing will be sent.
+          SMS is switched off for this school, so Send is refused. You can still compose and preview;
+          turn it on under Settings → SMS and choose a provider to send.
+        </p>
+      ) : !gatewayConfigured ? (
+        <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-ink">
+          No SMS gateway is configured on the platform yet, so messages are recorded as a dry run and
+          nothing is actually sent.
         </p>
       ) : null}
 

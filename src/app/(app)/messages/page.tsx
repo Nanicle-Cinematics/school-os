@@ -99,7 +99,10 @@ export default async function MessagesPage() {
         templates={templates}
         classGroups={classGroups}
         levels={levels}
-        smsEnabled={Boolean(settings?.smsEnabled) && gatewayConfigured}
+        // The same test sendCampaign applies, so the page never promises a send the
+        // action will refuse.
+        canSend={Boolean(settings?.smsEnabled && settings?.smsProvider)}
+        gatewayConfigured={gatewayConfigured}
       />
 
       <Card title="Campaigns">

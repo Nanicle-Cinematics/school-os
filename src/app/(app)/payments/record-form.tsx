@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState, type FormEvent } from "react";
+import { useActionState, useEffect, useRef, useState, type FormEvent } from "react";
 import { recordPayment, type PaymentState } from "@/lib/payment-actions";
 import { MAX_ATTACHMENT_BYTES } from "@/lib/attachment-constants";
 import { SubmitButton } from "../submit-button";
@@ -49,6 +49,33 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
   const [state, formAction] = useActionState<PaymentState, FormData>(recordPayment, {});
   const [studentId, setStudentId] = useState("");
   const [method, setMethod] = useState("CASH");
+  // React clears an uncontrolled form once its action returns, so a refusal (the
+  // duplicate warning above all) wiped what the bursar had typed and the "record it
+  // anyway" box then submitted an empty amount. These are held in state instead.
+  const [amount, setAmount] = useState("");
+  const [reference, setReference] = useState("");
+  const [note, setNote] = useState("");
+  const [momoNetwork, setMomoNetwork] = useState("MTN");
+  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+  // React resets the whole form to its defaults AFTER an action returns. Text inputs
+  // survive because their value is mirrored into the attribute, but a <select> goes back
+  // to its FIRST option and React never re-applies the state value (the student dropdown
+  // reverted to "Choose a student…", and its `required` then silently blocked the
+  // resubmit). So the selects are put back from state once the reset has happened.
+  const resultKey = `${state.error ?? ""}|${state.duplicate ? 1 : 0}|${state.ok ?? ""}`;
+  const studentSelect = useRef<HTMLSelectElement>(null);
+  const methodSelect = useRef<HTMLSelectElement>(null);
+  const networkSelect = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (studentSelect.current) studentSelect.current.value = studentId;
+      if (methodSelect.current) methodSelect.current.value = method;
+      if (networkSelect.current) networkSelect.current.value = momoNetwork;
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Re-run on every action result; the values themselves are read when it fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultKey]);
   const [query, setQuery] = useState("");
   const slipRef = useRef<HTMLInputElement>(null);
   // Caught before the request goes out. Server Actions cap the request body
@@ -76,7 +103,6 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
     : students;
 
   const selected = students.find((s) => s.id === studentId);
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <form
@@ -105,6 +131,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
 
         <Field label="Student" error={fieldError(state.error, "student", state.duplicate)}>
           <select
+            ref={studentSelect}
             value={studentId}
             onChange={(event) => setStudentId(event.target.value)}
             className={inputClass}
@@ -141,6 +168,8 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
             type="text"
             inputMode="decimal"
             name="amount"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
             placeholder="0.00"
             required
             className={inputClass}
@@ -149,6 +178,7 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
 
         <Field label="Method">
           <select
+            ref={methodSelect}
             name="method"
             value={method}
             onChange={(event) => setMethod(event.target.value)}
@@ -164,7 +194,13 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
 
         {method === "MOBILE_MONEY" ? (
           <Field label="Network">
-            <select name="momoNetwork" className={inputClass} defaultValue="MTN">
+            <select
+              ref={networkSelect}
+              name="momoNetwork"
+              className={inputClass}
+              value={momoNetwork}
+              onChange={(event) => setMomoNetwork(event.target.value)}
+            >
               <option value="MTN">MTN</option>
               <option value="TELECEL">Telecel</option>
               <option value="AIRTELTIGO">AirtelTigo</option>
@@ -172,7 +208,13 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
           </Field>
         ) : (
           <Field label="Date received">
-            <input type="date" name="paidAt" defaultValue={today} className={inputClass} />
+            <input
+              type="date"
+              name="paidAt"
+              value={paidAt}
+              onChange={(event) => setPaidAt(event.target.value)}
+              className={inputClass}
+            />
           </Field>
         )}
 
@@ -181,21 +223,39 @@ export function RecordForm({ students }: { students: StudentOption[] }) {
           hint={method === "MOBILE_MONEY" ? "Required for mobile money." : "Slip or cheque number."}
           error={fieldError(state.error, "reference", state.duplicate)}
         >
-          <input type="text" name="reference" className={inputClass} />
+          <input
+            type="text"
+            name="reference"
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            className={inputClass}
+          />
         </Field>
       </div>
 
       {method === "MOBILE_MONEY" ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Date received">
-            <input type="date" name="paidAt" defaultValue={today} className={inputClass} />
+            <input
+              type="date"
+              name="paidAt"
+              value={paidAt}
+              onChange={(event) => setPaidAt(event.target.value)}
+              className={inputClass}
+            />
           </Field>
         </div>
       ) : null}
 
       <div className="mt-3">
         <Field label="Note (optional)">
-          <input type="text" name="note" className={inputClass} />
+          <input
+            type="text"
+            name="note"
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            className={inputClass}
+          />
         </Field>
 
         {/* The bank slip or momo screenshot. Optional — cash across the counter
