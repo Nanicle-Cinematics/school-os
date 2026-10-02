@@ -96,7 +96,16 @@ export async function deleteLevel(formData: FormData): Promise<void> {
     return;
   }
 
-  await prisma.level.delete({ where: { id } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.level.delete({ where: { id} });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "level.delete",
+      entity: "Level",
+      entityId: id,
+    });
+  });
   refresh();
 }
 
@@ -148,7 +157,16 @@ export async function deleteHouse(formData: FormData): Promise<void> {
     return;
   }
 
-  await prisma.house.delete({ where: { id } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.house.delete({ where: { id} });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "house.delete",
+      entity: "House",
+      entityId: id,
+    });
+  });
   refresh();
 }
 
@@ -201,7 +219,16 @@ export async function deleteProgramme(formData: FormData): Promise<void> {
     return;
   }
 
-  await prisma.programme.delete({ where: { id } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.programme.delete({ where: { id} });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "programme.delete",
+      entity: "Programme",
+      entityId: id,
+    });
+  });
   refresh();
 }
 

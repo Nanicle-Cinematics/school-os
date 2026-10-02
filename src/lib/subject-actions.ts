@@ -6,7 +6,8 @@ import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { prisma, tenantTransaction } from "@/lib/prisma";
+import { writeAudit } from "@/lib/audit";
 
 export type SubjectState = { error?: string; ok?: string };
 
@@ -132,7 +133,16 @@ export async function deleteSubject(formData: FormData): Promise<void> {
     redirect(`/subjects/${id}?error=in-use`);
   }
 
-  await prisma.subject.delete({ where: { id } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.subject.delete({ where: { id} });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "subject.delete",
+      entity: "Subject",
+      entityId: id,
+    });
+  });
   revalidatePath("/subjects");
   redirect("/subjects");
 }

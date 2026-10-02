@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma, type SchoolSettings } from "@prisma/client";
+import { reportHoldsForClass } from "@/lib/report-access";
 import { prisma } from "@/lib/prisma";
 import { renderTemplate, countSegments, sendSms, RATE_PER_SEGMENT } from "@/lib/sms";
 import { normalisePhone } from "@/lib/sms-shared";
@@ -189,12 +190,21 @@ export async function textResultsPublished(args: {
 
     const term = await prisma.term.findUnique({ where: { id: args.termId } });
 
+    // A pupil whose card is held for arrears cannot open it in the portal, so
+    // "your results are ready" would send a parent to a page that says otherwise.
+    // Leave them out rather than send a text the portal contradicts.
+    const holds = await reportHoldsForClass(args.studentIds, args.termId, settings);
+    const studentIds = args.studentIds.filter((id) => !holds.has(id));
+    if (studentIds.length === 0) {
+      return { texted: 0 };
+    }
+
     // `receivesReports` is the guardian's own preference, set on the link
     // between them and the child — the same flag a results campaign audience
     // uses, so the two cannot disagree about who hears about a report card.
     const links = await prisma.studentGuardian.findMany({
       where: {
-        studentId: { in: args.studentIds },
+        studentId: { in: studentIds },
         receivesReports: true,
         guardian: { deletedAt: null },
       },
@@ -236,11 +246,11 @@ export async function textResultsPublished(args: {
       return { texted: 0 };
     }
 
-    await prisma.message.createMany({ data: outgoing });
-
-    // Read back what was just written, for the ids the gateway results attach to.
-    const queued = await prisma.message.findMany({
-      where: { schoolId: args.schoolId, status: "QUEUED", studentId: { in: args.studentIds } },
+    // The rows THIS call created, by id. Reading back "everything still queued for
+    // these pupils" also swept up messages a campaign running at the same moment
+    // had queued, sending them here and again from the campaign.
+    const queued = await prisma.message.createManyAndReturn({
+      data: outgoing,
       select: { id: true, toPhone: true, body: true },
     });
 

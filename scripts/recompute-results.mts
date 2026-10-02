@@ -17,8 +17,8 @@
  *
  * ⚠️ A PUBLISHED TermResult is left exactly as it was — republishing is an
  * explicit act, and a parent holding a printed card must not find the school's
- * copy quietly disagreeing with it. The SUBJECT rows under it are still
- * rewritten, which is the same thing the Compute button has always done.
+ * copy quietly disagreeing with it. Its SUBJECT rows are left alone too (the
+ * results engine skips every published pupil), so the card stays consistent.
  */
 import { PrismaClient } from "@prisma/client";
 import { computeClassResults } from "@/lib/results-engine";

@@ -153,7 +153,16 @@ export async function deleteScale(formData: FormData): Promise<void> {
     return;
   }
 
-  await prisma.gradingScale.delete({ where: { id } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.gradingScale.delete({ where: { id } });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "gradingScale.delete",
+      entity: "GradingScale",
+      entityId: id,
+    });
+  });
   refresh();
 }
 
@@ -261,6 +270,15 @@ export async function deleteBand(formData: FormData): Promise<void> {
     return;
   }
 
-  await prisma.gradeBand.delete({ where: { id } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.gradeBand.delete({ where: { id } });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "gradeBand.delete",
+      entity: "GradeBand",
+      entityId: id,
+    });
+  });
   refresh();
 }

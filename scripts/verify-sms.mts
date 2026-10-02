@@ -28,6 +28,9 @@ check("spaces and dashes", normalisePhone("024 412-3456") === "233244123456");
 check("rejects too short", normalisePhone("0244") === null);
 check("rejects junk", normalisePhone("not a phone") === null);
 check("rejects empty", normalisePhone("") === null && normalisePhone(null) === null);
+check("rejects a landline", normalisePhone("0302123456") === null);
+check("rejects an unknown network prefix", normalisePhone("0111234567") === null && normalisePhone("233991234567") === null);
+check("accepts every mobile network", ["0201234567", "0241234567", "0261234567", "0501234567", "0541234567", "0571234567"].every((n) => normalisePhone(n) !== null));
 
 console.log("\nSegment counting");
 check("short message is one segment", countSegments("Hello").segments === 1);

@@ -2,6 +2,9 @@ import "server-only";
 
 import sharp from "sharp";
 
+/** Decoding a crest never needs more than this; a bigger declared size is a decompression bomb. */
+export const MAX_CREST_PIXELS = 16_000_000;
+
 /**
  * A school's crest, composited into a home-screen icon.
  *
@@ -26,7 +29,7 @@ export async function schoolIcon(
 ): Promise<Buffer> {
   const content = opts.maskable ? Math.round(size * 0.66) : Math.round(size * 0.88);
 
-  const mark = await sharp(crestBytes)
+  const mark = await sharp(crestBytes, { limitInputPixels: MAX_CREST_PIXELS })
     .resize(content, content, { fit: "contain", background: { r: 255, g: 255, b: 255, alpha: 0 } })
     .toBuffer();
 

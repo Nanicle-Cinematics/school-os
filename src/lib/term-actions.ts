@@ -48,6 +48,16 @@ export async function createAcademicYear(
     return { error: "The year has to end after it starts." };
   }
 
+  // Two years that overlap make "which year is today in" ambiguous for the
+  // register, the dashboard and the invoice carry-forward.
+  const clash = await prisma.academicYear.findFirst({
+    where: { startDate: { lte: endDate }, endDate: { gte: startDate } },
+    select: { name: true },
+  });
+  if (clash) {
+    return { error: `Those dates overlap ${clash.name}. A year has to start after the previous one ends.` };
+  }
+
   const terms = splitIntoTerms(startDate, endDate);
 
   try {
@@ -131,6 +141,28 @@ export async function saveTerm(_prev: TermState, formData: FormData): Promise<Te
   }
   if (nextTermBegins && nextTermBegins <= endDate) {
     return { error: "The next term cannot begin before this one ends." };
+  }
+
+  const current = await prisma.term.findUnique({
+    where: { id },
+    select: { sequence: true, academicYearId: true, academicYear: { select: { startDate: true, endDate: true } } },
+  });
+  if (!current) {
+    return { error: "That term no longer exists." };
+  }
+  if (startDate < current.academicYear.startDate || endDate > current.academicYear.endDate) {
+    return { error: "A term has to fall inside its academic year." };
+  }
+  // Terms of one year run in order and may not overlap each other.
+  const siblings = await prisma.term.findMany({
+    where: { academicYearId: current.academicYearId, id: { not: id } },
+    select: { sequence: true, startDate: true, endDate: true, name: true },
+  });
+  const overlap = siblings.find((other) =>
+    other.sequence < current.sequence ? startDate <= other.endDate : endDate >= other.startDate,
+  );
+  if (overlap) {
+    return { error: `That overlaps the ${overlap.name.toLowerCase()} term. Terms must run in order without overlapping.` };
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {

@@ -10,6 +10,8 @@ import { tenantTransaction, prisma } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { writeAudit } from "@/lib/audit";
 
+const MAX_FEE = new Prisma.Decimal("9999999.99");
+
 export type ActionState = { error?: string; ok?: string };
 
 /**
@@ -55,6 +57,55 @@ export async function saveFeeStructure(
   const level = await prisma.level.findUnique({ where: { id: levelId } });
   if (!level) {
     return { error: "That level no longer exists." };
+  }
+
+  // Everything below came from the request, so it is checked against what exists
+  // rather than cast: a bad value used to surface as a database error.
+  if (!["ANY", "DAY", "BOARDING"].includes(residency)) {
+    return { error: "Choose who the fees apply to: everyone, day pupils or boarders." };
+  }
+  if (!["ANY", "NEW", "CONTINUING"].includes(studentType)) {
+    return { error: "Choose whether the fees are for new pupils, continuing ones or both." };
+  }
+  if (lines.some((line) => line.amount!.greaterThan(MAX_FEE))) {
+    return { error: "One of those amounts is too large — check for an extra digit." };
+  }
+
+  const year = await prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { id: true } });
+  if (!year) {
+    return { error: "That academic year no longer exists." };
+  }
+  if (termId) {
+    const term = await prisma.term.findFirst({ where: { id: termId, academicYearId }, select: { id: true } });
+    if (!term) {
+      return { error: "That term does not belong to the chosen year." };
+    }
+  }
+  const known = await prisma.feeCategory.count({
+    where: { id: { in: lines.map((line) => line.feeCategoryId) } },
+  });
+  if (known !== lines.length) {
+    return { error: "A fee item on that form no longer exists. Reload the page and try again." };
+  }
+
+  // Two structures with the same level, year, term, residency and type tie, and the
+  // bill then uses whichever the database returns first. One per combination.
+  const twin = await prisma.feeStructure.findFirst({
+    where: {
+      levelId,
+      academicYearId,
+      termId: termId || null,
+      residency: residency as "ANY" | "DAY" | "BOARDING",
+      studentType: studentType as "ANY" | "NEW" | "CONTINUING",
+      isActive: true,
+      ...(structureId ? { id: { not: structureId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (twin) {
+    return {
+      error: `${level.name} already has a fee structure for exactly those conditions. Edit that one instead of adding a second.`,
+    };
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
