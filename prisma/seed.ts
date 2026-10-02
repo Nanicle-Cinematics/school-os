@@ -166,6 +166,21 @@ const pad = (n: number, width = 4) => String(n).padStart(width, "0");
 const money = (n: number) => new Prisma.Decimal(n.toFixed(2));
 
 async function main() {
+  /**
+   * ⚠️ This creates a school whose owner signs in with a password printed in this
+   * file. Against a database that holds real schools that is a known-password
+   * account in production, so it refuses to run there. A fresh or demo-only
+   * database (no school other than the demo one) is fine; anything else needs an
+   * explicit ALLOW_SEED=1 from someone who has looked at which database this is.
+   */
+  const others = await prisma.school.count({ where: { slug: { not: SLUG } } });
+  if (others > 0 && process.env.ALLOW_SEED !== "1") {
+    throw new Error(
+      `Refusing to seed: this database already holds ${others} other school${others === 1 ? "" : "s"}. ` +
+        `The demo owner has a published password. If you are SURE this is a throwaway database, set ALLOW_SEED=1.`,
+    );
+  }
+
   console.log("Clearing previous demo data…");
   await prisma.school.deleteMany({ where: { slug: SLUG } });
   await prisma.user.deleteMany({ where: { email: { endsWith: `@${EMAIL_DOMAIN}` } } });

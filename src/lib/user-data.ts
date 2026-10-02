@@ -72,7 +72,7 @@ export async function getUserList(schoolId: string) {
   const byUser = new Map<
     string,
     {
-      user: (typeof memberships)[number]["user"];
+      user: Omit<(typeof memberships)[number]["user"], "passwordHash"> & { hasPassword: boolean };
       roles: Role[];
       statuses: string[];
       staffNo: string | null;
@@ -84,8 +84,11 @@ export async function getUserList(schoolId: string) {
     if (membership.user.deletedAt) {
       continue;
     }
+    // The hash is read only to answer "does this login have a password?" and is
+    // dropped here, so it cannot travel to a component or a log by accident.
+    const { passwordHash, ...safeUser } = membership.user;
     const entry = byUser.get(membership.userId) ?? {
-      user: membership.user,
+      user: { ...safeUser, hasPassword: Boolean(passwordHash) },
       roles: [],
       statuses: [],
       staffNo: membership.staff?.staffNo ?? null,
