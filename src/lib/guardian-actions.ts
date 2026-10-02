@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { GuardianRelationship } from "@prisma/client";
+import { Prisma, type GuardianRelationship } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
@@ -262,37 +262,44 @@ export async function createGuardianLogin(
   const password = temporaryPassword();
   const passwordHash = await hashPassword(password);
 
-  await tenantTransaction(auth.schoolId, async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        name: `${guardian.firstName} ${guardian.lastName}`,
-        email: email || null,
-        phone: normalised,
-        passwordHash,
-        // Temporary: the portal diverts this login to /account/password.
-        mustChangePassword: true,
-        schoolId: auth.schoolId,
-      },
-    });
+  try {
+    await tenantTransaction(auth.schoolId, async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: `${guardian.firstName} ${guardian.lastName}`,
+          email: email || null,
+          phone: normalised,
+          passwordHash,
+          // Temporary: the portal diverts this login to /account/password.
+          mustChangePassword: true,
+          schoolId: auth.schoolId,
+        },
+      });
 
-    await tx.membership.create({
-      data: {
-        schoolId: auth.schoolId,
-        userId: user.id,
-        role: "PARENT",
-        guardianId,
-      },
-    });
+      await tx.membership.create({
+        data: {
+          schoolId: auth.schoolId,
+          userId: user.id,
+          role: "PARENT",
+          guardianId,
+        },
+      });
 
-    await writeAudit(tx, {
-      schoolId: auth.schoolId,
-      actorUserId: auth.userId,
-      action: "guardian.login.create",
-      entity: "Guardian",
-      entityId: guardianId,
-      after: { guardianName: `${guardian.firstName} ${guardian.lastName}` },
+      await writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: "guardian.login.create",
+        entity: "Guardian",
+        entityId: guardianId,
+        after: { guardianName: `${guardian.firstName} ${guardian.lastName}` },
+      });
     });
-  });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: "That phone number or email already has an account on School OS." };
+    }
+    throw error;
+  }
 
   revalidatePath(`/guardians/${guardianId}`);
   // The password is shown once, here, because there is nowhere to look it up

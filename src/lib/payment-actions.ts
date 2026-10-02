@@ -25,6 +25,12 @@ import { normalisePhone } from "@/lib/sms";
 
 export type PaymentState = { error?: string; ok?: string };
 
+const MAX_PAYMENT = new Prisma.Decimal("9999999999.99");
+const METHODS = ["CASH", "BANK_TRANSFER", "BANK_DEPOSIT", "MOBILE_MONEY", "CARD", "CHEQUE"];
+const MOMO_NETWORKS = ["MTN", "TELECEL", "AIRTELTIGO"];
+/** The same student, amount and method inside this window is a double-press, not a second payment. */
+const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+
 export async function recordPayment(
   _prev: PaymentState,
   formData: FormData,
@@ -46,6 +52,26 @@ export async function recordPayment(
   if (!amount) {
     return { error: "Enter a valid amount greater than zero." };
   }
+  // The column is Decimal(12,2); anything bigger is a typo, and would 500.
+  if (amount.greaterThan(MAX_PAYMENT)) {
+    return { error: "That amount is too large — check for an extra digit." };
+  }
+  if (!METHODS.includes(method)) {
+    return { error: "Choose how the payment was made." };
+  }
+  if (momoNetwork && !MOMO_NETWORKS.includes(momoNetwork)) {
+    return { error: "Choose a valid mobile money network." };
+  }
+  let paidAt = new Date();
+  if (paidAtRaw) {
+    paidAt = new Date(paidAtRaw);
+    if (Number.isNaN(paidAt.getTime())) {
+      return { error: "That payment date is not valid." };
+    }
+    if (paidAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return { error: "A payment cannot be dated in the future." };
+    }
+  }
   if (method === "MOBILE_MONEY" && !reference) {
     return { error: "Mobile money payments need the transaction reference." };
   }
@@ -64,6 +90,10 @@ export async function recordPayment(
 
   try {
     receiptNo = await tenantTransaction(auth.schoolId, async (tx) => {
+      // Serialise payments for one student: two at once would both read the same
+      // open balances and both allocate to them. Released at commit.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"payment:" + studentId}))`;
+
       const bankSlipUrl = upload.ok
         ? await storeAttachment(tx, auth.schoolId, auth.userId, upload)
         : null;
@@ -82,6 +112,26 @@ export async function recordPayment(
 
       if (!student) {
         throw new Error("STUDENT_NOT_FOUND");
+      }
+
+      const duplicate = await tx.payment.findFirst({
+        where: {
+          status: "CONFIRMED",
+          OR: [
+            // A transaction id is unique to the school, whoever it was recorded against.
+            ...(method === "MOBILE_MONEY" && reference ? [{ method: "MOBILE_MONEY" as const, reference }] : []),
+            {
+              studentId,
+              amount,
+              method: method as "CASH",
+              createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+            },
+          ],
+        },
+        select: { receiptNo: true },
+      });
+      if (duplicate) {
+        throw new Error(`DUPLICATE:${duplicate.receiptNo}`);
       }
 
       const receipt = await nextNumber(
@@ -104,7 +154,7 @@ export async function recordPayment(
           reference: reference || null,
           note: note || null,
           status: "CONFIRMED",
-          paidAt: paidAtRaw ? new Date(paidAtRaw) : new Date(),
+          paidAt,
           recordedByUserId: auth.userId,
         },
       });
@@ -170,6 +220,11 @@ export async function recordPayment(
     if (error instanceof Error && error.message === "STUDENT_NOT_FOUND") {
       return { error: "That student no longer exists." };
     }
+    if (error instanceof Error && error.message.startsWith("DUPLICATE:")) {
+      return {
+        error: `This looks like a payment already recorded (${error.message.slice(10)}) — same student and amount a moment ago, or the same mobile money reference. Check Payments before recording it again.`,
+      };
+    }
     throw error;
   }
 
@@ -232,6 +287,9 @@ export async function reversePayment(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    // One reversal at a time per payment, so two clicks cannot both pass the
+    // "not yet reversed" check and reverse the journal entry twice.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"payment:reverse:" + paymentId}))`;
     const payment = await tx.payment.findUnique({
       where: { id: paymentId },
       include: { allocations: true },

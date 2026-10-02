@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { TenantTx } from "@/lib/prisma";
+import { bytesMatchType } from "@/lib/file-sniff";
 import {
   ACCEPTED_ATTACHMENT_TYPES as ACCEPTED_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
@@ -43,6 +44,9 @@ export async function readAttachment(value: FormDataEntryValue | null): Promise<
   // Bytes field is typed to the narrow form, and both the Buffer and the
   // ArrayBufferLike variants fail to assign to it.
   const bytes = new Uint8Array(await value.arrayBuffer()) as Uint8Array<ArrayBuffer>;
+  if (!bytesMatchType(bytes, value.type)) {
+    return { ok: false, error: "That file is not really a " + ACCEPTED_ATTACHMENTS[value.type] + ". Attach the original photo or PDF." };
+  }
   return { ok: true, bytes, mimeType: value.type, byteSize: bytes.byteLength };
 }
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { bytesMatchType } from "@/lib/file-sniff";
 import { revalidatePath } from "next/cache";
 import type { SchoolAssetKind } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
@@ -61,6 +62,9 @@ export async function uploadSchoolAsset(
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
+  if (!bytesMatchType(bytes, file.type)) {
+    return { error: `That file is not really a ${ACCEPTED[file.type]}. Choose the original image.` };
+  }
 
   // The pointer carries the byte count as its cache key, so replacing the image
   // changes the URL and a parent never sees last term's crest from cache.
