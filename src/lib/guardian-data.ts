@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 // the pool holds one connection, so a fan-out only queues and then times out.
 
 export async function getGuardianList(query: string) {
+  const digits = query.replace(/\D/g, "");
+  const phoneTail = digits.length >= 6 ? digits.slice(-9) : null;
   const where = {
     deletedAt: null,
     ...(query
@@ -15,6 +17,9 @@ export async function getGuardianList(query: string) {
             { lastName: { contains: query, mode: "insensitive" as const } },
             { phone: { contains: query } },
             { altPhone: { contains: query } },
+            // Numbers are stored as typed (0244…, 233244…, +233…), so a search for one
+            // spelling missed the others. The last nine digits are the same in all.
+            ...(phoneTail ? [{ phone: { contains: phoneTail } }, { altPhone: { contains: phoneTail } }] : []),
           ],
         }
       : {}),

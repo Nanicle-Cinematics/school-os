@@ -1,6 +1,8 @@
 "use server";
 
+import sharp from "sharp";
 import { bytesMatchType } from "@/lib/file-sniff";
+import { MAX_CREST_PIXELS } from "@/lib/school-icon";
 import { revalidatePath } from "next/cache";
 import type { SchoolAssetKind } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
@@ -64,6 +66,18 @@ export async function uploadSchoolAsset(
   const bytes = Buffer.from(await file.arrayBuffer());
   if (!bytesMatchType(bytes, file.type)) {
     return { error: `That file is not really a ${ACCEPTED[file.type]}. Choose the original image.` };
+  }
+
+  // A 500 KB PNG can declare tens of thousands of pixels each way, and the public
+  // icon route decodes it on every cold request. Read the declared size (cheap, no
+  // decode) and refuse anything a crest could never need.
+  try {
+    const { width = 0, height = 0 } = await sharp(bytes, { limitInputPixels: MAX_CREST_PIXELS }).metadata();
+    if (width * height > MAX_CREST_PIXELS) {
+      return { error: "That image is far larger than a crest needs. Resize it to a few hundred pixels across." };
+    }
+  } catch {
+    return { error: "That image could not be read. Choose a different file." };
   }
 
   // The pointer carries the byte count as its cache key, so replacing the image

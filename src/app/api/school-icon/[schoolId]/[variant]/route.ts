@@ -56,7 +56,14 @@ export async function GET(
     return NOT_FOUND();
   }
 
-  const png = await schoolIcon(Buffer.from(asset.bytes), spec.size, { maskable: spec.maskable });
+  let png: Buffer;
+  try {
+    png = await schoolIcon(Buffer.from(asset.bytes), spec.size, { maskable: spec.maskable });
+  } catch {
+    // An unreadable or oversized crest has no icon; the caller falls back to the
+    // generic mark. 404, not a 500 that a public route then repeats on every hit.
+    return NOT_FOUND();
+  }
 
   return new Response(new Uint8Array(png), {
     headers: {

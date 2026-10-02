@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Prisma } from "@prisma/client";
+import { AssessmentType, Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
+
+const ASSESSMENT_TYPES = Object.keys(AssessmentType);
 
 export type AssessmentState = { error?: string; ok?: string };
 
@@ -61,6 +63,20 @@ export async function createAssessment(
   if (!(await assertMayTeach(auth, classGroupId, subjectId))) {
     return { error: "You are not assigned to teach that subject in that class." };
   }
+  if (!ASSESSMENT_TYPES.includes(type)) {
+    return { error: "Choose what kind of assessment this is." };
+  }
+  if (maxScore > 1000) {
+    return { error: "A component is marked out of 1000 at most." };
+  }
+  // A negative or runaway weight would skew every average it is part of.
+  if (weight !== 0 && (!Number.isFinite(weight) || weight < 0 || weight > 1000)) {
+    return { error: "The weight must be between 0 and 1000." };
+  }
+  const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+  if (dueDate && Number.isNaN(dueDate.getTime())) {
+    return { error: "That due date is not valid." };
+  }
 
   let created = "";
   await tenantTransaction(auth.schoolId, async (tx) => {
@@ -73,8 +89,8 @@ export async function createAssessment(
         type: type as "CLASS_TEST",
         title,
         maxScore: new Prisma.Decimal(maxScore),
-        weight: new Prisma.Decimal(Number.isFinite(weight) ? weight : 0),
-        dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
+        weight: new Prisma.Decimal(weight || 0),
+        dueDate,
         status: "OPEN",
         createdByStaffId: auth.staffId,
       },
@@ -118,6 +134,30 @@ export async function saveScores(
   if (assessment.status === "APPROVED") {
     return { error: "These scores have been approved and can no longer be edited." };
   }
+
+  // Only pupils on this class's roll, and nothing once the class's results are
+  // published — the same two rules the mark sheet applies.
+  const term = await prisma.term.findUnique({
+    where: { id: assessment.termId },
+    select: { academicYearId: true },
+  });
+  const roster = await prisma.enrollment.findMany({
+    where: {
+      classGroupId: assessment.classGroupId,
+      academicYearId: term?.academicYearId ?? "",
+      status: "ACTIVE",
+    },
+    select: { studentId: true },
+  });
+  const enrolled = new Set(roster.map((row) => row.studentId));
+  const published = await prisma.termResult.count({
+    where: { termId: assessment.termId, classGroupId: assessment.classGroupId, status: "PUBLISHED" },
+  });
+  if (published > 0) {
+    return {
+      error: "This class's results are already published, so the marks are locked. Withdraw the results first if a correction is needed.",
+    };
+  }
   if (!(await assertMayTeach(auth, assessment.classGroupId, assessment.subjectId))) {
     return { error: "You are not assigned to teach that subject in that class." };
   }
@@ -130,6 +170,9 @@ export async function saveScores(
       continue;
     }
     const studentId = key.slice("score:".length);
+    if (!enrolled.has(studentId)) {
+      continue;
+    }
     const raw = String(value).trim();
     const isAbsent = formData.get(`absent:${studentId}`) === "on";
 
@@ -206,14 +249,21 @@ export async function setAssessmentStatus(formData: FormData): Promise<void> {
     return;
   }
   // Only leadership may approve; a teacher can submit for review.
-  if (status === "APPROVED" && !canAccess(auth.roles, LEADERSHIP)) {
-    return;
-  }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
     const before = await tx.assessment.findUnique({ where: { id: assessmentId } });
     if (!before) {
       return;
+    }
+    // Reopening an approved assessment behind a published report card would let
+    // its marks drift from the card; withdraw the results first.
+    if (before.status === "APPROVED" && status !== "APPROVED") {
+      const published = await tx.termResult.count({
+        where: { termId: before.termId, classGroupId: before.classGroupId, status: "PUBLISHED" },
+      });
+      if (published > 0) {
+        return;
+      }
     }
     await tx.assessment.update({
       where: { id: assessmentId },

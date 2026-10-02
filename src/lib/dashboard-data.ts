@@ -691,6 +691,13 @@ const ACTIVITY: Record<
   "student.admit": { kind: "people", title: () => "A pupil was admitted", detail: "Students" },
   "student.enrol": { kind: "people", title: () => "A pupil was placed in a class", detail: "Students" },
   "student.withdraw": { kind: "people", title: () => "A pupil was withdrawn", detail: "Students" },
+  "class.delete": { kind: "admin", title: () => "A class was removed", detail: "Classes" },
+  "level.delete": { kind: "admin", title: () => "A level was removed", detail: "School structure" },
+  "house.delete": { kind: "admin", title: () => "A house was removed", detail: "School structure" },
+  "programme.delete": { kind: "admin", title: () => "A programme was removed", detail: "School structure" },
+  "subject.delete": { kind: "admin", title: () => "A subject was removed", detail: "Subjects" },
+  "gradingScale.delete": { kind: "admin", title: () => "A grading scale was removed", detail: "Grading" },
+  "gradeBand.delete": { kind: "admin", title: () => "A grade band was removed", detail: "Grading" },
   "student.delete": { kind: "people", title: () => "A pupil record was removed", detail: "Students" },
   "staff.remove": {
     kind: "people",

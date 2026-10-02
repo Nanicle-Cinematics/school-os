@@ -9,23 +9,33 @@
  * 0244123456, 244123456, +233244123456, 233 244 123 456. Gateways want the
  * international form with no punctuation.
  */
+/**
+ * Ghana mobile network prefixes (after the 233 country code): MTN 24/25/53/54/55/59,
+ * Telecel 20/50, AirtelTigo 26/27/56/57. A number that is not one of these is a
+ * landline, a typo or another country, and a text or a login sent to it reaches
+ * nobody the school meant — or a stranger.
+ */
+const MOBILE_PREFIXES = new Set(["20", "23", "24", "25", "26", "27", "28", "29", "50", "53", "54", "55", "56", "57", "59"]);
+
 export function normalisePhone(input: string | null | undefined): string | null {
   if (!input) {
     return null;
   }
   const digits = input.replace(/[^\d+]/g, "").replace(/^\+/, "");
 
+  let national: string | null = null;
   if (digits.startsWith("233") && digits.length === 12) {
-    return digits;
+    national = digits.slice(3);
+  } else if (digits.startsWith("0") && digits.length === 10) {
+    national = digits.slice(1);
+  } else if (digits.length === 9 && !digits.startsWith("0")) {
+    // Bare 9-digit local number, e.g. 244123456
+    national = digits;
   }
-  if (digits.startsWith("0") && digits.length === 10) {
-    return `233${digits.slice(1)}`;
+  if (!national || !MOBILE_PREFIXES.has(national.slice(0, 2))) {
+    return null;
   }
-  // Bare 9-digit local number, e.g. 244123456
-  if (digits.length === 9 && !digits.startsWith("0")) {
-    return `233${digits}`;
-  }
-  return null;
+  return `233${national}`;
 }
 
 // Characters outside GSM-7 force the whole message into UCS-2, which cuts the

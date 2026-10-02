@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
+import { writeAudit } from "@/lib/audit";
 
 export type ClassState = { error?: string; ok?: string };
 
@@ -71,12 +72,29 @@ export async function deleteClassGroup(formData: FormData): Promise<void> {
   // Enrollment cascades on delete at the database level (so a school can be torn
   // down in one go), which means the guard has to live here — deleting a class
   // with a roster would silently erase every enrolment record it holds.
-  const enrolled = await prisma.enrollment.count({ where: { classGroupId: id } });
-  if (enrolled > 0) {
+  // Assessments, results, register days and teaching assignments cascade too, so
+  // they count as "in use" exactly as the roster does.
+  const [enrolled, assessments, results, registers, teaching] = await Promise.all([
+    prisma.enrollment.count({ where: { classGroupId: id } }),
+    prisma.assessment.count({ where: { classGroupId: id } }),
+    prisma.termResult.count({ where: { classGroupId: id } }),
+    prisma.attendanceDay.count({ where: { classGroupId: id } }),
+    prisma.teachingAssignment.count({ where: { classGroupId: id } }),
+  ]);
+  if (enrolled + assessments + results + registers + teaching > 0) {
     redirect(`/classes/${id}?error=has-roster`);
   }
 
-  await prisma.classGroup.delete({ where: { id } });
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    await tx.classGroup.delete({ where: { id} });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "class.delete",
+      entity: "ClassGroup",
+      entityId: id,
+    });
+  });
   revalidatePath("/classes");
   redirect("/classes");
 }
