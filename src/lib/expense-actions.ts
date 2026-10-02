@@ -16,11 +16,17 @@ import {
   reverseJournalEntry,
 } from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
+import { lockOn } from "@/lib/locks";
 import { readAttachment, storeAttachment } from "@/lib/attachments";
 import type { TenantTx } from "@/lib/prisma";
-import type { PaymentMethod, Prisma } from "@prisma/client";
+import { Prisma, type PaymentMethod } from "@prisma/client";
 
 export type ExpenseState = { error?: string; ok?: string };
+
+const MAX_AMOUNT = new Prisma.Decimal("9999999999.99");
+const METHODS = ["CASH", "BANK_TRANSFER", "BANK_DEPOSIT", "MOBILE_MONEY", "CARD", "CHEQUE"];
+/** The same voucher pressed twice, not two purchases. */
+const DUPLICATE_WINDOW_MS = 30 * 1000;
 
 /**
  * Dr the expense account (via its category) / Cr the cash-like account for
@@ -83,6 +89,22 @@ export async function recordExpense(
   if (!amount) {
     return { error: "Enter a valid amount greater than zero." };
   }
+  if (amount.greaterThan(MAX_AMOUNT)) {
+    return { error: "That amount is too large — check for an extra digit." };
+  }
+  if (!METHODS.includes(method)) {
+    return { error: "Choose how the money was paid out." };
+  }
+  let spentAt = new Date();
+  if (spentAtRaw) {
+    spentAt = new Date(spentAtRaw);
+    if (Number.isNaN(spentAt.getTime())) {
+      return { error: "That date is not valid." };
+    }
+    if (spentAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
+      return { error: "An expense cannot be dated in the future." };
+    }
+  }
 
   /**
    * Does this one need a second signature?
@@ -119,10 +141,26 @@ export async function recordExpense(
     return { error: upload.error };
   }
 
-  const voucherNo = await tenantTransaction(auth.schoolId, async (tx) => {
+  let voucherNo: string;
+  try {
+    voucherNo = await tenantTransaction(auth.schoolId, async (tx) => {
     const receiptUrl = upload.ok
       ? await storeAttachment(tx, auth.schoolId, auth.userId, upload)
       : null;
+
+    const repeat = await tx.expense.findFirst({
+      where: {
+        description,
+        amount,
+        payee: payee || null,
+        status: { not: "CANCELLED" },
+        createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+      },
+      select: { voucherNo: true },
+    });
+    if (repeat) {
+      throw new Error(`DUPLICATE:${repeat.voucherNo}`);
+    }
 
     const voucher = await nextNumber(
       tx,
@@ -147,7 +185,7 @@ export async function recordExpense(
         // cash book until approved, so the net position never shows money the
         // school has not agreed to.
         status: needsApproval ? "DRAFT" : "PAID",
-        spentAt: spentAtRaw ? new Date(spentAtRaw) : new Date(),
+        spentAt,
         recordedByUserId: auth.userId,
       },
     });
@@ -173,6 +211,14 @@ export async function recordExpense(
 
     return voucher;
   });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("DUPLICATE:")) {
+      return {
+        error: `This looks like voucher ${error.message.slice(10)}, entered seconds ago with the same description, payee and amount. It is already saved — if this is a second identical purchase, wait half a minute and enter it again.`,
+      };
+    }
+    throw error;
+  }
 
   revalidatePath("/expenses");
   revalidatePath("/dashboard");
@@ -202,6 +248,7 @@ export async function approveExpense(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    await lockOn(tx, `expense:${id}`);
     const expense = await tx.expense.findUnique({
       where: { id },
       select: {
@@ -259,8 +306,11 @@ export async function cancelExpense(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
+    await lockOn(tx, `expense:${expenseId}`);
     const expense = await tx.expense.findUnique({ where: { id: expenseId } });
-    if (!expense) {
+    // Already cancelled: nothing to undo, and a second cancel must not stamp a
+    // second audit row or reverse the journal entry again.
+    if (!expense || expense.status === "CANCELLED") {
       return;
     }
     // Cancel, never delete — spend history has to stay auditable.

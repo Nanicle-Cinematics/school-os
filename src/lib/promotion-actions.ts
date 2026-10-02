@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
-import { tenantTransaction } from "@/lib/prisma";
+import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { getWholeSchoolPlan, type Decision } from "@/lib/promotion-data";
 
@@ -38,7 +38,36 @@ export async function runPromotion(
     return { error: "A class cannot be promoted into the year it is already in." };
   }
 
+  /**
+   * ⚠️ The form names the pupils, but only THIS class's roll may be moved.
+   *
+   * Student and class ids came straight from the request, so a forged one could
+   * graduate a child from another class (status GRADUATED, class cleared) or
+   * drop them into any class in the school. The roll is read from the database
+   * and every submitted id is checked against it; the destinations must be real
+   * classes, and the target year must be a different, later one.
+   */
+  const [sourceYear, targetYear] = await Promise.all([
+    prisma.academicYear.findUnique({ where: { id: sourceYearId }, select: { startDate: true } }),
+    prisma.academicYear.findUnique({ where: { id: targetYearId }, select: { startDate: true } }),
+  ]);
+  if (!sourceYear || !targetYear) {
+    return { error: "That academic year does not exist." };
+  }
+  if (targetYear.startDate <= sourceYear.startDate) {
+    return { error: "A class can only be promoted into a LATER year than the one it is leaving." };
+  }
+
+  const roll = await prisma.enrollment.findMany({
+    where: { classGroupId, academicYearId: sourceYearId, status: "ACTIVE" },
+    select: { studentId: true },
+  });
+  const onRoll = new Set(roll.map((row) => row.studentId));
+
   const studentIds = formData.getAll("student").map(String);
+  if (studentIds.some((id) => !onRoll.has(id))) {
+    return { error: "Some of those children are not on this class's roll for that year. Reload the page and try again." };
+  }
   if (studentIds.length === 0) {
     return { error: "Nobody is enrolled in that class for the year you are promoting from." };
   }
@@ -62,6 +91,14 @@ export async function runPromotion(
       };
     }
     moves.push({ studentId, decision, destinationId });
+  }
+
+  const destinationIds = [...new Set(moves.map((m) => m.destinationId).filter((id): id is string => Boolean(id)))];
+  if (destinationIds.length > 0) {
+    const real = await prisma.classGroup.count({ where: { id: { in: destinationIds } } });
+    if (real !== destinationIds.length) {
+      return { error: "One of the destination classes does not exist. Reload the page and try again." };
+    }
   }
 
   const applied = { promoted: 0, repeated: 0, graduated: 0, held: 0 };
@@ -182,6 +219,17 @@ export async function runWholeSchoolPromotion(
   }
   if (included.size === 0) {
     return { error: "Tick at least one class." };
+  }
+
+  const [fromYear, toYear] = await Promise.all([
+    prisma.academicYear.findUnique({ where: { id: sourceYearId }, select: { startDate: true } }),
+    prisma.academicYear.findUnique({ where: { id: targetYearId }, select: { startDate: true } }),
+  ]);
+  if (!fromYear || !toYear) {
+    return { error: "That academic year does not exist." };
+  }
+  if (toYear.startDate <= fromYear.startDate) {
+    return { error: "The school can only be promoted into a LATER year than the one it is leaving." };
   }
 
   const { plans } = await getWholeSchoolPlan(sourceYearId, targetYearId);

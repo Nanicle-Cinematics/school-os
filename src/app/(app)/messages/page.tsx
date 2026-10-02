@@ -9,6 +9,9 @@ import { formatCedis } from "@/lib/money";
 import { PageHeader, Card, StatusBadge } from "../ui";
 import { DataTable, Row, type Column } from "../primitives";
 import { Compose } from "./compose";
+
+// Sending a campaign runs inside this page's server action; give a large one room.
+export const maxDuration = 300;
 import { StandardMessages } from "./standard-messages";
 import { DEFAULT_MESSAGE_TEMPLATES } from "@/lib/message-defaults";
 

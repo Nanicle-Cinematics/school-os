@@ -21,15 +21,31 @@ export type PreviewState = {
   sample?: { phone: string; body: string }[];
 };
 
+/** One campaign may not name more numbers by hand than a class register has. */
+const MAX_CUSTOM_PHONES = 300;
+/** Three segments of 160; longer is a letter, and costs the school accordingly. */
+const MAX_BODY_LENGTH = 480;
+/** Everything one school may send in a day, across campaigns — the platform's gateway account pays for it. */
+const MAX_MESSAGES_PER_DAY = 3000;
+/** Identical campaign pressed twice, not a second announcement. */
+const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+const AUDIENCES: AudienceType[] = ["ALL_PARENTS", "ALL_STAFF", "CLASS", "LEVEL", "DEBTORS", "CUSTOM"];
+
 function readFilter(formData: FormData): AudienceFilter {
+  const minBalance = formData.get("minBalance") ? Number(formData.get("minBalance")) : undefined;
   return {
     classGroupIds: formData.getAll("classGroupIds").map(String).filter(Boolean),
     levelIds: formData.getAll("levelIds").map(String).filter(Boolean),
-    minBalance: formData.get("minBalance") ? Number(formData.get("minBalance")) : undefined,
+    minBalance: minBalance !== undefined && Number.isFinite(minBalance) ? minBalance : undefined,
     phones: String(formData.get("phones") ?? "")
       .split(/[\s,;]+/)
       .filter(Boolean),
   };
+}
+
+function readAudience(formData: FormData): AudienceType | null {
+  const value = String(formData.get("audienceType") ?? "ALL_PARENTS") as AudienceType;
+  return AUDIENCES.includes(value) ? value : null;
 }
 
 /** Resolve the audience and show what would go out, without sending anything. */
@@ -40,16 +56,26 @@ export async function previewCampaign(
   const auth = await requireRole(OFFICE);
   setTenantContext({ schoolId: auth.schoolId });
   const body = String(formData.get("body") ?? "").trim();
-  const audienceType = String(formData.get("audienceType") ?? "ALL_PARENTS") as AudienceType;
+  const audienceType = readAudience(formData);
 
   if (!body) {
     return { error: "Write the message first." };
+  }
+  if (!audienceType) {
+    return { error: "Choose who the message is for." };
+  }
+  if (body.length > MAX_BODY_LENGTH) {
+    return { error: `That message is ${body.length} characters. Keep it under ${MAX_BODY_LENGTH}.` };
+  }
+  const filterIn = readFilter(formData);
+  if ((filterIn.phones?.length ?? 0) > MAX_CUSTOM_PHONES) {
+    return { error: `A hand-typed list can hold ${MAX_CUSTOM_PHONES} numbers at most.` };
   }
 
   const recipients = await resolveAudience(
     auth.schoolId,
     audienceType,
-    readFilter(formData),
+    filterIn,
     auth.schoolName,
   );
 
@@ -95,25 +121,68 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
 
   const name = String(formData.get("name") ?? "").trim() || "Untitled campaign";
   const body = String(formData.get("body") ?? "").trim();
-  const audienceType = String(formData.get("audienceType") ?? "ALL_PARENTS") as AudienceType;
+  const audienceType = readAudience(formData);
   const templateId = String(formData.get("templateId") ?? "");
   const confirmed = formData.get("confirm") === "on";
 
   if (!body) {
     return { error: "Write the message first." };
   }
+  if (!audienceType) {
+    return { error: "Choose who the message is for." };
+  }
+  if (body.length > MAX_BODY_LENGTH) {
+    return { error: `That message is ${body.length} characters. Keep it under ${MAX_BODY_LENGTH}.` };
+  }
   if (!confirmed) {
     return { error: "Tick the confirmation box before sending." };
   }
 
   const filter = readFilter(formData);
+  if ((filter.phones?.length ?? 0) > MAX_CUSTOM_PHONES) {
+    return { error: `A hand-typed list can hold ${MAX_CUSTOM_PHONES} numbers at most.` };
+  }
+
+  /**
+   * ⚠️ The school's own SMS switch, which every other text here already obeys.
+   *
+   * Campaigns ignored it: a school that had left SMS off — or never set it up —
+   * still sent through the platform's shared gateway account, which Nanicle
+   * pays for. Off means off.
+   */
+  const settings = await prisma.schoolSettings.findUnique({ where: { schoolId: auth.schoolId } });
+  if (!settings?.smsEnabled || !settings.smsProvider) {
+    return { error: "SMS is switched off for this school. Turn it on under Settings → SMS first." };
+  }
+
   const recipients = await resolveAudience(auth.schoolId, audienceType, filter, auth.schoolName);
 
   if (recipients.length === 0) {
     return { error: "No recipients match that audience." };
   }
 
-  const settings = await prisma.schoolSettings.findUnique({ where: { schoolId: auth.schoolId } });
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const sentToday = await prisma.message.count({
+    where: { schoolId: auth.schoolId, channel: "SMS", createdAt: { gte: since } },
+  });
+  if (sentToday + recipients.length > MAX_MESSAGES_PER_DAY) {
+    return {
+      error: `That would take the school to ${sentToday + recipients.length} texts in a day; the limit is ${MAX_MESSAGES_PER_DAY}. Narrow the audience, or ask Nanicle to raise it.`,
+    };
+  }
+
+  const repeat = await prisma.messageCampaign.findFirst({
+    where: {
+      schoolId: auth.schoolId,
+      body,
+      audienceType,
+      createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+    },
+    select: { id: true },
+  });
+  if (repeat) {
+    redirect(`/messages/${repeat.id}`);
+  }
 
   const campaignId = await tenantTransaction(auth.schoolId, async (tx) => {
       const campaign = await tx.messageCampaign.create({
@@ -189,32 +258,39 @@ async function dispatchQueued(campaignId: string, schoolId: string, senderId: st
   let failed = 0;
   let dryRun = false;
 
-  for (const message of queued) {
-    if (!message.toPhone) {
-      failed += 1;
-      continue;
-    }
-    const result = await sendSms(message.toPhone, message.body, {
-      provider: message.provider,
-      senderId,
-    });
-    dryRun = dryRun || result.dryRun;
+  // A few at a time, not one by one: a class of 600 at ~1s each would outlive the
+  // function. Bounded, so the gateway is not hit with the whole list at once.
+  const BATCH = 10;
+  for (let i = 0; i < queued.length; i += BATCH) {
+    await Promise.all(
+      queued.slice(i, i + BATCH).map(async (message) => {
+        if (!message.toPhone) {
+          failed += 1;
+          return;
+        }
+        const result = await sendSms(message.toPhone, message.body, {
+          provider: message.provider,
+          senderId,
+        });
+        dryRun = dryRun || result.dryRun;
 
-    await prisma.message.update({
-      where: { id: message.id },
-      data: {
-        status: result.ok ? "SENT" : "FAILED",
-        providerRef: result.providerRef ?? null,
-        error: result.error ?? (result.dryRun ? "Dry run — no gateway configured" : null),
-        sentAt: result.ok ? new Date() : null,
-      },
-    });
+        await prisma.message.update({
+          where: { id: message.id },
+          data: {
+            status: result.ok ? "SENT" : "FAILED",
+            providerRef: result.providerRef ?? null,
+            error: result.error ?? (result.dryRun ? "Dry run — no gateway configured" : null),
+            sentAt: result.ok ? new Date() : null,
+          },
+        });
 
-    if (result.ok) {
-      sent += 1;
-    } else {
-      failed += 1;
-    }
+        if (result.ok) {
+          sent += 1;
+        } else {
+          failed += 1;
+        }
+      }),
+    );
   }
 
   await prisma.messageCampaign.update({
