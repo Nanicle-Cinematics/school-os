@@ -75,7 +75,10 @@ export async function changePassword(
   await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.user.update({
       where: { id: auth.userId },
-      data: { passwordHash, mustChangePassword: false, passwordChangedAt: new Date() },
+      data: { passwordHash, mustChangePassword: false,
+        passwordIssuedAt: null,
+        passwordChangedAt: new Date(),
+      },
     });
     await tx.session.deleteMany({
       where: { userId: auth.userId, ...(keep ? { tokenHash: { not: keep } } : {}) },

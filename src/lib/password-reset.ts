@@ -259,6 +259,7 @@ export async function completePasswordReset(args: {
         passwordHash,
         // They chose this one themselves, so there is nothing left to force.
         mustChangePassword: false,
+        passwordIssuedAt: null,
         passwordChangedAt: new Date(),
       },
     });

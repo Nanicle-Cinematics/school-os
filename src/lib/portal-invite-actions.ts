@@ -170,6 +170,7 @@ export async function sendInvites(_prev: InviteState, formData: FormData): Promi
             passwordHash,
             // Temporary: the portal diverts them to /account/password.
             mustChangePassword: true,
+            passwordIssuedAt: new Date(),
             schoolId: auth.schoolId,
           },
         });
