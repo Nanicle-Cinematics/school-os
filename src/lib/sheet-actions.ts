@@ -121,6 +121,18 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
 
   const byId = new Map(assessments.map((a) => [a.id, a]));
 
+  // The form is a convenience, not the authority: only pupils on this class's
+  // roll for the term's year may be scored, whatever ids a request carries.
+  const term = await prisma.term.findUnique({
+    where: { id: termId },
+    select: { academicYearId: true },
+  });
+  const roster = await prisma.enrollment.findMany({
+    where: { classGroupId, academicYearId: term?.academicYearId ?? "", status: "ACTIVE" },
+    select: { studentId: true },
+  });
+  const enrolled = new Set(roster.map((row) => row.studentId));
+
   /**
    * ⚠️ Only LEADERSHIP may raise a component's ceiling from the sheet.
    *
@@ -165,7 +177,7 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
     // score:<assessmentId>:<studentId>
     const [, assessmentId, studentId] = key.split(":");
     const assessment = byId.get(assessmentId);
-    if (!assessment || !studentId) {
+    if (!assessment || !studentId || !enrolled.has(studentId)) {
       continue;
     }
     // An approved component is closed; ignore rather than fail, so one locked
