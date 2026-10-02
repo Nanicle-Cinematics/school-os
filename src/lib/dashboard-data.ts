@@ -688,6 +688,15 @@ const ACTIVITY: Record<
   "student.admit": { kind: "people", title: () => "A pupil was admitted", detail: "Students" },
   "student.enrol": { kind: "people", title: () => "A pupil was placed in a class", detail: "Students" },
   "student.withdraw": { kind: "people", title: () => "A pupil was withdrawn", detail: "Students" },
+  "student.delete": { kind: "people", title: () => "A pupil record was removed", detail: "Students" },
+  "staff.remove": {
+    kind: "people",
+    title: (a) =>
+      Number(a.loginsRemoved) > 0
+        ? "A staff member was removed, and their login with them"
+        : "A staff member was removed",
+    detail: "Staff",
+  },
   "student.import": {
     kind: "people",
     title: (a) => `${count(a.created)} ${plural(a.created, "pupil")} imported`,
@@ -719,6 +728,7 @@ const ACTIVITY: Record<
   "user.roles": { kind: "admin", title: () => "Someone's roles changed", detail: "Users" },
   "term.update": { kind: "admin", title: () => "Term dates changed", detail: "Settings" },
   "settings.academic": { kind: "admin", title: () => "Academic settings changed", detail: "Settings" },
+  "settings.fees": { kind: "money", title: () => "Fees policy changed", detail: "Settings" },
   "school.asset.upload": { kind: "admin", title: () => "The crest or signature was updated", detail: "Settings" },
   "school.asset.remove": { kind: "admin", title: () => "The crest or signature was removed", detail: "Settings" },
   "school.provision": { kind: "admin", title: () => "The school was set up", detail: "Nanicle" },
