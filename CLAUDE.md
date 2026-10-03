@@ -796,6 +796,40 @@ layouts: `getSessionUser` uses `include: { user: … }`, which already selects
 every user scalar, so reading it costs nothing. Querying it separately added a
 round trip to every page load, which on this link is seconds.
 
+## The platform admin has a second factor
+
+The Nanicle console (`/admin`) reads every school and can change their subscriptions and
+trigger backups, so one password is not allowed to open it. **Authenticator-app codes
+(TOTP, RFC 6238) are mandatory for any `isPlatformAdmin` user**, enforced in
+`requirePlatformAdmin()` (`src/lib/platform-auth.ts`) — i.e. on every console page AND every
+console server action:
+
+- not enrolled → sent to `/admin/security` to enrol; the console stays closed until they do;
+- enrolled → the *session* must have passed the code check (`Session.mfaVerifiedAt`), so a
+  stolen password or a cookie issued before the code was entered opens nothing;
+- tenant pages are unaffected — only the console is gated.
+
+How it works: `src/lib/totp.ts` (HMAC-SHA1, 30s, 6 digits, ±1 step; replay protected by
+`User.totpLastStep`, spent with a conditional UPDATE so two requests cannot both use a code),
+`src/lib/totp-crypto.ts` (the secret is AES-256-GCM encrypted under **`TOTP_ENCRYPTION_KEY`**
+before it is stored; it fails closed with no key), `src/lib/platform-2fa-actions.ts`
+(enrol / verify / regenerate recovery codes / replace authenticator). Ten one-time recovery codes
+are shown once at enrolment and stored as SHA-256 hashes. Attempts are limited per account (8)
+and per address (30) per 15 minutes, and a locked account refuses even a correct code.
+
+⚠️ **`TOTP_ENCRYPTION_KEY` must exist in the deployment before the first admin visits the
+console**, or `/admin/security` shows the missing-key message and the console stays closed.
+Generate with `openssl rand -base64 32` and keep a copy with the other deployment secrets. Losing
+it only means admins must enrol again.
+
+Lost phone **and** recovery codes: there is deliberately no screen that turns the factor off (a
+screen that can would be a way around it). With database access run
+`node --env-file=.env.prod scripts/reset-platform-2fa.mjs <email>`: it clears the factor and ends
+every session; the admin signs in with their password and enrols again.
+
+Tests: `npm run verify:totp` (RFC 6238 vectors, replay, window, encryption, recovery hashing; no
+database; runs in CI).
+
 ## The subscription is MONTHLY
 
 `paidUntil` is the date a school is paid to, and **ACTIVE means "paid up to that
