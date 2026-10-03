@@ -8,7 +8,7 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { resolveAudience, type AudienceFilter } from "@/lib/message-data";
-import { renderTemplate, countSegments, estimateCost, sendSms, RATE_PER_SEGMENT } from "@/lib/sms";
+import { renderTemplate, countSegments, estimateCost, sendSms, pupilFieldsUsed, RATE_PER_SEGMENT } from "@/lib/sms";
 import { writeAudit } from "@/lib/audit";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 
@@ -19,6 +19,7 @@ export type PreviewState = {
   encoding?: string;
   cost?: number;
   sample?: { phone: string; body: string }[];
+  warnings?: string[];
 };
 
 /** One campaign may not name more numbers by hand than a class register has. */
@@ -101,12 +102,22 @@ export async function previewCampaign(
   );
   const { segments, encoding } = countSegments(worst);
 
+  const warnings: string[] = [];
+  const blank = audienceType === "CUSTOM" ? pupilFieldsUsed(body) : [];
+  if (blank.length > 0) {
+    warnings.push(
+      `${blank.join(", ")} will be blank for numbers you type in — there is no pupil behind them. ` +
+        `Send to a class or level instead, or take those out of the message.`,
+    );
+  }
+
   return {
     count: recipients.length,
     segments,
     encoding,
     cost: estimateCost(worst, recipients.length),
     sample: rendered,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
 
@@ -138,6 +149,12 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
   }
   if (body.length > MAX_BODY_LENGTH) {
     return { error: `That message is ${body.length} characters. Keep it under ${MAX_BODY_LENGTH}.` };
+  }
+  const blankFields = audienceType === "CUSTOM" ? pupilFieldsUsed(body) : [];
+  if (blankFields.length > 0) {
+    return {
+      error: `${blankFields.join(", ")} cannot be filled in for numbers you type in — there is no pupil behind them. Send to a class or level instead, or take those out of the message.`,
+    };
   }
   if (!confirmed) {
     return { error: "Tick the confirmation box before sending." };

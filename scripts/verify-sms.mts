@@ -4,7 +4,7 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { normalisePhone, countSegments, renderTemplate, estimateCost } from "@/lib/sms-shared";
+import { normalisePhone, countSegments, renderTemplate, estimateCost, pupilFieldsUsed } from "@/lib/sms-shared";
 import {
   DEFAULT_MESSAGE_TEMPLATES,
   TRANSACTIONAL,
@@ -31,6 +31,18 @@ check("rejects empty", normalisePhone("") === null && normalisePhone(null) === n
 check("rejects a landline", normalisePhone("0302123456") === null);
 check("rejects an unknown network prefix", normalisePhone("0111234567") === null && normalisePhone("233991234567") === null);
 check("accepts every mobile network", ["0201234567", "0241234567", "0261234567", "0501234567", "0541234567", "0571234567"].every((n) => normalisePhone(n) !== null));
+
+console.log("\nPupil-only placeholders (typed numbers have no pupil)");
+check(
+  "finds pupil fields, however they are spaced or cased",
+  JSON.stringify(pupilFieldsUsed("Dear {{ Student_Name }}, owing GHS {{balance}} ({{BALANCE}})")) ===
+    JSON.stringify(["{{student_name}}", "{{balance}}"]),
+);
+check(
+  "name, school and term fields are fine without a pupil",
+  pupilFieldsUsed("Hello {{first_name}} {{guardian_name}} from {{school_name}}, {{term}}, back on {{reopening_date}}").length === 0,
+);
+check("a plain message uses none", pupilFieldsUsed("School is closed on Friday.").length === 0);
 
 console.log("\nSegment counting");
 check("short message is one segment", countSegments("Hello").segments === 1);

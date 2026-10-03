@@ -44,7 +44,13 @@ export async function resolveAudience(
   // any name the ternary did not anticipate.
   const term_ = term ? `${termLabel(term.name)} Term` : "";
 
-  const base = { school_name: schoolName, term: term_ } satisfies MergeContext;
+  const base = {
+    school_name: schoolName,
+    term: term_,
+    // About the TERM, not a pupil, so every audience can use it (typed numbers and
+    // staff used to get a blank).
+    reopening_date: term?.nextTermBegins ? term.nextTermBegins.toLocaleDateString("en-GB") : "",
+  } satisfies MergeContext;
 
   if (type === "ALL_STAFF") {
     const staff = await prisma.staff.findMany({
@@ -77,7 +83,10 @@ export async function resolveAudience(
     return dedupe(
       (filter.phones ?? []).flatMap((raw) => {
         const phone = normalisePhone(raw);
-        return phone ? [{ phone, context: { ...base } }] : [];
+        // No person behind a typed number, so a name placeholder says "Parent" rather
+        // than leaving "Hello ,". Pupil-only fields stay blank, and the composer
+        // warns about them (and send refuses) — see pupilFieldsUsed.
+        return phone ? [{ phone, context: { ...base, first_name: "Parent", guardian_name: "Parent" } }] : [];
       }),
     );
   }
