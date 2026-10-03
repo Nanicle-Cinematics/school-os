@@ -105,7 +105,7 @@ function affordances(html: string) {
   };
 }
 
-async function openSession(userId: string, activeSchoolId?: string) {
+async function openSession(userId: string, activeSchoolId?: string, passedSecondFactor = false) {
   const token = randomBytes(32).toString("hex");
   await db(() =>
     withBypass(() =>
@@ -114,6 +114,8 @@ async function openSession(userId: string, activeSchoolId?: string) {
           userId,
           tokenHash: createHash("sha256").update(token).digest("hex"),
           activeSchoolId,
+          // The console wants a session that has passed the second factor.
+          ...(passedSecondFactor ? { mfaVerifiedAt: new Date() } : {}),
           expiresAt: new Date(Date.now() + 86_400_000),
         },
       }),
@@ -177,7 +179,7 @@ async function clean(slug: string) {
   const users = await db(() =>
     withBypass(() =>
       prisma.user.deleteMany({
-        where: { email: { in: [`qa-${stamp}@example.com`, `qa-admin-${stamp}@example.com`] } },
+        where: { email: { in: [`qa-${stamp}@example.com`, `qa-admin-${stamp}@example.com`, `qa-admin2-${stamp}@example.com`] } },
       }),
     ),
   );
@@ -205,6 +207,11 @@ async function main() {
           email: `qa-admin-${stamp}@example.com`,
           passwordHash: randomBytes(32).toString("hex"),
           isPlatformAdmin: true,
+          // Enrolled in two-factor, as every platform admin has to be to see the
+          // console at all. The secret is never read here — the session below is
+          // minted as already verified — so a placeholder stands in for it.
+          totpEnabledAt: new Date(),
+          totpSecretEnc: "v1.placeholder.placeholder.placeholder",
         },
       }),
     ),
@@ -338,7 +345,7 @@ async function main() {
    * hours this console was built in.
    */
   console.log("\n\n──── the Nanicle console ────");
-  const adminToken = await openSession(admin.id);
+  const adminToken = await openSession(admin.id, undefined, true);
 
   const consoleRoutes: { path: string; mustContain: string[] }[] = [
     {
@@ -402,6 +409,38 @@ async function main() {
     problems.push("/admin rendered for a school's proprietor — the console is Nanicle's alone");
   } else {
     console.log(`  /admin as a school proprietor  [${trespass.status}${trespass.location ? ` -> ${trespass.location}` : ""}]  refused`);
+  }
+
+  // The second factor gate, from outside: the SAME admin, signed in with the password only,
+  // and an admin who has not enrolled at all, must both be turned away from the console.
+  const passwordOnly = await openSession(admin.id);
+  const gateA = await get("/admin", passwordOnly);
+  if (gateA.status === 200 && !gateA.location) {
+    problems.push("/admin rendered for an enrolled admin whose session has not passed the code check");
+  } else if (!/\/admin\/verify/.test(gateA.location ?? "")) {
+    problems.push(`an enrolled admin without the code check was sent to ${gateA.location ?? "(nowhere)"}, not /admin/verify`);
+  } else {
+    console.log(`  /admin, password only, enrolled  [${gateA.status} -> ${gateA.location}]  held at the code check`);
+  }
+  const unenrolled = await db(() =>
+    withBypass(() =>
+      prisma.user.create({
+        data: {
+          name: "QA Unenrolled Admin",
+          email: `qa-admin2-${stamp}@example.com`,
+          passwordHash: randomBytes(32).toString("hex"),
+          isPlatformAdmin: true,
+        },
+      }),
+    ),
+  );
+  const gateB = await get("/admin", await openSession(unenrolled.id));
+  if (gateB.status === 200 && !gateB.location) {
+    problems.push("/admin rendered for a platform admin who has not enrolled in two-factor");
+  } else if (!/\/admin\/security/.test(gateB.location ?? "")) {
+    problems.push(`an un-enrolled admin was sent to ${gateB.location ?? "(nowhere)"}, not /admin/security`);
+  } else {
+    console.log(`  /admin, not enrolled  [${gateB.status} -> ${gateB.location}]  sent to enrol`);
   }
 
   console.log(`\n\nLeft behind: school ${slug}, admin qa-admin-${stamp}@example.com`);
