@@ -459,6 +459,18 @@ model User {
   /// When the current TEMPORARY password was handed out. Null once the person has
   /// chosen their own. Past 14 days an unused temporary password stops working.
   passwordIssuedAt   DateTime?
+
+  // Second factor for the Nanicle platform admin (authenticator-app codes, RFC 6238).
+  // The secret is AES-256-GCM encrypted under TOTP_ENCRYPTION_KEY before it is stored,
+  // so a database dump alone does not contain it. `totpEnabledAt` null with a secret
+  // present means enrolment was started and never confirmed.
+  totpSecretEnc      String?
+  totpEnabledAt      DateTime?
+  /// Newest 30-second step already accepted; a code for that step or an earlier one
+  /// is refused, so a code cannot be replayed.
+  totpLastStep       Int?
+  /// SHA-256 of each unused one-time recovery code.
+  recoveryCodeHashes String[]  @default([])
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?
@@ -561,15 +573,17 @@ model LoginAttempt {
 }
 
 model Session {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash      String   @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash      String    @unique
   activeSchoolId String? // which tenant this session is currently operating in
   expiresAt      DateTime
   ip             String?
   userAgent      String?
-  createdAt      DateTime @default(now())
+  /// When this session passed the second factor. Only the platform console looks at it.
+  mfaVerifiedAt  DateTime?
+  createdAt      DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])
