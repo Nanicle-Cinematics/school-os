@@ -27,6 +27,13 @@ payroll. Single-campus by design — there is no `Branch` model.
 
 ## Gotchas
 
+- **Only `main` builds on Vercel.** `vercel.json`'s `ignoreCommand` skips the build for every
+  other branch, so a PR gets no preview deployment (CI is GitHub Actions and still runs). It was
+  added on 2026-10-03 after the free team hit 100% of its 10 GB Function Storage: school-os alone
+  had made 342 deployments in six weeks and each one stores its own copy of the server bundle.
+  Put `[preview]` in a commit message to get a preview for that push. A skipped build is not an
+  error, and the "Vercel" check on a PR will say so.
+
 - **Prisma is pinned to v6.** Bare `npx prisma …` pulls v7, which rejects the
   `url = env("DATABASE_URL")` datasource syntax (P1012). Always go through the
   npm scripts (`npm run db:push`) or the local binary
