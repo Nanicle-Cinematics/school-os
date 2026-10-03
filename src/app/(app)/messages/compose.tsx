@@ -204,6 +204,11 @@ export function Compose({
             {preview.segments} segment{preview.segments === 1 ? "" : "s"} each ({preview.encoding}) ·
             about GHS {preview.cost?.toFixed(2)}
           </p>
+          {preview.warnings?.map((warning) => (
+            <p key={warning} className="mt-1 text-xs text-warning-ink">
+              {warning}
+            </p>
+          ))}
           {preview.encoding === "UCS2" ? (
             <p className="mt-1 text-xs text-warning-ink">
               Your message contains a non-GSM character, which cuts each segment from 160 to 70

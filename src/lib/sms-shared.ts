@@ -103,3 +103,30 @@ export const MERGE_FIELDS = [
   "reopening_date",
   "school_name",
 ] as const;
+
+/**
+ * Merge fields that come from a PUPIL's record. A hand-typed list of numbers has no
+ * pupil behind it, so these render as nothing there — and "has an outstanding balance
+ * of GHS ." or "Your child , of ," is worse than not sending.
+ */
+export const PUPIL_FIELDS = [
+  "student_name",
+  "class_name",
+  "admission_no",
+  "balance",
+  "amount",
+  "receipt_no",
+  "due_date",
+] as const;
+
+/** The pupil-only placeholders a message body actually uses, as written in braces. */
+export function pupilFieldsUsed(body: string): string[] {
+  const used = new Set<string>();
+  for (const match of body.matchAll(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi)) {
+    const key = match[1].toLowerCase();
+    if ((PUPIL_FIELDS as readonly string[]).includes(key)) {
+      used.add(`{{${key}}}`);
+    }
+  }
+  return [...used];
+}
