@@ -680,6 +680,25 @@ is never re-decided behind the office's back.
 pass mark above the best mark in the class must repeat the whole class, and the
 first term must leave every row `PENDING`.
 
+## Mock exams are not term assessments
+
+The BECE year (the top JHS level — found by stage and order, never by code:
+provisioning calls it `B9`, the demo seed `JHS3`) sits mocks: `MockExam` per
+sitting, `MockScore` per pupil per subject, out of 100. They are deliberately
+NOT `Assessment` rows — `computeClassResults` adds every assessment in a term
+into the report card, and a mock must never move a term's marks.
+
+`mock-engine.ts` grades on the school's default scale and aggregates the BECE
+way: **all four core subjects (ENG, MAT, SCI, SOC — matched by code, then name;
+`Subject.isCore` is true for everything) plus the best two of the rest.** A
+missing core subject or fewer than two others means NO aggregate rather than a
+flattering partial one; absent is 0, the lowest grade. Positions are year-group
+wide, ties shared. Nothing is stored — grades, aggregates and positions are
+derived on read. Subject teachers enter marks for their own current-year
+assignments (`/mocks` is MARKING); the broadsheet, slips and progress are
+ACADEMIC. `npm run verify:mocks` (CI, after the app starts) pins the aggregate
+and drives the sheet as leadership, an assigned teacher and an unassigned one.
+
 ## The register, and the day nobody marked it
 
 Attendance is a **daily** mark per child, taken by the form teacher on

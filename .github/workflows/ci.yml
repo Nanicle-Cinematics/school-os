@@ -338,6 +338,18 @@ jobs:
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:attendance
 
+      # Mock exams for the BECE year. Here, after the app starts, for the same
+      # reason as attendance: the sheet's guards (assigned teacher, marks out of
+      # 100, a closed mock is final) live behind requireRole in "use server"
+      # functions. The engine half — the BECE aggregate — needs nothing. It
+      # WRITES a mock in the seeded school and deletes it again.
+      - name: Mock exams — the BECE aggregate, and who may enter marks
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:mocks
+
       # A school provisioned minutes ago, walked screen by screen. This is the
       # check for onboarding dead ends — a screen that maps over an empty
       # collection and offers no way forward — which the demo seed hides, because

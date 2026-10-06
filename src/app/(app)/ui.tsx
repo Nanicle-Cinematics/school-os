@@ -178,6 +178,9 @@ const STATUS_TONE: Record<string, string> = {
   CONFIRMED: "bg-success-tint text-success-ink",
   REVERSED: "bg-danger-tint text-danger-ink line-through",
   PENDING: "bg-warning-tint text-warning-ink",
+  // A mock exam: open for marking, or closed with its marks final.
+  OPEN: "bg-info-tint text-info-ink",
+  CLOSED: "bg-slate-100 text-slate-500",
 };
 
 export function StatusBadge({ status }: { status: string }) {

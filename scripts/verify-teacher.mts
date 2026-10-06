@@ -29,9 +29,11 @@ const LANDING = "/assessments/sheet";
 /**
  * The screens a teacher signs in to use: marking, remarks, their register — and
  * the daily attendance register, which is the one place a plain teacher WRITES
- * about a class. The class page itself stays read-only for them.
+ * about a class. The class page itself stays read-only for them. And the mock
+ * exams list, from which a JHS 3 subject teacher enters mock marks; the mock
+ * broadsheet and progress behind it are leadership's.
  */
-const ALLOWED = ["/assessments/sheet", "/results/remarks", "/classes", "/attendance"];
+const ALLOWED = ["/assessments/sheet", "/results/remarks", "/classes", "/attendance", "/mocks"];
 
 /** Everything else reachable from the sidebar or by typing a URL. */
 const FORBIDDEN = [
@@ -45,6 +47,7 @@ const FORBIDDEN = [
   "/assessments",
   "/results",
   "/results/broadsheet",
+  "/mocks/progress",
   "/promotions",
   "/fees",
   "/invoices",

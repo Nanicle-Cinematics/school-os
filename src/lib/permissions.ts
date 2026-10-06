@@ -108,6 +108,7 @@ export type NavItem = {
 
 export type NavIcon =
   | "dashboard"
+  | "mocks"
   | "export"
   | "students"
   | "guardians"
@@ -181,6 +182,9 @@ export const NAV: NavSection[] = [
       { href: "/assessments", label: "Assessments", icon: "assessments", roles: ACADEMIC },
       { href: "/results", label: "Results", icon: "results", roles: ACADEMIC },
       { href: "/results/remarks", label: "Conduct & remarks", icon: "remarks", roles: MARKING },
+      // MARKING, so a JHS 3 subject teacher can enter mock marks. The broadsheet,
+      // slips and progress behind it are ACADEMIC and refuse a teacher by URL.
+      { href: "/mocks", label: "Mock exams", icon: "mocks", roles: MARKING },
       { href: "/promotions", label: "Promotions", icon: "promotions", roles: OFFICE },
     ],
   },

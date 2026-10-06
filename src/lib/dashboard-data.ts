@@ -699,6 +699,39 @@ const ACTIVITY: Record<
     title: (a) => `${count(a.marked)} ${plural(a.marked, "mark")} entered`,
     detail: "Mark sheet",
   },
+  "mock.saveSheet": {
+    kind: "academic",
+    title: (a) => {
+      const name = text(a.title);
+      return `${count(a.marked)} ${plural(a.marked, "mark")} entered${name ? ` for ${name}` : ""}`;
+    },
+    detail: "Mock exams",
+  },
+  "mock.create": {
+    kind: "academic",
+    title: (a) => {
+      const name = text(a.title);
+      return name ? `${name} was set up` : "A mock exam was set up";
+    },
+    detail: "Mock exams",
+  },
+  "mock.close": {
+    kind: "academic",
+    title: (a) => {
+      const name = text(a.title);
+      return name ? `${name} was closed — its marks are final` : "A mock exam was closed";
+    },
+    detail: "Mock exams",
+  },
+  "mock.reopen": {
+    kind: "academic",
+    title: (a) => {
+      const name = text(a.title);
+      return name ? `${name} was reopened for marking` : "A mock exam was reopened";
+    },
+    detail: "Mock exams",
+  },
+  "mock.delete": { kind: "academic", title: () => "A mock exam was deleted", detail: "Mock exams" },
   "score.saveBatch": {
     kind: "academic",
     title: (a) => `${count(a.entered)} ${plural(a.entered, "mark")} entered`,
