@@ -52,6 +52,7 @@ export default async function FeesPage() {
             categories={categories}
             terms={terms}
             academicYearId={year.id}
+            pricedLevelIds={[...covered]}
           />
         }
       />

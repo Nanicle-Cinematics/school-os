@@ -546,6 +546,26 @@ const ACTIVITY: Record<
     title: () => "A fee item was removed",
     detail: "Fees",
   },
+  /* One row per save, however many levels it priced, so a band reads as the
+     single decision it was rather than six lines saying the same thing. */
+  "feeStructure.create": {
+    kind: "money",
+    title: (a) => {
+      const names = Array.isArray(a.levels) ? a.levels.filter((n) => typeof n === "string") : [];
+      if (names.length === 1) return `Fees were set for ${names[0]}`;
+      if (names.length > 1) return `Fees were set for ${names.length} levels`;
+      return "A fee structure was added";
+    },
+    detail: "Fees",
+  },
+  "feeStructure.update": {
+    kind: "money",
+    title: (a) => {
+      const names = Array.isArray(a.levels) ? a.levels.filter((n) => typeof n === "string") : [];
+      return names.length === 1 ? `Fees for ${names[0]} were changed` : "A fee structure was changed";
+    },
+    detail: "Fees",
+  },
   "feeStructure.delete": {
     kind: "money",
     title: () => "A fee structure was removed",
