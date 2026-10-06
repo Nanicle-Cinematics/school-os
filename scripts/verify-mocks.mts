@@ -15,7 +15,7 @@
  * `finally` (its marks cascade with it).
  */
 import { createHash, randomBytes } from "node:crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { runWithTenantContext, withBypass } from "@/lib/tenant-context";
 import { aggregateChange, beceAggregate, isBeceCore, mockBroadsheet, type SubjectCell } from "@/lib/mock-engine";
@@ -298,15 +298,25 @@ if (!(await appIsUp())) {
   } catch (error) {
     check("the HTTP half ran to the end", false, error instanceof Error ? error.message : String(error));
   } finally {
-    await withBypass(async () => {
+    /**
+     * ⚠️ Cleaned up through the OWNER connection (DATABASE_URL), not the app's.
+     * In CI `@/lib/prisma` connects as the restricted school_os_app role, which
+     * may not delete from AuditLog at all — the trail is append-only for the
+     * app, and that is the point of it. verify:actions cleans up the same way.
+     */
+    const owner = new PrismaClient();
+    try {
       if (mockId) {
-        await prisma.mockExam.delete({ where: { id: mockId } }).catch(() => {});
-        await prisma.auditLog.deleteMany({ where: { entityId: mockId } });
+        await owner.mockExam.deleteMany({ where: { id: mockId } });
+        await owner.auditLog.deleteMany({ where: { entityId: mockId } });
       }
       for (const token of tokens) {
-        await prisma.session.deleteMany({ where: { tokenHash: createHash("sha256").update(token).digest("hex") } });
+        await owner.session.deleteMany({ where: { tokenHash: createHash("sha256").update(token).digest("hex") } });
       }
-    });
+      check("the fixture mock is removed again", mockId === null || (await owner.mockExam.count({ where: { id: mockId } })) === 0);
+    } finally {
+      await owner.$disconnect();
+    }
   }
 }
 
