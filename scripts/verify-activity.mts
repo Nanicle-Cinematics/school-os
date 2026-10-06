@@ -89,6 +89,10 @@ const rows: { action: string; after: unknown; expect: RegExp }[] = [
   { action: "attendance.register", after: { absent: 3, excused: 1 }, expect: /^4 pupils away$/ },
   { action: "attendance.register", after: { absent: 0, excused: 0 }, expect: /everybody in/ },
   { action: "feeCategory.create", after: { name: "PTA Levy" }, expect: /PTA Levy.*fee item/ },
+  // A band of levels priced in one save is one decision, so it is one line.
+  { action: "feeStructure.create", after: { levels: ["JHS 3"] }, expect: /^Fees were set for JHS 3$/ },
+  { action: "feeStructure.create", after: { levels: ["Basic 1", "Basic 2", "Basic 3"] }, expect: /^Fees were set for 3 levels$/ },
+  { action: "feeStructure.create", after: {}, expect: /^A fee structure was added$/ },
 ];
 
 const created: string[] = [];

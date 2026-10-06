@@ -15,9 +15,18 @@ const MAX_FEE = new Prisma.Decimal("9999999.99");
 export type ActionState = { error?: string; ok?: string };
 
 /**
- * Create or replace a level's fee structure for the year. Items are rewritten
- * wholesale rather than diffed — a fee list is small, and replacing it is far
- * easier to reason about than merging.
+ * Create a fee structure for one or more levels at once, or replace one level's.
+ *
+ * Schools price in bands as often as by level — one figure for Primary, another
+ * for JHS — and some then single out a level, JHS 3 being the usual one because
+ * of the BECE. Ticking several levels writes one structure PER LEVEL with the
+ * same amounts, so a band is a data-entry shortcut and never a second kind of
+ * structure: the invoice engine, the twin check and "Remove" all go on working
+ * per level, and pricing JHS 3 differently is simply leaving it unticked and
+ * giving it a form of its own.
+ *
+ * Items are rewritten wholesale rather than diffed — a fee list is small, and
+ * replacing it is far easier to reason about than merging.
  */
 export async function saveFeeStructure(
   _prev: ActionState,
@@ -26,15 +35,21 @@ export async function saveFeeStructure(
   const auth = await requireRole(FINANCE);
   setTenantContext(auth.tenant);
 
-  const levelId = String(formData.get("levelId") ?? "");
+  const levelIds = [
+    ...new Set(formData.getAll("levelId").map((value) => String(value)).filter(Boolean)),
+  ];
   const academicYearId = String(formData.get("academicYearId") ?? "");
   const termId = String(formData.get("termId") ?? "");
   const residency = String(formData.get("residency") ?? "ANY");
   const studentType = String(formData.get("studentType") ?? "ANY");
   const structureId = String(formData.get("structureId") ?? "");
 
-  if (!levelId || !academicYearId) {
-    return { error: "Choose a level." };
+  if (levelIds.length === 0 || !academicYearId) {
+    return { error: "Choose at least one level." };
+  }
+  // Replacing names one existing structure, and a structure belongs to one level.
+  if (structureId && levelIds.length !== 1) {
+    return { error: "An existing fee structure belongs to one level. Choose just that level." };
   }
 
   // Category amounts arrive as amount:<categoryId> fields.
@@ -54,9 +69,13 @@ export async function saveFeeStructure(
     return { error: "Enter an amount for at least one fee item." };
   }
 
-  const level = await prisma.level.findUnique({ where: { id: levelId } });
-  if (!level) {
-    return { error: "That level no longer exists." };
+  const levels = await prisma.level.findMany({
+    where: { id: { in: levelIds } },
+    orderBy: { order: "asc" },
+    select: { id: true, name: true },
+  });
+  if (levels.length !== levelIds.length) {
+    return { error: "A level on that form no longer exists. Reload the page and try again." };
   }
 
   // Everything below came from the request, so it is checked against what exists
@@ -90,9 +109,14 @@ export async function saveFeeStructure(
 
   // Two structures with the same level, year, term, residency and type tie, and the
   // bill then uses whichever the database returns first. One per combination.
-  const twin = await prisma.feeStructure.findFirst({
+  //
+  // A band is refused WHOLE when any of its levels is already priced, never
+  // written around: re-pricing "all of JHS" must not quietly overwrite the JHS 3
+  // structure a school set apart on purpose, and saving the other two alone would
+  // leave a bursar believing the band went in as typed.
+  const twins = await prisma.feeStructure.findMany({
     where: {
-      levelId,
+      levelId: { in: levelIds },
       academicYearId,
       termId: termId || null,
       residency: residency as "ANY" | "DAY" | "BOARDING",
@@ -100,52 +124,89 @@ export async function saveFeeStructure(
       isActive: true,
       ...(structureId ? { id: { not: structureId } } : {}),
     },
-    select: { id: true },
+    select: { levelId: true },
   });
-  if (twin) {
+  if (twins.length > 0) {
+    const taken = new Set(twins.map((twin) => twin.levelId));
+    const names = levels.filter((level) => taken.has(level.id)).map((level) => level.name);
     return {
-      error: `${level.name} already has a fee structure for exactly those conditions. Edit that one instead of adding a second.`,
+      error:
+        names.length === 1 && levels.length === 1
+          ? `${names[0]} already has a fee structure for exactly those conditions. Edit that one instead of adding a second.`
+          : `Already priced for exactly those conditions: ${names.join(", ")}. Untick ${names.length === 1 ? "it" : "them"}, or remove ${names.length === 1 ? "its structure" : "their structures"} first. Nothing was saved.`,
     };
   }
 
+  const who = residency === "ANY" ? "all students" : residency.toLowerCase();
+
   await tenantTransaction(auth.schoolId, async (tx) => {
-    const data = {
-      schoolId: auth.schoolId,
-      academicYearId,
-      termId: termId || null,
-      levelId,
-      name: `${level.name} — ${residency === "ANY" ? "all students" : residency.toLowerCase()}`,
-      residency: residency as "ANY" | "DAY" | "BOARDING",
-      studentType: studentType as "ANY" | "NEW" | "CONTINUING",
-      isActive: true,
-    };
-
-    const structure = structureId
-      ? await tx.feeStructure.update({ where: { id: structureId }, data })
-      : await tx.feeStructure.create({ data });
-
-    await tx.feeStructureItem.deleteMany({ where: { feeStructureId: structure.id } });
-    await tx.feeStructureItem.createMany({
-      data: lines.map((line) => ({
+    const ids: string[] = [];
+    for (const level of levels) {
+      const data = {
         schoolId: auth.schoolId,
-        feeStructureId: structure.id,
-        feeCategoryId: line.feeCategoryId,
-        amount: line.amount!,
-      })),
+        academicYearId,
+        termId: termId || null,
+        levelId: level.id,
+        name: `${level.name} — ${who}`,
+        residency: residency as "ANY" | "DAY" | "BOARDING",
+        studentType: studentType as "ANY" | "NEW" | "CONTINUING",
+        isActive: true,
+      };
+      const structure = structureId
+        ? await tx.feeStructure.update({ where: { id: structureId }, data })
+        : await tx.feeStructure.create({ data, select: { id: true } });
+      ids.push(structure.id);
+    }
+
+    // One delete and one insert for the whole band, not a pair per level.
+    await tx.feeStructureItem.deleteMany({ where: { feeStructureId: { in: ids } } });
+    await tx.feeStructureItem.createMany({
+      data: ids.flatMap((feeStructureId) =>
+        lines.map((line) => ({
+          schoolId: auth.schoolId,
+          feeStructureId,
+          feeCategoryId: line.feeCategoryId,
+          amount: line.amount!,
+        })),
+      ),
     });
 
-    await writeAudit(tx, {
-      schoolId: auth.schoolId,
-      actorUserId: auth.userId,
-      action: structureId ? "feeStructure.update" : "feeStructure.create",
-      entity: "FeeStructure",
-      entityId: structure.id,
-      after: { levelId, residency, studentType, lines: lines.length },
-    });
+    const after = {
+      levels: levels.map((level) => level.name),
+      structureIds: ids,
+      residency,
+      studentType,
+      lines: lines.length,
+    };
+    if (structureId) {
+      await writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: "feeStructure.update",
+        entity: "FeeStructure",
+        entityId: structureId,
+        after,
+      });
+    } else {
+      await writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: "feeStructure.create",
+        entity: "FeeStructure",
+        entityId: ids[0],
+        after,
+      });
+    }
   });
 
   revalidatePath("/fees");
-  return { ok: `Fee structure saved for ${level.name}.` };
+  const names = levels.map((level) => level.name);
+  return {
+    ok:
+      names.length === 1
+        ? `Fee structure saved for ${names[0]}.`
+        : `Fee structures saved for ${names.length} levels: ${names.join(", ")}.`,
+  };
 }
 
 /**
