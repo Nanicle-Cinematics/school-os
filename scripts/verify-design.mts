@@ -125,6 +125,12 @@ const NOT_LISTS = [
   "assessments/sheet/sheet-form.tsx",
   "assessments/[id]/score-grid.tsx",
   "results/broadsheet/page.tsx",
+  // The mock broadsheet is the term broadsheet's twin — a wide grid of
+  // candidates by subject — and the mock sheet is the mark sheet's. The slip is
+  // a printed document a parent keeps, like the report card.
+  "mocks/[id]/page.tsx",
+  "mocks/[id]/sheet/sheet-form.tsx",
+  "mocks/[id]/slips/page.tsx",
   "promotions/promotion-form.tsx",
   "promotions/bulk-form.tsx",
   "students/import/import-form.tsx",

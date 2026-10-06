@@ -119,6 +119,8 @@ model School {
   gradeBands     GradeBand[]
   assessments    Assessment[]
   scores         Score[]
+  mockExams      MockExam[]
+  mockScores     MockScore[]
   subjectResults SubjectResult[]
   termResults    TermResult[]
 
@@ -645,6 +647,7 @@ model AcademicYear {
   feeStructures       FeeStructure[]
   teachingAssignments TeachingAssignment[]
   studentDiscounts    StudentDiscount[]
+  mockExams           MockExam[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -698,6 +701,7 @@ model Level {
   classGroups   ClassGroup[]
   levelSubjects LevelSubject[]
   feeStructures FeeStructure[]
+  mockExams     MockExam[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -750,6 +754,7 @@ model Subject {
   assessments         Assessment[]
   subjectResults      SubjectResult[]
   teachingAssignments TeachingAssignment[]
+  mockScores          MockScore[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -896,6 +901,7 @@ model Student {
   messages       Message[]
 
   attendanceEntries AttendanceEntry[]
+  mockScores        MockScore[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, status])
@@ -1214,6 +1220,67 @@ model Score {
 
   @@unique([assessmentId, studentId])
   @@index([schoolId, studentId])
+}
+
+/**
+ * A mock examination for the final-year (BECE candidate) class — "Mock 1",
+ * "Mock 2" — sat by the whole year group across its streams.
+ * Deliberately SEPARATE from Assessment. The results engine adds every
+ * assessment in a term into the report card, and a mock must never move a
+ * term's marks: it is a rehearsal for an external exam, graded and aggregated
+ * the way that exam is, and read on its own broadsheet. Grades, the aggregate
+ * and positions are derived on read (mock-engine.ts) rather than stored.
+ */
+model MockExam {
+  id             String       @id @default(cuid())
+  schoolId       String
+  school         School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  levelId        String
+  level          Level        @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  title       String // "Mock 1"
+  sittingDate DateTime?
+  // Closed = marks are final and no longer editable from the sheet.
+  isClosed    Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  scores MockScore[]
+
+  @@unique([schoolId, academicYearId, levelId, title])
+  @@index([schoolId])
+}
+
+/**
+ * One pupil's mark in one subject of one mock, out of 100.
+ */
+model MockScore {
+  id         String   @id @default(cuid())
+  schoolId   String
+  school     School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  mockExamId String
+  mockExam   MockExam @relation(fields: [mockExamId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  rawScore Decimal? @db.Decimal(5, 2) // null with isAbsent = absent
+  isAbsent Boolean  @default(false)
+
+  // Who typed it, for the audit trail. A plain id, not a relation: the staff
+  // record may be removed and the mark must stay.
+  enteredByStaffId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([mockExamId, studentId, subjectId])
+  @@index([schoolId])
+  @@index([mockExamId, subjectId])
 }
 
 enum ResultStatus {
