@@ -9,7 +9,7 @@ import { FINANCE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
-import { allocateFifo, recalcInvoice, syncCarriedForward } from "@/lib/invoice-engine";
+import { allocateFifo, netOutstanding, recalcInvoice, syncCarriedForward } from "@/lib/invoice-engine";
 import {
   cashAccountIdForMethod,
   findJournalEntryForSource,
@@ -19,7 +19,7 @@ import {
 } from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
 import { readAttachment, storeAttachment } from "@/lib/attachments";
-import { queueTransactionalSms } from "@/lib/transactional-sms";
+import { queueTransactionalSms, type TextOutcome } from "@/lib/transactional-sms";
 import { TRANSACTIONAL } from "@/lib/message-defaults";
 import { normalisePhone } from "@/lib/sms";
 
@@ -262,19 +262,31 @@ export async function recordPayment(
           lastName: true,
           invoices: {
             where: { status: { not: "CANCELLED" } },
-            select: { balance: true },
+            select: { total: true, broughtForward: true },
+          },
+          payments: {
+            where: { reversedAt: null, status: "CONFIRMED" },
+            select: { amount: true },
           },
         },
       },
     },
   });
 
+  // Who the receipt went to, or why it did not go — shown under the receipt
+  // number, because a text that never left is as silent to the office as it is
+  // to the parent.
+  let texted: TextOutcome | "noGuardian" = "noGuardian";
   if (receiptDetails?.guardian) {
-    const balance = receiptDetails.student.invoices.reduce(
-      (sum, invoice) => sum + Number(invoice.balance),
-      0,
-    );
-    await queueTransactionalSms({
+    /**
+     * ⚠️ NOT a sum of invoice balances. Each term's invoice carries the last
+     * one's unpaid balance forward, so summing counted the same arrears once per
+     * term and told a parent with last term's debt that they owed far more than
+     * they did — in a text headed "we have received". netOutstanding is the
+     * figure the debtor messages and the parent portal already use.
+     */
+    const balance = netOutstanding(receiptDetails.student.invoices, receiptDetails.student.payments);
+    texted = await queueTransactionalSms({
       schoolId: auth.schoolId,
       templateName: TRANSACTIONAL.paymentReceived,
       gate: "notifyOnPayment",
@@ -295,7 +307,7 @@ export async function recordPayment(
   revalidatePath("/payments");
   revalidatePath("/invoices");
   revalidatePath("/dashboard");
-  redirect(`/payments?receipt=${encodeURIComponent(receiptNo)}`);
+  redirect(`/payments?receipt=${encodeURIComponent(receiptNo)}&sms=${texted}`);
 }
 
 export async function reversePayment(formData: FormData): Promise<void> {

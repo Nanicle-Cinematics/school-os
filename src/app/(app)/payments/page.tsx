@@ -9,12 +9,58 @@ import { prisma } from "@/lib/prisma";
 import { getPaymentList } from "@/lib/payment-data";
 import { reversePayment } from "@/lib/payment-actions";
 import { formatCedis } from "@/lib/money";
+import { netOutstanding } from "@/lib/invoice-engine";
 import { PageHeader, Card, StatusBadge, Alert, filterClass } from "../ui";
 import { DataTable, Row, StatCard, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { RecordForm, type StudentOption } from "./record-form";
 
 export const metadata: Metadata = { title: "Payments · School OS" };
+
+/**
+ * What became of the receipt text, said under the receipt number.
+ *
+ * The outcome arrives in the redirect from recordPayment (`&sms=`). Every value
+ * but "sent" is a reason the parent heard nothing, and each one names where it
+ * is put right — before this line existed the office could not tell a receipt
+ * that went from one that never did.
+ */
+function receiptTextLine(
+  outcome: string | undefined,
+  guardian: { name: string; phone: string | null } | null,
+): { tone: "ok" | "warn"; text: React.ReactNode } | null {
+  const who = guardian?.name ?? "the guardian";
+  const settings = (
+    <Link href="/settings/sms" className="font-medium underline">
+      Settings → SMS
+    </Link>
+  );
+  const log = (
+    <Link href="/messages" className="font-medium underline">
+      Messages
+    </Link>
+  );
+  switch (outcome) {
+    case "sent":
+      return { tone: "ok", text: <>Receipt texted to {who}{guardian?.phone ? ` on ${guardian.phone}` : ""}.</> };
+    case "dryRun":
+      return { tone: "warn", text: <>Not texted: no SMS gateway is set up, so the receipt was only recorded in {log}. The parent received nothing.</> };
+    case "failed":
+      return { tone: "warn", text: <>The receipt text to {who} failed. The gateway&apos;s reason is in {log}.</> };
+    case "smsOff":
+      return { tone: "warn", text: <>Not texted: SMS is switched off in {settings}.</> };
+    case "gateOff":
+      return { tone: "warn", text: <>Not texted: receipt texts are switched off in {settings}.</> };
+    case "noGuardian":
+      return { tone: "warn", text: <>Not texted: this pupil has no primary guardian to send the receipt to.</> };
+    case "noPhone":
+      return { tone: "warn", text: <>Not texted: {who} has no valid phone number on record.</> };
+    case "error":
+      return { tone: "warn", text: <>The receipt text could not be sent. The payment itself is recorded.</> };
+    default:
+      return null;
+  }
+}
 
 const COLUMNS: Column[] = [
   { label: "Receipt" },
@@ -42,6 +88,7 @@ export default async function PaymentsPage({
   const method = typeof params.method === "string" ? params.method : undefined;
   const receipt =
     typeof params.receipt === "string" ? params.receipt : undefined;
+  const sms = typeof params.sms === "string" ? params.sms : undefined;
 
   const [data, students] = await Promise.all([
     getPaymentList({ q, method }),
@@ -57,12 +104,35 @@ export default async function PaymentsPage({
           select: { name: true, level: { select: { name: true } } },
         },
         invoices: {
-          where: { balance: { gt: 0 }, status: { not: "CANCELLED" } },
-          select: { balance: true },
+          where: { status: { not: "CANCELLED" } },
+          select: { total: true, broughtForward: true },
+        },
+        payments: {
+          where: { reversedAt: null, status: "CONFIRMED" },
+          select: { amount: true },
         },
       },
     }),
   ]);
+
+  // Only after a payment was just recorded: who its receipt was addressed to.
+  const receiptGuardian = receipt
+    ? await prisma.payment.findFirst({
+        where: { receiptNo: receipt },
+        select: { guardian: { select: { firstName: true, lastName: true, phone: true } } },
+      })
+    : null;
+  const textLine = receipt
+    ? receiptTextLine(
+        sms,
+        receiptGuardian?.guardian
+          ? {
+              name: `${receiptGuardian.guardian.firstName} ${receiptGuardian.guardian.lastName}`,
+              phone: receiptGuardian.guardian.phone,
+            }
+          : null,
+      )
+    : null;
 
   const options: StudentOption[] = students.map((student) => ({
     id: student.id,
@@ -71,10 +141,10 @@ export default async function PaymentsPage({
     className: student.currentClassGroup
       ? `${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
       : "Unassigned",
-    balance: student.invoices.reduce(
-      (sum, invoice) => sum + Number(invoice.balance),
-      0,
-    ),
+    // Across terms, so NOT a sum of invoice balances: each term's invoice
+    // carries the last one's arrears forward, and summing counted them twice.
+    // The same figure the receipt text now quotes.
+    balance: Number(netOutstanding(student.invoices, student.payments)),
   }));
 
   const owing = options.filter((option) => option.balance > 0).length;
@@ -100,7 +170,13 @@ export default async function PaymentsPage({
           Payment recorded. Receipt number{" "}
           <span className="font-mono font-semibold">{receipt}</span> — give this
           to the parent.
+          {textLine?.tone === "ok" ? <> {textLine.text}</> : null}
         </Alert>
+      ) : null}
+      {textLine?.tone === "warn" ? (
+        <p className="rounded-control border border-hairline bg-warning-tint px-3.5 py-2.5 text-sm text-warning-ink">
+          {textLine.text}
+        </p>
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

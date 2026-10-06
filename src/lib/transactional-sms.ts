@@ -26,6 +26,24 @@ type NotifySetting = "notifyOnPayment" | "notifyOnResultPublish";
 type SmsContext = Record<string, string | number | null | undefined>;
 
 /**
+ * What became of one automatic text, so the screen that caused it can say so.
+ *
+ * ⚠️ This returned nothing, and the payment screen said nothing: a bursar had
+ * no way to tell a receipt that reached the parent from one that was never sent
+ * because SMS was off, the gateway was unset, or the guardian had no number.
+ * Every one of those is silent to the parent too, which is why it must not be
+ * silent to the office.
+ */
+export type TextOutcome =
+  | "sent" // the gateway accepted it
+  | "dryRun" // recorded in Messages; no gateway, so nothing left the building
+  | "failed" // the gateway refused it; its reason is on the Messages row
+  | "smsOff" // Settings → SMS: SMS is switched off
+  | "gateOff" // Settings → SMS: this kind of text is switched off
+  | "noPhone" // nobody to send to
+  | "error"; // something threw; the caller's work is unaffected
+
+/**
  * Send one, with the school's settings already in hand.
  *
  * Split out because publishing a class texts one guardian per pupil, and
@@ -42,9 +60,9 @@ async function deliver(
     studentId?: string;
     guardianId?: string;
   },
-): Promise<boolean> {
+): Promise<TextOutcome> {
   if (!args.toPhone) {
-    return false;
+    return "noPhone";
   }
 
   const template = await prisma.messageTemplate.findFirst({
@@ -62,7 +80,7 @@ async function deliver(
    */
   const source = template?.body ?? defaultTemplateBody(args.templateName);
   if (!source) {
-    return false;
+    return "error";
   }
 
   const body = renderTemplate(source, args.context);
@@ -98,7 +116,7 @@ async function deliver(
     },
   });
 
-  return true;
+  return result.dryRun ? "dryRun" : result.ok ? "sent" : "failed";
 }
 
 /**
@@ -111,17 +129,24 @@ async function deliver(
  * that does nothing is worse than an absent one: it is a written-down claim about
  * the software that isn't true.
  */
-async function notifiable(schoolId: string, gate: NotifySetting) {
+async function notifiable(
+  schoolId: string,
+  gate: NotifySetting,
+): Promise<SchoolSettings | "smsOff" | "gateOff"> {
   const settings = await prisma.schoolSettings.findUnique({ where: { schoolId } });
-  if (!settings?.smsEnabled || !settings[gate]) {
-    return null;
+  if (!settings?.smsEnabled) {
+    return "smsOff";
+  }
+  if (!settings[gate]) {
+    return "gateOff";
   }
   return settings;
 }
 
 /**
  * Fire-and-forget transactional SMS: one recipient, one message.
- * Never throws into the caller — a failed text must not roll back a payment.
+ * Never throws into the caller — a failed text must not roll back a payment —
+ * but says what happened, so the caller can tell the person who caused it.
  */
 export async function queueTransactionalSms(args: {
   schoolId: string;
@@ -132,15 +157,16 @@ export async function queueTransactionalSms(args: {
   context: SmsContext;
   studentId?: string;
   guardianId?: string;
-}) {
+}): Promise<TextOutcome> {
   try {
     const settings = await notifiable(args.schoolId, args.gate);
-    if (!settings) {
-      return;
+    if (typeof settings === "string") {
+      return settings;
     }
-    await deliver(settings, args);
+    return await deliver(settings, args);
   } catch {
     // Deliberately swallowed. The payment succeeded; the text is best-effort.
+    return "error";
   }
 }
 
@@ -176,7 +202,7 @@ export async function textResultsPublished(args: {
     }
 
     const settings = await notifiable(args.schoolId, "notifyOnResultPublish");
-    if (!settings) {
+    if (typeof settings === "string") {
       return { texted: 0 };
     }
 
