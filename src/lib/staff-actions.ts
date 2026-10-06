@@ -30,7 +30,7 @@ function optionalDate(value: FormDataEntryValue | null) {
 
 export async function saveStaff(_prev: StaffState, formData: FormData): Promise<StaffState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const firstName = String(formData.get("firstName") ?? "").trim();
@@ -108,7 +108,7 @@ export async function addTeachingAssignment(
   formData: FormData,
 ): Promise<StaffState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const staffId = String(formData.get("staffId") ?? "");
   const subjectId = String(formData.get("subjectId") ?? "");
@@ -151,7 +151,7 @@ export async function addTeachingAssignment(
 
 export async function removeTeachingAssignment(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const staffId = String(formData.get("staffId") ?? "");
   const assignmentId = String(formData.get("assignmentId") ?? "");
   if (!assignmentId) {
@@ -164,7 +164,7 @@ export async function removeTeachingAssignment(formData: FormData): Promise<void
 
 export async function removeStaff(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;

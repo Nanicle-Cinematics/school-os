@@ -43,7 +43,7 @@ console.log("Days are days, not timestamps");
 const school = await prisma.school.findUniqueOrThrow({ where: { slug: "hope-demo" } });
 // The helpers under test go through the app's tenant-guarded client, which
 // refuses to answer without a school — exactly as it would for an action.
-setTenantContext({ schoolId: school.id });
+setTenantContext({ schoolId: school.id, readOnly: false });
 const term = await prisma.term.findFirstOrThrow({
   where: { schoolId: school.id, sequence: 1 },
   select: { id: true, startDate: true, endDate: true, academicYearId: true },

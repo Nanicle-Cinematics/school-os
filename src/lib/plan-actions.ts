@@ -24,7 +24,7 @@ const MAX_INSTALMENTS = 12;
  */
 export async function createPlan(_prev: PlanState, formData: FormData): Promise<PlanState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const invoiceId = String(formData.get("invoiceId") ?? "");
   const count = Number(formData.get("count"));
@@ -123,7 +123,7 @@ export async function createPlan(_prev: PlanState, formData: FormData): Promise<
  */
 export async function cancelPlan(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const planId = String(formData.get("planId") ?? "");
   const invoiceId = String(formData.get("invoiceId") ?? "");

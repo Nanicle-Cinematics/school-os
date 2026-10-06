@@ -40,7 +40,7 @@ export async function createAssessment(
   formData: FormData,
 ): Promise<AssessmentState> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
@@ -124,7 +124,7 @@ export async function saveScores(
   formData: FormData,
 ): Promise<ScoreEntryState> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const assessmentId = String(formData.get("assessmentId") ?? "");
 
   const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId } });
@@ -241,7 +241,7 @@ export async function saveScores(
 
 export async function setAssessmentStatus(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const assessmentId = String(formData.get("assessmentId") ?? "");
   const status = String(formData.get("status") ?? "");
 
@@ -286,7 +286,7 @@ export async function setAssessmentStatus(formData: FormData): Promise<void> {
 
 export async function deleteAssessment(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const assessmentId = String(formData.get("assessmentId") ?? "");
   if (!assessmentId) {
     return;

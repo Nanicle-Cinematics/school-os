@@ -61,7 +61,7 @@ export async function previewInvites(
   formData: FormData,
 ): Promise<InviteState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const classGroupId = String(formData.get("classGroupId") ?? "") || null;
   const plan = await getInvitePlan(auth.schoolId, auth.schoolName, classGroupId, portalUrl());
@@ -109,7 +109,7 @@ export async function previewInvites(
  */
 export async function sendInvites(_prev: InviteState, formData: FormData): Promise<InviteState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const classGroupId = String(formData.get("classGroupId") ?? "") || null;
   const plan = await getInvitePlan(auth.schoolId, auth.schoolName, classGroupId, portalUrl());

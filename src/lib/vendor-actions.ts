@@ -29,7 +29,7 @@ export type ActionState = { error?: string; ok?: string };
 /** Create or edit a vendor. No code, unlike a category — a vendor is a name, not a classification. */
 export async function saveVendor(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -63,7 +63,7 @@ export async function saveVendor(_prev: ActionState, formData: FormData): Promis
 /** A vendor with a bill or payment history is deactivated, never deleted — the same rule as every category in this app. */
 export async function deactivateVendor(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -78,7 +78,7 @@ export async function recordVendorBill(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const vendorId = String(formData.get("vendorId") ?? "");
   const description = String(formData.get("description") ?? "").trim();
@@ -143,7 +143,7 @@ export async function recordVendorBill(
 /** LEADERSHIP-gated, self-approval refused — mirrors approveExpense exactly. */
 export async function approveVendorBill(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("vendorBillId") ?? "");
   if (!id) {
@@ -219,7 +219,7 @@ export async function approveVendorBill(formData: FormData): Promise<void> {
 /** Refused once a payment has been allocated — cancel the payment first, or the vendor's balance would understate what was actually paid out. */
 export async function cancelVendorBill(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("vendorBillId") ?? "");
   if (!id) {
     return;
@@ -267,7 +267,7 @@ export async function recordVendorPayment(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const vendorId = String(formData.get("vendorId") ?? "");
   const amount = parseAmount(formData.get("amount"));
@@ -418,7 +418,7 @@ export async function recordVendorPayment(
 /** Undo a vendor payment — drops its allocations and recomputes every bill it touched, mirroring reversePayment. */
 export async function reverseVendorPayment(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const paymentId = String(formData.get("vendorPaymentId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!paymentId) {

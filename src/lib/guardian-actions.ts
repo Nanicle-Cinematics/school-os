@@ -29,7 +29,7 @@ export async function saveGuardian(
   formData: FormData,
 ): Promise<GuardianState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const firstName = String(formData.get("firstName") ?? "").trim();
@@ -89,7 +89,7 @@ export async function linkStudent(
   formData: FormData,
 ): Promise<GuardianState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const guardianId = String(formData.get("guardianId") ?? "");
   const studentId = String(formData.get("studentId") ?? "");
@@ -157,7 +157,7 @@ export async function linkStudent(
 
 export async function unlinkStudent(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const guardianId = String(formData.get("guardianId") ?? "");
   const linkId = String(formData.get("linkId") ?? "");
   if (!linkId) {
@@ -171,7 +171,7 @@ export async function unlinkStudent(formData: FormData): Promise<void> {
 
 export async function deleteGuardian(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -205,7 +205,7 @@ export async function createGuardianLogin(
   formData: FormData,
 ): Promise<GuardianState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const guardianId = String(formData.get("guardianId") ?? "");
   if (!guardianId) {

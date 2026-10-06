@@ -21,7 +21,7 @@ export async function saveBillCode(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -113,7 +113,7 @@ export async function saveBillCode(
  */
 export async function deleteBillCode(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -149,7 +149,7 @@ export async function applyDefaultBillCodesAction(
   _formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const result = await tenantTransaction(auth.schoolId, (tx) =>
     applyDefaultBillCodes(tx, auth.schoolId),

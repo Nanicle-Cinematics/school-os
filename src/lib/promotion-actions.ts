@@ -25,7 +25,7 @@ export async function runPromotion(
   formData: FormData,
 ): Promise<PromotionState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const classGroupId = String(formData.get("classGroupId") ?? "");
   const sourceYearId = String(formData.get("sourceYearId") ?? "");
@@ -208,7 +208,7 @@ export async function runWholeSchoolPromotion(
   formData: FormData,
 ): Promise<PromotionState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const sourceYearId = String(formData.get("sourceYearId") ?? "");
   const targetYearId = String(formData.get("targetYearId") ?? "");

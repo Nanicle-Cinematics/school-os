@@ -69,7 +69,7 @@ check("and no phrase is for an action nobody writes", stale.length === 0,
 
 // ── Payload reading ─────────────────────────────────────────────────────────
 const school = await demoSchool();
-setTenantContext({ schoolId: school!.id });
+setTenantContext({ schoolId: school!.id, readOnly: false });
 
 const now = new Date();
 const rows: { action: string; after: unknown; expect: RegExp }[] = [

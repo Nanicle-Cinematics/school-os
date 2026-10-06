@@ -33,7 +33,7 @@ export async function saveFeeStructure(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const levelIds = [
     ...new Set(formData.getAll("levelId").map((value) => String(value)).filter(Boolean)),
@@ -219,7 +219,7 @@ export async function saveFeeCategory(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -317,7 +317,7 @@ export async function saveFeeCategory(
  */
 export async function deleteFeeCategory(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -358,7 +358,7 @@ export async function applyDefaultFeeItems(
   _formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const result = await tenantTransaction(auth.schoolId, (tx) =>
     applyDefaultFinanceCategories(tx, auth.schoolId),
@@ -379,7 +379,7 @@ export async function applyDefaultFeeItems(
 
 export async function deleteFeeStructure(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("structureId") ?? "");
   if (!id) {
     return;

@@ -23,7 +23,7 @@ export type BudgetState = { error?: string; ok?: string };
  */
 export async function setBudget(_prev: BudgetState, formData: FormData): Promise<BudgetState> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const termId = String(formData.get("termId") ?? "");
   const categoryId = String(formData.get("categoryId") ?? "");

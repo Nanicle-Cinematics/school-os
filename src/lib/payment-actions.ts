@@ -36,7 +36,7 @@ export async function recordPayment(
   formData: FormData,
 ): Promise<PaymentState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const studentId = String(formData.get("studentId") ?? "");
   const amount = parseAmount(formData.get("amount"));
@@ -300,7 +300,7 @@ export async function recordPayment(
 
 export async function reversePayment(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const paymentId = String(formData.get("paymentId") ?? "");
   const reason = String(formData.get("reason") ?? "").trim();
   if (!paymentId) {

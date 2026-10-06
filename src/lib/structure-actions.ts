@@ -37,7 +37,7 @@ export async function saveLevel(
   formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -82,7 +82,7 @@ export async function saveLevel(
 
 export async function deleteLevel(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -114,7 +114,7 @@ export async function saveHouse(
   formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -144,7 +144,7 @@ export async function saveHouse(
 
 export async function deleteHouse(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -175,7 +175,7 @@ export async function saveProgramme(
   formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -208,7 +208,7 @@ export async function saveProgramme(
 
 export async function deleteProgramme(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -250,7 +250,7 @@ export async function applyCurriculum(
   _formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const result = await tenantTransaction(
     auth.schoolId,
@@ -284,7 +284,7 @@ export async function saveComponent(
   formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(ACADEMIC);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const title = String(formData.get("title") ?? "").trim();
@@ -363,7 +363,7 @@ export async function saveComponent(
  */
 export async function deleteComponent(formData: FormData): Promise<void> {
   const auth = await requireRole(ACADEMIC);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -396,7 +396,7 @@ export async function applyDefaultComponents(
   _formData: FormData,
 ): Promise<StructureState> {
   const auth = await requireRole(ACADEMIC);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const { template, rollout } = await tenantTransaction(auth.schoolId, async (tx) => {
     const template = await applyDefaultAssessmentTemplate(tx, auth.schoolId);

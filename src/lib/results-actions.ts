@@ -16,7 +16,7 @@ export async function computeResults(
   formData: FormData,
 ): Promise<ComputeState> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
 
@@ -71,7 +71,7 @@ export async function computeResults(
  */
 export async function setResultsStatus(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
   const status = String(formData.get("status") ?? "");
@@ -147,7 +147,7 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
 /** Form-master and head remarks, saved per student from the broadsheet. */
 export async function saveRemarks(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const termId = String(formData.get("termId") ?? "");
   const studentId = String(formData.get("studentId") ?? "");
   if (!termId || !studentId) {
@@ -226,7 +226,7 @@ export async function saveClassRemarks(
   formData: FormData,
 ): Promise<{ error?: string; ok?: string }> {
   const auth = await requireRole(MARKING);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");

@@ -72,7 +72,7 @@ export async function recordExpense(
   formData: FormData,
 ): Promise<ExpenseState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const categoryId = String(formData.get("categoryId") ?? "");
   const termId = String(formData.get("termId") ?? "");
@@ -240,7 +240,7 @@ export async function recordExpense(
  */
 export async function approveExpense(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("expenseId") ?? "");
   if (!id) {
@@ -299,7 +299,7 @@ export async function approveExpense(formData: FormData): Promise<void> {
 
 export async function cancelExpense(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const expenseId = String(formData.get("expenseId") ?? "");
   if (!expenseId) {
     return;

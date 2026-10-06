@@ -72,7 +72,7 @@ export class TenantContextMissingError extends Error {
     super(
       `No tenant context for a query on ${model}. Under RLS this cannot match a single row, ` +
         `so it would answer "nothing here" for a school with plenty. Call ` +
-        `setTenantContext({ schoolId }) in this frame — an action must do it itself, ` +
+        `setTenantContext(auth.tenant) in this frame — an action must do it itself, ` +
         `enterWith does not reach a caller — or withBypass() if the query is deliberately ` +
         `cross-tenant, as a login or the platform console is.`,
     );

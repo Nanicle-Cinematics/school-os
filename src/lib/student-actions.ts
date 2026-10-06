@@ -123,7 +123,7 @@ export async function admitStudent(
   formData: FormData,
 ): Promise<StudentState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const profile = readProfile(formData);
   const invalid = validateProfile(profile);
@@ -277,7 +277,7 @@ export async function addGuardianToStudent(
   formData: FormData,
 ): Promise<StudentState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const studentId = String(formData.get("studentId") ?? "");
   const name = String(formData.get("guardianName") ?? "").trim();
@@ -393,7 +393,7 @@ export async function addGuardianToStudent(
 
 export async function saveStudent(_prev: StudentState, formData: FormData): Promise<StudentState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   if (!id) {
@@ -438,7 +438,7 @@ export async function enrolStudent(
   formData: FormData,
 ): Promise<StudentState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const studentId = String(formData.get("studentId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
@@ -493,7 +493,7 @@ export async function enrolStudent(
  */
 export async function withdrawStudent(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const studentId = String(formData.get("studentId") ?? "");
   const status = String(formData.get("status") ?? "WITHDRAWN") as StudentStatus;
 
@@ -535,7 +535,7 @@ export async function withdrawStudent(formData: FormData): Promise<void> {
 
 export async function deleteStudent(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const studentId = String(formData.get("studentId") ?? "");
   if (!studentId) {
     return;

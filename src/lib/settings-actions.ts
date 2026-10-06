@@ -30,7 +30,7 @@ export async function saveSchoolProfile(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) {
@@ -69,7 +69,7 @@ export async function saveAcademicPolicy(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   // The weights and the pass mark decide every grade and every promotion in the
   // school. The page stays open to the office, but changing them is leadership's.
@@ -155,7 +155,7 @@ export async function saveFeesPolicy(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   // Money policy. IT admin is kept out of the money everywhere else, and this is
   // where the expense approval control lives — so it is not theirs to change.
@@ -244,7 +244,7 @@ export async function saveSmsGateway(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const providerRaw = String(formData.get("smsProvider") ?? "");
   const smsSenderId = String(formData.get("smsSenderId") ?? "").trim();
@@ -303,7 +303,7 @@ export async function saveSmsPolicy(
   formData: FormData,
 ): Promise<SettingsState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const smsEnabled = formData.get("smsEnabled") === "on";
 
@@ -343,7 +343,7 @@ export async function saveSmsPolicy(
  */
 export async function setCurrentTerm(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const termId = String(formData.get("termId") ?? "");
   if (!termId) {
     return;
@@ -402,7 +402,7 @@ export async function sendTestSms(
   // BEFORE any parent hears from the school — and it costs one message,
   // which is why it is not open to everyone.
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const phone = normalisePhone(String(formData.get("testPhone") ?? ""));
   if (!phone) {

@@ -153,25 +153,31 @@ const stray = await withBypass(() =>
 check("and nothing was written", stray === 0, `${stray} rows`);
 
 /**
- * ⚠️ The check that nearly did not exist.
+ * ⚠️ The check that passed while the bug was live.
  *
- * Every server action calls `setTenantContext({ schoolId: auth.schoolId })` right
- * after requireRole. With replace semantics that threw away the readOnly the auth
- * gate had just resolved — leaving a perfect guard in prisma.ts that nothing ever
- * reached, and an unpaid school writing exactly as before while every test passed.
+ * This used to wrap `setTenantContext({ schoolId })` in
+ * `runWithTenantContext({ schoolId, readOnly: true })` and assert the flag was
+ * carried forward. It was — inside that wrapper. A real server action has no
+ * wrapper: requireAuth's context never reaches the action's frame, so there was
+ * nothing to carry, and every unpaid school wrote freely while this stayed green.
+ *
+ * `setTenantContext` now REQUIRES `readOnly` (tsc refuses a call without it), so
+ * what is left to prove here is that the flag an action passes is the one that
+ * is enforced, in a fresh frame with nothing around it. The real path — sign in,
+ * post a form — is proved over HTTP in verify:actions.
  */
 let survived: unknown = null;
 try {
-  await runWithTenantContext({ schoolId, readOnly: true }, async () => {
+  await (async () => {
     // exactly what an action does, one line after requireRole
-    setTenantContext({ schoolId });
+    setTenantContext({ schoolId, readOnly: true });
     await prisma.house.create({ data: { schoolId, name: `rescope probe ${Date.now()}` } });
-  });
+  })();
 } catch (error) {
   survived = error;
 }
 check(
-  "re-scoping to the same school does NOT lose read-only",
+  "the readOnly an action passes is enforced",
   survived instanceof SchoolReadOnlyError,
   survived instanceof Error ? survived.name : "the write went through",
 );

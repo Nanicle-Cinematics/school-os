@@ -31,7 +31,7 @@ export async function createAcademicYear(
   formData: FormData,
 ): Promise<TermState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const name = String(formData.get("name") ?? "").trim();
   const startDate = parseDate(formData.get("startDate"));
@@ -117,7 +117,7 @@ export async function createAcademicYear(
 
 export async function saveTerm(_prev: TermState, formData: FormData): Promise<TermState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const startDate = parseDate(formData.get("startDate"));
@@ -191,7 +191,7 @@ export async function saveTerm(_prev: TermState, formData: FormData): Promise<Te
 
 export async function deleteAcademicYear(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
