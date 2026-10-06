@@ -95,9 +95,28 @@ export default async function StudentDetailPage({
 
       {query.error === "has-money" ? (
         <Alert tone="error">
-          This student has invoices or payments on file, so the record cannot be
-          removed — deleting it would take the money records with it. Withdraw
-          them instead.
+          {invoices.length > 0 ? (
+            <>
+              This record cannot be deleted while it has a live invoice (
+              {invoices.map((invoice, i) => (
+                <span key={invoice.id}>
+                  {i > 0 ? ", " : null}
+                  <Link href={`/invoices/${invoice.id}`} className="font-mono underline">
+                    {invoice.invoiceNo}
+                  </Link>
+                </span>
+              ))}
+              ). If it was entered by mistake, ask the bursar to cancel{" "}
+              {invoices.length === 1 ? "that invoice" : "those invoices"}, then delete it
+              here. Otherwise, withdraw the pupil instead.
+            </>
+          ) : (
+            <>
+              This record cannot be deleted while it has a payment on file. If the
+              payment was recorded against the wrong pupil, ask the bursar to reverse
+              it, then delete the record here.
+            </>
+          )}
         </Alert>
       ) : null}
 
@@ -367,8 +386,8 @@ export default async function StudentDetailPage({
             </SubmitButton>
             <p className="text-xs text-slate-500">
               {invoices.length > 0
-                ? "Blocked — this student has been invoiced."
-                : "Only possible for a student who was never billed, e.g. a mistaken entry."}
+                ? "Blocked while an invoice is live — the bursar cancels it first."
+                : "For a mistaken entry, such as a duplicate. Removes them from their class as well."}
             </p>
           </form>
         </div>

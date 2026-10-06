@@ -463,7 +463,7 @@ async function studentGuards(cookie) {
     return;
   }
   const billed = await db(() => prisma.student.findFirst({
-    where: { deletedAt: null, invoices: { some: {} } },
+    where: { deletedAt: null, invoices: { some: { status: { not: "CANCELLED" } } } },
     select: { id: true, admissionNo: true },
   }));
   if (!billed) {
@@ -485,6 +485,136 @@ async function studentGuards(cookie) {
     select: { deletedAt: true },
   }));
   check("the student is still on file", still?.deletedAt === null, billed.admissionNo);
+}
+
+/**
+ * Deleting a duplicate: refused while its invoice is live, allowed once the
+ * bursar has cancelled it, and the pupil then leaves their class.
+ *
+ * ⚠️ Both halves were broken. Cancelled invoices counted as "money on file", so
+ * a duplicate billed before anyone noticed could never be deleted. And a delete
+ * set `deletedAt` and nothing else, so the pupil left /students but stayed on
+ * the class register, the mark sheets and the broadsheet, which read the roll
+ * from ENROLMENTS — reported by a school whose duplicate in JHS 2 "would not
+ * delete".
+ *
+ * Writes a fixture pupil and removes it again in `finally`; the delete itself is
+ * the thing under test, so it cannot be a refusal-only check.
+ */
+async function deleteGuards(cookie) {
+  console.log("\nDeleting a duplicate pupil");
+  if (!hasDb) {
+    console.log("  --   no database access from here; this needs a pupil it may create and remove");
+    return;
+  }
+  const membership = await db(() =>
+    prisma.membership.findFirst({ where: { user: { email: "owner@hopedemo.edu.gh" } } }),
+  );
+  const schoolId = membership.schoolId;
+  const enrolled = await db(() =>
+    prisma.enrollment.findFirst({
+      where: { schoolId, status: "ACTIVE", academicYear: { isCurrent: true }, student: { deletedAt: null } },
+      select: {
+        classGroupId: true,
+        academicYearId: true,
+        student: { select: { firstName: true, lastName: true } },
+      },
+    }),
+  );
+  const term = await db(() => prisma.term.findFirst({ where: { schoolId, isCurrent: true } }));
+  if (!enrolled || !term) {
+    console.log("  --   no current class or term, skipping");
+    return;
+  }
+
+  const stamp = Date.now();
+  const student = await db(() =>
+    prisma.student.create({
+      data: {
+        schoolId,
+        admissionNo: `VERIFY-DUP-${stamp}`,
+        firstName: "Verify",
+        lastName: `Duplicate${stamp}`,
+        gender: "MALE",
+        currentClassGroupId: enrolled.classGroupId,
+      },
+    }),
+  );
+  try {
+    await db(() =>
+      prisma.enrollment.create({
+        data: {
+          schoolId,
+          studentId: student.id,
+          academicYearId: enrolled.academicYearId,
+          classGroupId: enrolled.classGroupId,
+        },
+      }),
+    );
+    const invoice = await db(() =>
+      prisma.invoice.create({
+        data: {
+          schoolId,
+          studentId: student.id,
+          termId: term.id,
+          invoiceNo: `VERIFY-${stamp}`,
+          status: "ISSUED",
+          total: 100,
+          balance: 100,
+          subtotal: 100,
+        },
+      }),
+    );
+
+    const path = `/students/${student.id}`;
+    const live = await postForm(path, formWith((await fetchPage(path, cookie)).html, "Delete record"), {}, cookie);
+    check(
+      "a duplicate with a LIVE invoice is refused",
+      live.location?.includes("error=has-money") ?? false,
+      live.location ?? "no redirect",
+    );
+    const refused = await fetchPage(`${path}?error=has-money`, cookie);
+    check(
+      "and the refusal names the invoice and who cancels it",
+      refused.html.includes(invoice.invoiceNo) && refused.html.includes("ask the bursar"),
+    );
+
+    // What the bursar does on /invoices.
+    await db(() => prisma.invoice.update({ where: { id: invoice.id }, data: { status: "CANCELLED" } }));
+
+    const del = await postForm(path, formWith((await fetchPage(path, cookie)).html, "Delete record"), {}, cookie);
+    check(
+      "once the invoice is cancelled, the duplicate can be deleted",
+      (del.location ?? "").endsWith("/students"),
+      del.location ?? "no redirect",
+    );
+    const after = await db(() =>
+      prisma.student.findUnique({
+        where: { id: student.id },
+        select: { deletedAt: true, currentClassGroupId: true, enrollments: { select: { status: true } } },
+      }),
+    );
+    check("it is marked deleted", Boolean(after?.deletedAt));
+    check("and has left its class", after?.currentClassGroupId === null, String(after?.currentClassGroupId));
+    check(
+      "and its enrolment is ended, so registers and results drop it",
+      (after?.enrollments ?? []).every((row) => row.status !== "ACTIVE"),
+      (after?.enrollments ?? []).map((row) => row.status).join(","),
+    );
+
+    const day = term.startDate.toISOString().slice(0, 10);
+    const register = await fetchPage(`/attendance?class=${enrolled.classGroupId}&date=${day}`, cookie);
+    check(
+      "the class register still lists its real pupils",
+      register.html.includes(enrolled.student.lastName),
+      `${enrolled.student.firstName} ${enrolled.student.lastName}`,
+    );
+    check("but not the deleted duplicate", !register.html.includes(`Duplicate${stamp}`));
+  } finally {
+    // Cascades the enrolment and the invoice.
+    await db(() => prisma.student.delete({ where: { id: student.id } }));
+    await db(() => prisma.auditLog.deleteMany({ where: { entityId: student.id } }));
+  }
 }
 
 async function structureGuards(cookie) {
@@ -864,6 +994,7 @@ async function main() {
       await gradingGuards(token);
       await accountGuards(token, userId);
       await studentGuards(token);
+      await deleteGuards(token);
       await structureGuards(token);
       await feeGuards(token);
       await readOnlyGuards(token);

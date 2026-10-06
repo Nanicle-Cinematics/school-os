@@ -533,6 +533,19 @@ export async function withdrawStudent(formData: FormData): Promise<void> {
   revalidatePath("/dashboard");
 }
 
+/**
+ * Remove a record entered by mistake — a duplicate admission, typically.
+ *
+ * A soft delete: the row stays, with `deletedAt` set, so its audit history
+ * and any cancelled paperwork keep something to point at.
+ *
+ * ⚠️ It used to set `deletedAt` and nothing else. The class registers, mark
+ * sheets, results and promotions read the roll from ENROLMENTS, not from the
+ * student row, so a deleted duplicate vanished from /students and stayed on
+ * the JHS 2 register, was ranked on the broadsheet with no marks, and could no
+ * longer be opened to withdraw it. Deleting now ends the enrolment and clears
+ * the class in the same transaction, exactly as Withdraw does.
+ */
 export async function deleteStudent(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
   setTenantContext(auth.tenant);
@@ -541,11 +554,15 @@ export async function deleteStudent(formData: FormData): Promise<void> {
     return;
   }
 
-  const invoices = await prisma.invoice.count({ where: { studentId } });
-  const payments = await prisma.payment.count({ where: { studentId } });
-
-  // Invoice and Payment cascade from Student at the database level, so removing
-  // a billed student here would silently delete money records.
+  // Only LIVE money blocks it. A duplicate that was billed before anyone noticed
+  // has its invoice cancelled by the bursar, and counting cancelled invoices
+  // here left that duplicate undeletable for ever — the office's only way out
+  // was to withdraw a pupil who never existed. A reversed payment is likewise
+  // money already handed back.
+  const invoices = await prisma.invoice.count({
+    where: { studentId, status: { not: "CANCELLED" } },
+  });
+  const payments = await prisma.payment.count({ where: { studentId, reversedAt: null } });
   if (invoices > 0 || payments > 0) {
     redirect(`/students/${studentId}?error=has-money`);
   }
@@ -553,21 +570,41 @@ export async function deleteStudent(formData: FormData): Promise<void> {
   await tenantTransaction(auth.schoolId, async (tx) => {
     const student = await tx.student.findUnique({
       where: { id: studentId },
-      select: { admissionNo: true, firstName: true, lastName: true, deletedAt: true },
+      select: {
+        admissionNo: true,
+        firstName: true,
+        lastName: true,
+        deletedAt: true,
+        currentClassGroupId: true,
+      },
     });
     if (!student || student.deletedAt) {
       return;
     }
-    await tx.student.update({ where: { id: studentId }, data: { deletedAt: new Date() } });
+    await tx.student.update({
+      where: { id: studentId },
+      data: { deletedAt: new Date(), currentClassGroupId: null },
+    });
+    const ended = await tx.enrollment.updateMany({
+      where: { studentId, status: "ACTIVE" },
+      data: { status: "WITHDRAWN" },
+    });
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,
       action: "student.delete",
       entity: "Student",
       entityId: studentId,
-      before: { admissionNo: student.admissionNo, name: `${student.firstName} ${student.lastName}` },
+      before: {
+        admissionNo: student.admissionNo,
+        name: `${student.firstName} ${student.lastName}`,
+        currentClassGroupId: student.currentClassGroupId,
+      },
+      after: { enrolmentsEnded: ended.count },
     });
   });
   revalidatePath("/students");
+  revalidatePath("/classes");
+  revalidatePath("/attendance");
   redirect("/students");
 }
