@@ -23,7 +23,7 @@ export async function saveAccountsInformation(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const tin = String(formData.get("tin") ?? "").trim();
   const paymentInstructions = String(formData.get("paymentInstructions") ?? "").trim();

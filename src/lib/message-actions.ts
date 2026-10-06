@@ -55,7 +55,7 @@ export async function previewCampaign(
   formData: FormData,
 ): Promise<PreviewState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const body = String(formData.get("body") ?? "").trim();
   const audienceType = readAudience(formData);
 
@@ -133,7 +133,7 @@ export type SendState = { error?: string; ok?: string };
  */
 export async function sendCampaign(_prev: SendState, formData: FormData): Promise<SendState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const name = String(formData.get("name") ?? "").trim() || "Untitled campaign";
   const body = String(formData.get("body") ?? "").trim();
@@ -352,7 +352,7 @@ export async function applyStandardMessages(
   _formData: FormData,
 ): Promise<TemplatesState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const result = await tenantTransaction(auth.schoolId, (tx) =>
     applyDefaultMessageTemplates(tx, auth.schoolId),

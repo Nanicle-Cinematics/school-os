@@ -17,7 +17,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   if (!canSearch(auth.roles)) {
     redirect(landingFor(auth.roles));
   }
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const params = await searchParams;
   const query = typeof params.q === "string" ? params.q : "";

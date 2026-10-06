@@ -4,7 +4,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { getSessionUser } from "@/lib/session";
-import { setTenantContext } from "@/lib/tenant-context";
+import { setTenantContext, type SchoolScope } from "@/lib/tenant-context";
 import { subscriptionState, type SubscriptionState } from "@/lib/subscription";
 import { canAccess, landingFor } from "@/lib/permissions";
 
@@ -27,6 +27,12 @@ export type AuthContext = {
   mustChangePassword: boolean;
   /** What this school's subscription allows, and what to say about it. */
   subscription: SubscriptionState;
+  /**
+   * What every server action hands to `setTenantContext`: the school AND whether
+   * this session may write to it. One object so an action cannot pass the first
+   * and forget the second — see tenant-context.ts for what that cost.
+   */
+  tenant: SchoolScope;
   isPlatformAdmin: boolean;
 };
 
@@ -80,7 +86,8 @@ const loadAuth = cache(async (): Promise<AuthContext> => {
    * so this costs no extra query on a path that runs for every request.
    */
   const subscription = subscriptionState(active.school);
-  setTenantContext({ schoolId: active.schoolId, readOnly: subscription.readOnly });
+  const tenant: SchoolScope = { schoolId: active.schoolId, readOnly: subscription.readOnly };
+  setTenantContext(tenant);
 
   // One user can hold SEVERAL memberships in the same school — the unique key is
   // (school, user, role) — and `active` is only the first of them. The person
@@ -100,6 +107,7 @@ const loadAuth = cache(async (): Promise<AuthContext> => {
     schoolName: active.school.name,
     schoolShortName: active.school.shortName,
     subscription,
+    tenant,
     schoolMotto: active.school.motto,
     schoolCrestUrl: active.school.crestUrl,
     headSignatureUrl: active.school.headSignatureUrl,

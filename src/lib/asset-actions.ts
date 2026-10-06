@@ -43,7 +43,7 @@ export async function uploadSchoolAsset(
   // OFFICE: uploading the crest is the technical half of a decision the
   // head has already made about what the crest IS.
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const kind = String(formData.get("kind") ?? "") as SchoolAssetKind;
   if (!KINDS.includes(kind)) {
@@ -126,7 +126,7 @@ export async function removeSchoolAsset(formData: FormData): Promise<void> {
   // OFFICE: uploading the crest is the technical half of a decision the
   // head has already made about what the crest IS.
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const kind = String(formData.get("kind") ?? "") as SchoolAssetKind;
   if (!KINDS.includes(kind)) {

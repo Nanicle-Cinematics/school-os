@@ -26,7 +26,10 @@ export async function GET(request: Request) {
     return fallback();
   }
 
-  setTenantContext({ schoolId });
+  // readOnly: true because this route only reads. It skips requireAuth to stay
+  // light, so it never learns the subscription, and "may not write" is the
+  // answer that is correct whatever the subscription says.
+  setTenantContext({ schoolId, readOnly: true });
   const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true } });
   const icons = schoolIconUrls(schoolId, school?.crestUrl ?? null);
   if (!icons) {

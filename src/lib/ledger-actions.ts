@@ -19,7 +19,7 @@ export async function saveLedgerAccount(
   formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -108,7 +108,7 @@ export async function saveLedgerAccount(
  */
 export async function deleteLedgerAccount(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -181,7 +181,7 @@ export async function applyDefaultChartOfAccountsAction(
   _formData: FormData,
 ): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const result = await tenantTransaction(auth.schoolId, (tx) =>
     applyDefaultChartOfAccounts(tx, auth.schoolId),
@@ -202,7 +202,7 @@ export async function applyDefaultChartOfAccountsAction(
 /** Point one fee category at the income account it posts to, or clear it. */
 export async function setFeeCategoryAccount(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const feeCategoryId = String(formData.get("feeCategoryId") ?? "");
   const incomeAccountId = String(formData.get("incomeAccountId") ?? "") || null;
   if (!feeCategoryId) {
@@ -215,7 +215,7 @@ export async function setFeeCategoryAccount(formData: FormData): Promise<void> {
 /** Point one expense category at the expense account it posts to, or clear it. */
 export async function setExpenseCategoryAccount(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const expenseCategoryId = String(formData.get("expenseCategoryId") ?? "");
   const expenseAccountId = String(formData.get("expenseAccountId") ?? "") || null;
   if (!expenseCategoryId) {
@@ -236,7 +236,7 @@ export async function setExpenseCategoryAccount(formData: FormData): Promise<voi
  */
 export async function saveCoreAccounts(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const field = (key: string) => String(formData.get(key) ?? "") || null;
 

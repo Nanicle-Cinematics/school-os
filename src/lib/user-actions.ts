@@ -24,7 +24,7 @@ export async function createUserAccount(
   formData: FormData,
 ): Promise<UserState> {
   const auth = await requireRole(ACCOUNT_CREATOR);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const staffId = String(formData.get("staffId") ?? "");
   const roles = readRoles(formData);
@@ -200,7 +200,7 @@ export async function createUserAccount(
 
 export async function updateUserRoles(_prev: UserState, formData: FormData): Promise<UserState> {
   const auth = await requireRole(ROLE_ADMIN);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const userId = String(formData.get("userId") ?? "");
   const roles = readRoles(formData);
@@ -285,7 +285,7 @@ export async function setAccountSuspended(formData: FormData): Promise<void> {
   // job an IT admin exists for. Creating one, changing its roles and removing
   // it stay on OFFICE — see the note on ACCOUNT_SUPPORT.
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const userId = String(formData.get("userId") ?? "");
   const suspend = String(formData.get("suspend") ?? "") === "1";
 
@@ -349,7 +349,7 @@ export async function resetUserPassword(
   formData: FormData,
 ): Promise<UserState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const userId = String(formData.get("userId") ?? "");
   if (!userId) {
     return { error: "Missing account." };
@@ -402,7 +402,7 @@ export async function resetUserPassword(
 
 export async function removeUserAccess(formData: FormData): Promise<void> {
   const auth = await requireRole(ROLE_ADMIN);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const userId = String(formData.get("userId") ?? "");
 
   if (!userId) {

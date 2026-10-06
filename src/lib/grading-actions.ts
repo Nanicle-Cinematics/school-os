@@ -33,7 +33,7 @@ async function assertEditable(gradingScaleId: string): Promise<string | null> {
 
 export async function saveScale(_prev: GradingState, formData: FormData): Promise<GradingState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -87,7 +87,7 @@ export async function saveScale(_prev: GradingState, formData: FormData): Promis
  */
 export async function duplicateScale(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -133,7 +133,7 @@ export async function duplicateScale(formData: FormData): Promise<void> {
 
 export async function deleteScale(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -168,7 +168,7 @@ export async function deleteScale(formData: FormData): Promise<void> {
 
 export async function saveBand(_prev: GradingState, formData: FormData): Promise<GradingState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const gradingScaleId = String(formData.get("gradingScaleId") ?? "");
   const id = String(formData.get("id") ?? "");
@@ -259,7 +259,7 @@ export async function saveBand(_prev: GradingState, formData: FormData): Promise
 
 export async function deleteBand(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   const gradingScaleId = String(formData.get("gradingScaleId") ?? "");
   if (!id || !gradingScaleId) {

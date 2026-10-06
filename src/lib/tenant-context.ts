@@ -54,26 +54,30 @@ export function getTenantContext(): TenantContext | undefined {
 }
 
 /**
+ * A school, and whether this request may WRITE to it.
+ *
+ * `readOnly` is REQUIRED, so leaving it out is a build failure rather than a
+ * school that has stopped paying going on entering data. Every server action
+ * passes `auth.tenant`, which requireAuth built from the subscription.
+ */
+export type SchoolScope = { schoolId: string; readOnly: boolean };
+
+/**
  * Set the context for the remainder of the current request.
  *
- * ⚠️ `readOnly` is CARRIED FORWARD unless the caller says otherwise, and that is
- * load-bearing. Every one of the sixty-odd server actions calls
- * `setTenantContext({ schoolId: auth.schoolId })` immediately after requireRole
- * — which is correct, and which, with replace semantics, threw away the
- * `readOnly` requireAuth had just resolved from the subscription. The guard in
- * prisma.ts would then have been perfect and reached by nothing: an unpaid
- * school would write exactly as before, and every check would have passed.
- *
- * The same school, re-scoped, keeps what was decided about it. Naming a
- * DIFFERENT school, or passing readOnly explicitly, replaces it as before.
+ * ⚠️ This used to take `{ schoolId }` and CARRY FORWARD the `readOnly` that
+ * requireAuth had set, on the theory that the two calls shared a request. In a
+ * page render they do. In a SERVER ACTION they do not: React's `cache` is not
+ * active there (each `holder()` call returns a new object), and requireAuth's
+ * `enterWith` ran inside an awaited function, so it never reaches the action's
+ * own frame. There was nothing to carry forward, every action wrote with
+ * `readOnly` unset, and an expired trial or an unpaid school went on entering
+ * data under a banner saying it could not. The guard in prisma.ts was tested
+ * with `runWithTenantContext`, which is exactly the path that works, so it
+ * stayed green throughout. The decision now travels with the call.
  */
-export function setTenantContext(ctx: TenantContext): void {
-  const previous = getTenantContext();
-  const sameSchool = previous?.schoolId && previous.schoolId === ctx.schoolId;
-  const next: TenantContext =
-    sameSchool && ctx.readOnly === undefined && previous?.readOnly !== undefined
-      ? { ...ctx, readOnly: previous.readOnly }
-      : ctx;
+export function setTenantContext(ctx: SchoolScope): void {
+  const next: TenantContext = ctx;
 
   const store = holder();
   if (store) {

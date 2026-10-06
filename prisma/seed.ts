@@ -203,7 +203,11 @@ async function main() {
       headName: "Mr. Emmanuel Ofori",
       plan: "INSTITUTION",
       subscriptionStatus: "TRIALING",
-      trialEndsAt: d("2026-10-01"),
+      // Relative to the day the seed runs, NOT a calendar date like the rest of
+      // this file. It was d("2026-10-01"): from that morning every fresh seed —
+      // CI's included — built a school that was already read-only, and nothing
+      // noticed because read-only was not being enforced on server actions.
+      trialEndsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       settings: {
         create: {
           classScoreWeight: 50,

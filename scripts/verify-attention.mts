@@ -34,7 +34,7 @@ function check(label: string, ok: boolean, detail = "") {
 }
 
 const school = await demoSchool();
-setTenantContext({ schoolId: school.id });
+setTenantContext({ schoolId: school.id, readOnly: false });
 
 const data = await getDashboard(school.id);
 if (!data.term) {

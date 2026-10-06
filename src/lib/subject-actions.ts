@@ -20,7 +20,7 @@ export async function saveSubject(
   formData: FormData,
 ): Promise<SubjectState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -77,7 +77,7 @@ export async function saveSubjectLevels(
   formData: FormData,
 ): Promise<SubjectState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const subjectId = String(formData.get("subjectId") ?? "");
   if (!subjectId) {
@@ -116,7 +116,7 @@ export async function saveSubjectLevels(
 
 export async function deleteSubject(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;

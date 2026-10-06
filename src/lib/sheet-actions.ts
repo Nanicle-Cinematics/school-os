@@ -53,7 +53,7 @@ async function mayTeach(
 /** Create this term's components for one class and subject. */
 export async function openSheet(_prev: SheetState, formData: FormData): Promise<SheetState> {
   const auth = await requireRole(MARKING);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");
@@ -102,7 +102,7 @@ type Cell = { assessmentId: string; studentId: string; rawScore: number | null; 
  */
 export async function saveSheet(_prev: SheetState, formData: FormData): Promise<SheetState> {
   const auth = await requireRole(MARKING);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const termId = String(formData.get("termId") ?? "");
   const classGroupId = String(formData.get("classGroupId") ?? "");

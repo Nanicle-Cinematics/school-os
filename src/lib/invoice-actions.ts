@@ -29,7 +29,7 @@ export async function generateInvoices(
   formData: FormData,
 ): Promise<GenerateState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const termId = String(formData.get("termId") ?? "");
 
   if (!termId) {
@@ -83,7 +83,7 @@ export async function generateInvoices(
 
 export async function cancelInvoice(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const invoiceId = String(formData.get("invoiceId") ?? "");
   if (!invoiceId) {
     return;
@@ -137,7 +137,7 @@ export async function cancelInvoice(formData: FormData): Promise<void> {
 
 export async function recomputeInvoice(formData: FormData): Promise<void> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const invoiceId = String(formData.get("invoiceId") ?? "");
   if (!invoiceId) {
     return;

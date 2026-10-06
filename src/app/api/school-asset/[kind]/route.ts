@@ -45,7 +45,10 @@ export async function GET(
     return NOT_FOUND();
   }
 
-  setTenantContext({ schoolId });
+  // readOnly: true because this route only reads. It skips requireAuth to stay
+  // light, so it never learns the subscription, and "may not write" is the
+  // answer that is correct whatever the subscription says.
+  setTenantContext({ schoolId, readOnly: true });
 
   const asset = await prisma.schoolAsset.findFirst({
     where: { schoolId, kind },

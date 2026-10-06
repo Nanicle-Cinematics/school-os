@@ -69,7 +69,7 @@ export async function previewImport(
   formData: FormData,
 ): Promise<ImportState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const csv = await readCsv(formData);
   if (!csv.trim()) {
@@ -101,7 +101,7 @@ export async function commitImport(
   formData: FormData,
 ): Promise<ImportState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const csv = await readCsv(formData);
   if (!csv.trim()) {

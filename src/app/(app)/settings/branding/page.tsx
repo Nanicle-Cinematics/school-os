@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Crest and signature · School OS" };
 
 export default async function BrandingPage() {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const school = await prisma.school.findUnique({
     where: { id: auth.schoolId },

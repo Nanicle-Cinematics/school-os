@@ -16,7 +16,7 @@ export async function saveClassGroup(
   formData: FormData,
 ): Promise<ClassState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const id = String(formData.get("id") ?? "");
   const levelId = String(formData.get("levelId") ?? "");
@@ -63,7 +63,7 @@ export async function saveClassGroup(
 
 export async function deleteClassGroup(formData: FormData): Promise<void> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
   const id = String(formData.get("id") ?? "");
   if (!id) {
     return;
@@ -118,7 +118,7 @@ export async function saveClassAssignments(
   formData: FormData,
 ): Promise<ClassState> {
   const auth = await requireRole(OFFICE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const classGroupId = String(formData.get("classGroupId") ?? "");
   if (!classGroupId) {

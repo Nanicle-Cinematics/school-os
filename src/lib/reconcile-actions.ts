@@ -36,7 +36,7 @@ export async function reconcileStatement(
   formData: FormData,
 ): Promise<ReconcileState> {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const text = String(formData.get("statement") ?? "").trim();
   if (!text) {

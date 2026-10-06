@@ -261,7 +261,7 @@ if (!owing) {
   // reportHold reads Invoice, which is tenant-scoped — and prisma.ts REFUSES a
   // tenant query with no context rather than quietly answering "nothing here".
   // Same line every other verify script needs.
-  setTenantContext({ schoolId: owing.schoolId });
+  setTenantContext({ schoolId: owing.schoolId, readOnly: false });
 
   const held = { blockReportOnArrears: true };
   const before = await reportHold(owing.studentId, owing.termId, held);

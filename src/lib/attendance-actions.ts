@@ -50,7 +50,7 @@ export async function saveRegister(
   formData: FormData,
 ): Promise<RegisterState> {
   const auth = await requireRole(ATTENDANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const classGroupId = String(formData.get("classGroupId") ?? "");
   const dateRaw = String(formData.get("date") ?? "");
@@ -199,7 +199,7 @@ export async function saveRegister(
  */
 export async function deleteRegister(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const classGroupId = String(formData.get("classGroupId") ?? "");
   const date = parseDay(String(formData.get("date") ?? ""));

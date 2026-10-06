@@ -1,6 +1,6 @@
 import { requireAuth } from "@/lib/auth";
 import { canAccess } from "@/lib/permissions";
-import { setTenantContext } from "@/lib/tenant-context";
+import { runWithTenantContext, setTenantContext } from "@/lib/tenant-context";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -53,7 +53,7 @@ export async function GET(
     });
   }
 
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const url = new URL(request.url);
   const termId = url.searchParams.get("term");
@@ -79,15 +79,21 @@ export async function GET(
 
   const rows = await spec.load(termId);
 
-  await tenantTransaction(auth.schoolId, (tx) =>
-    writeAudit(tx, {
-      schoolId: auth.schoolId,
-      actorUserId: auth.userId,
-      action: "data.export",
-      entity: "Export",
-      entityId: dataset,
-      after: { dataset, rows: rows.length, termId: termId ?? null },
-    }),
+  // The audit row is written even for a READ-ONLY school, deliberately. A school
+  // that has stopped paying must still be able to take its records away — that
+  // is the point of /export — and the row records a read, not a change to them.
+  // So the flag is lifted for this one write and nowhere else.
+  await runWithTenantContext({ ...auth.tenant, readOnly: false }, () =>
+    tenantTransaction(auth.schoolId, (tx) =>
+      writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: "data.export",
+        entity: "Export",
+        entityId: dataset,
+        after: { dataset, rows: rows.length, termId: termId ?? null },
+      }),
+    ),
   );
 
   // The short name if the school set one, else its full name — the filename is

@@ -29,7 +29,7 @@ const bad = (label: string, detail: string) => {
 };
 
 const school = await demoSchool();
-setTenantContext({ schoolId: school.id });
+setTenantContext({ schoolId: school.id, readOnly: false });
 
 console.log("\nThe entry itself");
 

@@ -19,7 +19,7 @@ import { prisma } from "@/lib/prisma";
  */
 export async function GET(_request: Request, { params }: RouteContext<"/api/attachment/[id]">) {
   const auth = await requireRole(FINANCE);
-  setTenantContext({ schoolId: auth.schoolId });
+  setTenantContext(auth.tenant);
 
   const { id } = await params;
   const file = await prisma.fileAttachment.findUnique({

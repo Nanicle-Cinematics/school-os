@@ -562,6 +562,106 @@ async function feeGuards(cookie) {
   );
 }
 
+/**
+ * A school that has not paid can READ but not WRITE — through a real sign-in and
+ * a real form post, which is the only path that proves it.
+ *
+ * ⚠️ Every earlier test of this called `runWithTenantContext({ readOnly: true })`
+ * around the write, and that wrapper is exactly what a server action does not
+ * have: requireAuth's context never reached the action's frame, every action
+ * wrote with the flag unset, and an expired trial went on entering data under a
+ * banner saying it could not. CI's own demo school had been read-only for five
+ * days (the seed's trial ended on a fixed date) with every write test green.
+ *
+ * The one exception to "nothing here writes": the school is flipped to an
+ * expired trial for the length of this section and put back in `finally`, and
+ * the export's audit row is deleted. Both are fixtures, not results.
+ */
+async function readOnlyGuards(cookie) {
+  console.log("\nRead-only school");
+  if (!hasDb) {
+    console.log("  --   no database access from here; this needs a school it may switch off");
+    return;
+  }
+  const membership = await db(() =>
+    prisma.membership.findFirst({ where: { user: { email: "owner@hopedemo.edu.gh" } } }),
+  );
+  const school = await db(() =>
+    prisma.school.findUnique({
+      where: { id: membership.schoolId },
+      select: { id: true, subscriptionStatus: true, trialEndsAt: true },
+    }),
+  );
+  const started = new Date();
+  const probe = `Read-only probe ${Date.now()}`;
+
+  try {
+    await db(() =>
+      prisma.school.update({
+        where: { id: school.id },
+        data: { subscriptionStatus: "TRIALING", trialEndsAt: new Date(Date.now() - 86_400_000) },
+      }),
+    );
+
+    const page = await fetchPage("/fees", cookie);
+    check("a read-only school still opens its pages", page.status === 200);
+    check(
+      "and is told why it cannot save",
+      page.html.includes("read-only"),
+      "the subscription notice in the layout",
+    );
+
+    // Posted once, by hand: postForm retries a 500 as a dropped connection, and
+    // a refusal thrown by prisma.ts arrives as exactly that.
+    const before = await db(() => prisma.feeCategory.count());
+    const form = formWith(page.html, "Add fee item");
+    const body = new FormData();
+    for (const field of form.fields) {
+      if (field.name !== "name") body.append(field.name, field.value);
+    }
+    body.append("name", probe);
+    const response = await fetch(BASE + "/fees", {
+      method: "POST",
+      headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+      body,
+      redirect: "manual",
+    });
+    const html = await response.text();
+    const written = await db(() => prisma.feeCategory.count({ where: { name: probe } }));
+    check(
+      "a server action WRITE is refused",
+      written === 0 && (await db(() => prisma.feeCategory.count())) === before,
+      written ? "the fee item was created" : `HTTP ${response.status}`,
+    );
+    check("and does not report success", !says(html, "added"), alerts(html)[0] ?? "no banner");
+
+    // Leaving is a read: a school that stopped paying can still take its data.
+    const exported = await fetch(BASE + "/api/export/students", {
+      headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
+      redirect: "manual",
+    });
+    const csv = await exported.text();
+    check(
+      "but the export still downloads",
+      exported.status === 200 && csv.split("\n").length > 1,
+      `HTTP ${exported.status}`,
+    );
+  } finally {
+    await db(() =>
+      prisma.school.update({
+        where: { id: school.id },
+        data: { subscriptionStatus: school.subscriptionStatus, trialEndsAt: school.trialEndsAt },
+      }),
+    );
+    await db(() => prisma.feeCategory.deleteMany({ where: { name: probe } }));
+    await db(() =>
+      prisma.auditLog.deleteMany({
+        where: { schoolId: school.id, action: "data.export", createdAt: { gte: started } },
+      }),
+    );
+  }
+}
+
 async function billChecks(cookie) {
   console.log("\nPrinted bills");
   if (!hasDb) {
@@ -766,6 +866,7 @@ async function main() {
       await studentGuards(token);
       await structureGuards(token);
       await feeGuards(token);
+      await readOnlyGuards(token);
       await billChecks(token);
       await componentChecks(token);
       await importChecks(token);
