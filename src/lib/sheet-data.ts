@@ -2,6 +2,25 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { isExamType } from "@/lib/assessment-templates";
+import { rosterWhere } from "@/lib/class-roster";
+
+/**
+ * The pupils on a class's roll in the term's own year — not the class today.
+ * See class-roster.ts: a past term's sheet used to list this year's cohort.
+ */
+async function termRoster(termId: string, classGroupId: string) {
+  const term = await prisma.term.findUnique({ where: { id: termId }, select: { academicYearId: true } });
+  if (!term) {
+    return [];
+  }
+  const enrolments = await prisma.enrollment.findMany({
+    where: rosterWhere(term.academicYearId, classGroupId),
+    select: { student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } } },
+  });
+  return enrolments
+    .map((e) => e.student)
+    .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+}
 
 /**
  * One class's mark sheet for one subject: the components across, the students
@@ -18,11 +37,7 @@ export async function getSheet(termId: string, classGroupId: string, subjectId: 
     include: { scores: { select: { studentId: true, rawScore: true, isAbsent: true } } },
   });
 
-  const students = await prisma.student.findMany({
-    where: { currentClassGroupId: classGroupId, status: "ACTIVE", deletedAt: null },
-    select: { id: true, firstName: true, lastName: true, admissionNo: true },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-  });
+  const students = await termRoster(termId, classGroupId);
 
   const settings = await prisma.schoolSettings.findFirst({
     select: { classScoreWeight: true, examScoreWeight: true },
@@ -67,11 +82,7 @@ export async function getSheet(termId: string, classGroupId: string, subjectId: 
 
 /** The class list with whatever pastoral fields have been filled in so far. */
 export async function getClassRemarks(termId: string, classGroupId: string) {
-  const students = await prisma.student.findMany({
-    where: { currentClassGroupId: classGroupId, status: "ACTIVE", deletedAt: null },
-    select: { id: true, firstName: true, lastName: true, admissionNo: true },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-  });
+  const students = await termRoster(termId, classGroupId);
 
   const results = await prisma.termResult.findMany({
     where: { termId, studentId: { in: students.map((s) => s.id) } },

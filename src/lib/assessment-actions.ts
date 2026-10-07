@@ -8,6 +8,7 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
+import { rosterWhere } from "@/lib/class-roster";
 
 const ASSESSMENT_TYPES = Object.keys(AssessmentType);
 
@@ -142,11 +143,7 @@ export async function saveScores(
     select: { academicYearId: true },
   });
   const roster = await prisma.enrollment.findMany({
-    where: {
-      classGroupId: assessment.classGroupId,
-      academicYearId: term?.academicYearId ?? "",
-      status: "ACTIVE",
-    },
+    where: rosterWhere(term?.academicYearId ?? "", assessment.classGroupId),
     select: { studentId: true },
   });
   const enrolled = new Set(roster.map((row) => row.studentId));

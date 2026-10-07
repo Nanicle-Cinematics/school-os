@@ -1290,6 +1290,20 @@ enum ResultStatus {
   PUBLISHED
 }
 
+/// Where a result came from.
+///
+/// COMPUTED rows are rolled up by the results engine from marks entered in School
+/// OS. RECORDS rows were transcribed from the school's own paper records for a
+/// year before it used School OS — a JHS 3 class's JHS 1 and JHS 2 terms, which
+/// a school adopting the system mid-way otherwise has no way to hold. The engine
+/// never recomputes a RECORDS row (there are no marks behind it to recompute
+/// from, and a recompute would blank it), never decides a promotion from one, and
+/// publishing never reaches one, so it is never shown to parents or texted.
+enum ResultSource {
+  COMPUTED
+  RECORDS
+}
+
 // Computed per student, per subject, per term. Written by the results engine —
 // never hand-edited without an AuditLog entry.
 model SubjectResult {
@@ -1320,6 +1334,8 @@ model SubjectResult {
 
   teacherId String?
   teacher   Staff?  @relation(fields: [teacherId], references: [id], onDelete: SetNull)
+
+  source ResultSource @default(COMPUTED)
 
   computedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -1380,6 +1396,7 @@ model TermResult {
 
   promotionStatus PromotionStatus @default(PENDING)
   status          ResultStatus    @default(DRAFT)
+  source          ResultSource    @default(COMPUTED)
   publishedAt     DateTime?
 
   createdAt DateTime @default(now())

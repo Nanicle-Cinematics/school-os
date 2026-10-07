@@ -7,6 +7,7 @@ import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
+import { rosterWhere } from "@/lib/class-roster";
 import { textResultsPublished } from "@/lib/transactional-sms";
 
 export type ComputeState = { error?: string; ok?: string };
@@ -98,13 +99,17 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
         ? await tx.termResult.findMany({
             // Never published before: withdrawing and re-publishing a class to
             // fix a typo must not text every parent a second time.
-            where: { termId, classGroupId, status: { not: "PUBLISHED" }, publishedAt: null },
+            where: { termId, classGroupId, source: "COMPUTED", status: { not: "PUBLISHED" }, publishedAt: null },
             select: { studentId: true },
           })
         : [];
 
+    // COMPUTED only. A term transcribed from paper records is the office's own
+    // record of a year before School OS, not a report card: publishing it would
+    // put it in front of parents and text every one of them about a term that
+    // ended years ago.
     const updated = await tx.termResult.updateMany({
-      where: { termId, classGroupId },
+      where: { termId, classGroupId, source: "COMPUTED" },
       data: {
         status: status as "DRAFT",
         // Kept when a class is withdrawn, so "first published" survives a correction.
@@ -112,7 +117,7 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
     });
     if (status === "PUBLISHED") {
       await tx.termResult.updateMany({
-        where: { termId, classGroupId, publishedAt: null },
+        where: { termId, classGroupId, source: "COMPUTED", publishedAt: null },
         data: { publishedAt: new Date() },
       });
     }
@@ -275,7 +280,7 @@ export async function saveClassRemarks(
   // Only pupils actually on this class's roll — a forged `row:` key must not
   // reach another class's report card.
   const roster = await prisma.enrollment.findMany({
-    where: { classGroupId, academicYearId: term.academicYearId, status: "ACTIVE" },
+    where: rosterWhere(term.academicYearId, classGroupId),
     select: { studentId: true },
   });
   const enrolled = new Set(roster.map((row) => row.studentId));

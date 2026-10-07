@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { isExamType } from "@/lib/assessment-templates";
+import { rosterWhere } from "@/lib/class-roster";
 import type { TenantTx } from "@/lib/prisma";
 
 type Tx = TenantTx;
@@ -219,9 +220,20 @@ export async function computeClassResults(
     isPass: band.isPass,
   }));
 
+  // The year the term belongs to, not every year on record. It decides the
+  // roll below, and the teacher name frozen onto SubjectResult — which reprints
+  // for as long as the report card exists, so a previous year's teacher must
+  // not win that lookup either.
+  const term = await tx.term.findUnique({
+    where: { id: termId },
+    select: { academicYearId: true, sequence: true },
+  });
+
+  // The term's own year's roll, not every ACTIVE row in the class: see
+  // class-roster.ts for the cohort this used to compute into the wrong term.
   const enrolments = await tx.enrollment.findMany({
-    where: { schoolId, classGroupId, status: "ACTIVE" },
-    include: { student: { select: { id: true } } },
+    where: { schoolId, ...rosterWhere(term?.academicYearId ?? "", classGroupId) },
+    select: { studentId: true },
   });
   const studentIds = enrolments.map((e) => e.studentId);
 
@@ -232,14 +244,6 @@ export async function computeClassResults(
   const assessments = await tx.assessment.findMany({
     where: { schoolId, termId, classGroupId, status: { not: "DRAFT" } },
     include: { scores: true },
-  });
-
-  // The year the term belongs to, not every year on record: this name is frozen
-  // onto SubjectResult and reprints for as long as the report card exists, so a
-  // previous year's teacher must not win the lookup.
-  const term = await tx.term.findUnique({
-    where: { id: termId },
-    select: { academicYearId: true, sequence: true },
   });
   const teaching = await tx.teachingAssignment.findMany({
     where: { schoolId, classGroupId, academicYearId: term?.academicYearId ?? "" },
@@ -286,10 +290,18 @@ export async function computeClassResults(
    * changed the subject marks a parent was reading while the total and position
    * above them stayed as published: a card that contradicted itself.
    */
+  //
+  // A pupil whose term was transcribed from paper records (source RECORDS) is
+  // settled the same way: there are no marks behind those figures, so a
+  // recompute would find nothing and blank the term. See records-engine.ts.
   const publishedHere = new Set(
     (
       await tx.termResult.findMany({
-        where: { termId, studentId: { in: studentIds }, status: "PUBLISHED" },
+        where: {
+          termId,
+          studentId: { in: studentIds },
+          OR: [{ status: "PUBLISHED" }, { source: "RECORDS" }],
+        },
         select: { studentId: true },
       })
     ).map((row) => row.studentId),
@@ -310,7 +322,9 @@ export async function computeClassResults(
       if (entry.total === null) {
         skipped += 1;
         // Remove a stale row rather than leaving last week's number behind.
-        await tx.subjectResult.deleteMany({ where: { termId, studentId: entry.studentId, subjectId } });
+        await tx.subjectResult.deleteMany({
+          where: { termId, studentId: entry.studentId, subjectId, source: "COMPUTED" },
+        });
         continue;
       }
 
@@ -430,8 +444,9 @@ export async function computeClassResults(
       where: { termId_studentId: { termId, studentId: row.studentId } },
     });
 
-    // Never overwrite a published report card — republishing is an explicit act.
-    if (existing?.status === "PUBLISHED") {
+    // Never overwrite a published report card — republishing is an explicit act —
+    // nor a term transcribed from paper records, which has no marks to recompute.
+    if (existing?.status === "PUBLISHED" || existing?.source === "RECORDS") {
       continue;
     }
 
@@ -516,8 +531,10 @@ export async function applyYearPromotion(
   });
   const termIds = terms.map((t) => t.id);
 
+  // Never a term transcribed from paper records: that year's promotions were
+  // decided long ago, by people, and are already history.
   const thisTerm = await tx.termResult.findMany({
-    where: { termId, classGroupId },
+    where: { termId, classGroupId, source: "COMPUTED" },
     select: { studentId: true, status: true },
   });
   const studentIds = thisTerm.map((row) => row.studentId);

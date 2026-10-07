@@ -685,6 +685,21 @@ const ACTIVITY: Record<
     detail: "Academics",
   },
   "results.remarks": { kind: "academic", title: () => "Conduct and remarks saved", detail: "Academics" },
+  /* Earlier years, transcribed from paper — the year is in the payload, and it
+     is the part a head reading the feed needs to tell this from this term's marks. */
+  "records.earlierClasses": {
+    kind: "academic",
+    title: (a) => {
+      const n = count(a.placed);
+      return `Earlier classes recorded for ${n} ${plural(n, "pupil")}${a.year ? ` in ${String(a.year)}` : ""}`;
+    },
+    detail: "Academics",
+  },
+  "records.marks": {
+    kind: "academic",
+    title: (a) => `Results from earlier records entered for ${count(a.students)} ${plural(a.students, "pupil")}`,
+    detail: "Academics",
+  },
   "results.classRemarks": {
     kind: "academic",
     title: (a) => `Conduct and remarks saved for ${count(a.students)} ${plural(a.students, "pupil")}`,

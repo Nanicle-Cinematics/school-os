@@ -3,13 +3,13 @@ import { LineChart } from "lucide-react";
 import { buttonClass } from "../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, canAccess } from "@/lib/permissions";
+import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { getResultsOverview } from "@/lib/results-data";
 import { getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
 import { setResultsStatus } from "@/lib/results-actions";
 import { PageHeader, Card, filterClass } from "../ui";
-import { DataTable, Row, type Column } from "../primitives";
+import { ButtonLink, DataTable, Row, type Column } from "../primitives";
 import { SubmitButton } from "../submit-button";
 import { ComputeForm } from "./compute-form";
 
@@ -58,6 +58,15 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
         title="Results"
         subtitle={
           term ? `Term ${term.sequence} · ${term.academicYear.name}` : "Compute and publish results"
+        }
+        action={
+          // Leadership only, like the screens it opens: an IT admin can read
+          // this page but would be turned away from the records.
+          canAccess(auth.roles, LEADERSHIP) ? (
+            <ButtonLink href="/results/records" variant="secondary">
+              Earlier years
+            </ButtonLink>
+          ) : null
         }
       />
 

@@ -136,6 +136,10 @@ const NOT_LISTS = [
   "students/import/import-form.tsx",
   "subjects/[id]/levels-form.tsx",
   "classes/[id]/assignments-form.tsx",
+  // TABULAR FORMS too: one select per pupil for the class they sat in an earlier
+  // year, and one row of mark inputs per pupil transcribed from paper records.
+  "results/records/classes/placement-form.tsx",
+  "results/records/records-form.tsx",
   "dashboard/collections-chart.tsx",
 ];
 
