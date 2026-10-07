@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
+import { getBillSchool } from "@/lib/invoice-data";
 import { ACADEMIC } from "@/lib/permissions";
 import { getMockBroadsheet } from "@/lib/mock-data";
 import { ordinal } from "@/lib/results-engine";
 import { buttonClass } from "../../button-style";
 import { Card, StatusBadge, Alert, thClass, tableHeadClass, filterClass } from "../../ui";
 import { PrintButton } from "../../print-button";
+import { BillLetterhead } from "../../bill-letterhead";
 
 export const metadata: Metadata = { title: "Mock broadsheet · School OS" };
 
@@ -15,9 +17,13 @@ export const metadata: Metadata = { title: "Mock broadsheet · School OS" };
  * Every candidate, every subject: the mark and its grade, the BECE aggregate
  * and the year-group position. A wide grid, not a list — named in
  * verify:design's NOT_LISTS like the term broadsheet it mirrors.
+ *
+ * Printed, it carries the school's letterhead and numbers every row: until the
+ * marks are in, the position column is all dashes and the number is the only
+ * way to count the candidates or point at a line.
  */
 export default async function MockBroadsheetPage({ params, searchParams }: PageProps<"/mocks/[id]">) {
-  await requireRole(ACADEMIC);
+  const auth = await requireRole(ACADEMIC);
   const { id } = await params;
   const query = await searchParams;
   const classGroupId = typeof query.class === "string" && query.class ? query.class : undefined;
@@ -25,6 +31,8 @@ export default async function MockBroadsheetPage({ params, searchParams }: PageP
   const data = await getMockBroadsheet(id, classGroupId);
   if (!data) notFound();
   const { mock, subjects, rows, classGroups, candidates, hasScale } = data;
+  const school = await getBillSchool(auth.schoolId);
+  if (!school) notFound();
 
   const placed = rows.filter((r) => r.aggregate !== null);
   const averageOf = (subjectId: string) => {
@@ -37,6 +45,9 @@ export default async function MockBroadsheetPage({ params, searchParams }: PageP
 
   return (
     <div className="mx-auto max-w-full space-y-4">
+      <div className="paper hidden print:block">
+        <BillLetterhead school={school} />
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/mocks" className="text-sm text-slate-500 hover:text-slate-900 print:hidden">
@@ -87,6 +98,7 @@ export default async function MockBroadsheetPage({ params, searchParams }: PageP
           <table className="w-full text-left text-sm">
             <thead className={tableHeadClass}>
               <tr>
+                <th className={`${thClass} text-right`}>No.</th>
                 <th className={`${thClass} text-right`}>Pos</th>
                 <th className={`${thClass} sticky left-0 bg-slate-50`}>Candidate</th>
                 <th className={`${thClass} text-right`}>Agg</th>
@@ -102,13 +114,14 @@ export default async function MockBroadsheetPage({ params, searchParams }: PageP
             <tbody className="divide-y divide-slate-100">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={subjects.length + 4} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={subjects.length + 5} className="px-4 py-10 text-center text-sm text-slate-500">
                     Nobody is enrolled in {mock.level.name} this year.
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => (
+                rows.map((row, index) => (
                   <tr key={row.studentId} className="hover:bg-slate-50">
+                    <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-slate-500">{index + 1}</td>
                     <td className="whitespace-nowrap px-4 py-2 text-right font-medium tabular-nums text-slate-900">
                       {ordinal(row.position)}
                     </td>
@@ -151,6 +164,7 @@ export default async function MockBroadsheetPage({ params, searchParams }: PageP
             {rows.length > 0 ? (
               <tfoot className="border-t border-hairline bg-slate-50 text-xs text-slate-500">
                 <tr>
+                  <td className="px-4 py-2" />
                   <td className="px-4 py-2" />
                   <td className="sticky left-0 bg-slate-50 px-4 py-2 font-semibold">Subject average</td>
                   <td className="px-4 py-2" />

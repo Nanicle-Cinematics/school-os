@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { BillSchool } from "@/lib/invoice-data";
 
 /**
@@ -23,7 +24,13 @@ export function contactLine(school: BillSchool) {
     .join(" · ");
 }
 
-export function BillLetterhead({ school }: { school: BillSchool }) {
+/**
+ * `children` is the document's own title — "Mock 1 examination · result slip" —
+ * set under the school's details inside the same centred block, so a document
+ * that is not a bill still carries the whole letterhead rather than a copy of
+ * half of it.
+ */
+export function BillLetterhead({ school, children }: { school: BillSchool; children?: ReactNode }) {
   const address = addressLine(school);
   const contact = contactLine(school);
 
@@ -43,6 +50,7 @@ export function BillLetterhead({ school }: { school: BillSchool }) {
         {school.gpsAddress ? (
           <p className="text-xs text-slate-500">GPS: {school.gpsAddress}</p>
         ) : null}
+        {children}
       </div>
       {/* Balances the crest so the name stays optically centred. */}
       {school.crestUrl ? <div className="h-14 w-14 shrink-0" /> : null}
