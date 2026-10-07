@@ -7,6 +7,7 @@ import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
+import { rosterWhere } from "@/lib/class-roster";
 import { textResultsPublished } from "@/lib/transactional-sms";
 
 export type ComputeState = { error?: string; ok?: string };
@@ -275,7 +276,7 @@ export async function saveClassRemarks(
   // Only pupils actually on this class's roll — a forged `row:` key must not
   // reach another class's report card.
   const roster = await prisma.enrollment.findMany({
-    where: { classGroupId, academicYearId: term.academicYearId, status: "ACTIVE" },
+    where: rosterWhere(term.academicYearId, classGroupId),
     select: { studentId: true },
   });
   const enrolled = new Set(roster.map((row) => row.studentId));

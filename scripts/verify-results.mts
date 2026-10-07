@@ -9,6 +9,7 @@
  */
 import { PrismaClient, Prisma } from "@prisma/client";
 import { computeClassResults, computeSubjectScore, gradeFor, rank, ordinal } from "@/lib/results-engine";
+import { rosterWhere } from "@/lib/class-roster";
 
 const prisma = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
 
@@ -406,6 +407,101 @@ console.log("\nMarks-based components (weight = maxScore)");
     c.examScore === null, `${c.examScore}`);
   assert("and the total is the class part alone",
     Number(c.total) === Number(c.classScore), `${c.total}`);
+}
+
+// ── A finished year's roll is the cohort that sat it, not the class today ────
+//
+// "JHS 2 Gold" holds a new cohort every September. Before rosterWhere, the mark
+// sheet listed the class TODAY for any term, and the engine read every ACTIVE
+// enrolment with no year — so a past term rolled up the wrong children. The
+// fixture is a year in 1990, far from anything real, with ONE of today's pupils
+// placed in the class back then. Everything it creates hangs off that year and
+// goes with it.
+console.log("\nA past term's roll");
+{
+  const today = await prisma.enrollment.findMany({
+    where: { classGroupId: classGroup.id, academicYearId: term.academicYearId, status: "ACTIVE" },
+    select: { studentId: true },
+  });
+  assert("fixture: the class has more than one pupil today", today.length > 1, `${today.length}`);
+  const sat = today[0].studentId;
+
+  const pastYear = await prisma.academicYear.create({
+    data: {
+      schoolId: school.id,
+      name: "verify-roster-1990",
+      startDate: new Date("1990-09-01"),
+      endDate: new Date("1991-07-31"),
+    },
+  });
+  try {
+    const pastTerm = await prisma.term.create({
+      data: {
+        schoolId: school.id,
+        academicYearId: pastYear.id,
+        name: "FIRST",
+        sequence: 1,
+        startDate: new Date("1990-09-01"),
+        endDate: new Date("1990-12-15"),
+      },
+    });
+    // COMPLETED, as every row of a finished year reads once the promotion ran.
+    await prisma.enrollment.create({
+      data: {
+        schoolId: school.id,
+        studentId: sat,
+        academicYearId: pastYear.id,
+        classGroupId: classGroup.id,
+        status: "COMPLETED",
+      },
+    });
+
+    const roll = await prisma.enrollment.findMany({
+      where: rosterWhere(pastYear.id, classGroup.id),
+      select: { studentId: true },
+    });
+    assert(
+      "the 1990 roll is the one child who sat in the class in 1990",
+      roll.length === 1 && roll[0].studentId === sat,
+      `${roll.length} on the roll`,
+    );
+
+    const subject = await prisma.levelSubject.findFirstOrThrow({
+      where: { levelId: classGroup.levelId },
+      select: { subjectId: true },
+    });
+    await prisma.assessment.create({
+      data: {
+        schoolId: school.id,
+        termId: pastTerm.id,
+        classGroupId: classGroup.id,
+        subjectId: subject.subjectId,
+        type: "END_OF_TERM_EXAM",
+        title: "verify-roster exam",
+        maxScore: 100,
+        weight: 100,
+        status: "APPROVED",
+        scores: { create: { schoolId: school.id, studentId: sat, rawScore: 80 } },
+      },
+    });
+
+    const past = await prisma.$transaction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (tx) => computeClassResults(tx as any, school.id, pastTerm.id, classGroup.id),
+      { timeout: 180_000, maxWait: 30_000 },
+    );
+    const rows = await prisma.termResult.findMany({
+      where: { termId: pastTerm.id },
+      select: { studentId: true },
+    });
+    assert(
+      "computing the 1990 term rolls up that child and nobody from today's class",
+      past.students === 1 && rows.length === 1 && rows[0].studentId === sat,
+      `${past.students} computed, ${rows.length} report cards`,
+    );
+  } finally {
+    await prisma.academicYear.delete({ where: { id: pastYear.id } });
+  }
 }
 
 await prisma.$disconnect();

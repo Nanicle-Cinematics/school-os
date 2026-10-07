@@ -680,6 +680,24 @@ is never re-decided behind the office's back.
 pass mark above the best mark in the class must repeat the whole class, and the
 first term must leave every row `PENDING`.
 
+## A term's roll is the term's YEAR, never the class today
+
+A `ClassGroup` is a stream that outlives its pupils — "JHS 1 Gold" holds a new
+cohort every September — so "who is in this class" means nothing until a year is
+named. `rosterWhere(academicYearId, classGroupId)` in `src/lib/class-roster.ts` is
+the one answer: that year's enrolments in the class, in any state but
+`WITHDRAWN` (a finished year's rows read COMPLETED or REPEATED once the promotion
+has run, and they are still the children who sat it), deleted pupils excluded.
+
+⚠️ Until 2026-10-07 three rules disagreed. The mark sheet and remarks screen read
+`Student.currentClassGroupId` — the class TODAY — so a 2024/25 sheet listed this
+year's pupils; `computeClassResults` read every ACTIVE enrolment with no year, so
+recomputing last year's third term after the promotion rolled up the new cohort
+into it; and the save actions scoped by year but only to ACTIVE, so a finished
+year's saves were silently dropped. Use `rosterWhere` for anything term-scoped.
+`verify:results` builds a 1990 year with one of today's pupils in it and asserts
+the engine computes that child alone — on the old engine it computed all four.
+
 ## Mock exams are not term assessments
 
 The BECE year (the top JHS level — found by stage and order, never by code:

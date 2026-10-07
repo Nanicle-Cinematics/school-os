@@ -9,6 +9,7 @@ import { prisma, tenantTransaction } from "@/lib/prisma";
 import { materialiseComponents } from "@/lib/assessment-templates";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
+import { rosterWhere } from "@/lib/class-roster";
 
 export type SheetState = { error?: string; ok?: string; savedAt?: string };
 
@@ -141,7 +142,7 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
     select: { academicYearId: true },
   });
   const roster = await prisma.enrollment.findMany({
-    where: { classGroupId, academicYearId: term?.academicYearId ?? "", status: "ACTIVE" },
+    where: rosterWhere(term?.academicYearId ?? "", classGroupId),
     select: { studentId: true },
   });
   const enrolled = new Set(roster.map((row) => row.studentId));

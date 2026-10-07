@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { isExamType } from "@/lib/assessment-templates";
+import { rosterWhere } from "@/lib/class-roster";
 import type { TenantTx } from "@/lib/prisma";
 
 type Tx = TenantTx;
@@ -219,9 +220,20 @@ export async function computeClassResults(
     isPass: band.isPass,
   }));
 
+  // The year the term belongs to, not every year on record. It decides the
+  // roll below, and the teacher name frozen onto SubjectResult — which reprints
+  // for as long as the report card exists, so a previous year's teacher must
+  // not win that lookup either.
+  const term = await tx.term.findUnique({
+    where: { id: termId },
+    select: { academicYearId: true, sequence: true },
+  });
+
+  // The term's own year's roll, not every ACTIVE row in the class: see
+  // class-roster.ts for the cohort this used to compute into the wrong term.
   const enrolments = await tx.enrollment.findMany({
-    where: { schoolId, classGroupId, status: "ACTIVE" },
-    include: { student: { select: { id: true } } },
+    where: { schoolId, ...rosterWhere(term?.academicYearId ?? "", classGroupId) },
+    select: { studentId: true },
   });
   const studentIds = enrolments.map((e) => e.studentId);
 
@@ -232,14 +244,6 @@ export async function computeClassResults(
   const assessments = await tx.assessment.findMany({
     where: { schoolId, termId, classGroupId, status: { not: "DRAFT" } },
     include: { scores: true },
-  });
-
-  // The year the term belongs to, not every year on record: this name is frozen
-  // onto SubjectResult and reprints for as long as the report card exists, so a
-  // previous year's teacher must not win the lookup.
-  const term = await tx.term.findUnique({
-    where: { id: termId },
-    select: { academicYearId: true, sequence: true },
   });
   const teaching = await tx.teachingAssignment.findMany({
     where: { schoolId, classGroupId, academicYearId: term?.academicYearId ?? "" },

@@ -3,6 +3,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth";
 import { canAccess, LEADERSHIP } from "@/lib/permissions";
+import { rosterWhere } from "@/lib/class-roster";
 
 /**
  * Classes and subjects the signed-in user may enter scores for.
@@ -97,7 +98,8 @@ export async function getAssessmentForEntry(id: string) {
   }
 
   const enrolments = await prisma.enrollment.findMany({
-    where: { classGroupId: assessment.classGroupId, status: "ACTIVE" },
+    // The term's own year's roll — see class-roster.ts.
+    where: rosterWhere(assessment.term.academicYearId, assessment.classGroupId),
     include: {
       student: {
         select: { id: true, firstName: true, lastName: true, admissionNo: true },
