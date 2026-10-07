@@ -1,8 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
-import { setTenantContext } from "@/lib/tenant-context";
-import { activeSchoolId } from "@/lib/session-school";
+import { withBypass } from "@/lib/tenant-context";
 import { schoolIconUrls } from "@/lib/manifest-data";
 
 /**
@@ -13,24 +12,30 @@ import { schoolIconUrls } from "@/lib/manifest-data";
  * can never drift from the generic one the way a hand-kept duplicate would.
  * The ONLY thing this route ever changes is `icons`.
  *
+ * ⚠️ The school comes from `?school=`, NOT the session cookie. A browser
+ * fetches a manifest with credentials mode "omit" (see `schoolIconUrls`), so
+ * the cookie never arrives here in production. The first version read it,
+ * found nobody, and redirected every install to the generic file — every
+ * school's home-screen icon was the green "S". Public is safe for the same
+ * reason the icon route is: the response says nothing but which crest a
+ * school prints on its bills.
+ *
  * A school with no crest is redirected to the static file outright rather than
- * served an identical copy of it: one fewer thing that could drift, and the
- * static file is a normal cacheable asset while this route, reading the
- * session cookie, is never allowed to be.
+ * served an identical copy of it: one fewer thing that could drift.
  */
 export async function GET(request: Request) {
   const fallback = () => Response.redirect(new URL("/manifest.webmanifest", request.url), 307);
 
-  const schoolId = await activeSchoolId();
+  const schoolId = new URL(request.url).searchParams.get("school");
   if (!schoolId) {
     return fallback();
   }
 
-  // readOnly: true because this route only reads. It skips requireAuth to stay
-  // light, so it never learns the subscription, and "may not write" is the
-  // answer that is correct whatever the subscription says.
-  setTenantContext({ schoolId, readOnly: true });
-  const school = await prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true } });
+  // No session, so no tenant context to set; the read is scoped to the one
+  // school named in the url, exactly as /api/school-icon does it.
+  const school = await withBypass(() =>
+    prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true } }),
+  );
   const icons = schoolIconUrls(schoolId, school?.crestUrl ?? null);
   if (!icons) {
     return fallback();
@@ -47,10 +52,10 @@ export async function GET(request: Request) {
   return Response.json(manifest, {
     headers: {
       "Content-Type": "application/manifest+json",
-      // Session-scoped content at a stable url: the opposite of the icons
-      // above, which is exactly why it must never be cached by anything
-      // shared. See public/sw.js for the same rule applied to the generic one.
-      "Cache-Control": "private, no-store",
+      // The url carries the crest's version, so a new crest is a new url. Not
+      // immutable, though: the rest of the body comes from the static file,
+      // which a deploy can change under the same url.
+      "Cache-Control": "public, max-age=3600",
     },
   });
 }
