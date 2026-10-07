@@ -85,6 +85,60 @@ export async function getStudentFormOptions() {
   return { classGroups, houses, programmes };
 }
 
+/**
+ * A pupil who was deleted, for the page that offers to restore them. Without
+ * it a deleted pupil's link — the class roster still lists their ended
+ * enrolment — opened a bare 404, and a school that deleted BOTH copies of a
+ * duplicate had no way back to the real child.
+ *
+ * Carries every other pupil with the same name, live or deleted, because the
+ * office is choosing which copy is the real one.
+ */
+export async function getDeletedStudent(id: string) {
+  const student = await prisma.student.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      admissionNo: true,
+      firstName: true,
+      middleName: true,
+      lastName: true,
+      deletedAt: true,
+      createdAt: true,
+    },
+  });
+  if (!student?.deletedAt) {
+    return null;
+  }
+
+  const deletion = await prisma.auditLog.findFirst({
+    where: { entity: "Student", entityId: id, action: "student.delete" },
+    orderBy: { createdAt: "desc" },
+    select: { actor: { select: { name: true } } },
+  });
+
+  const enrolments = await prisma.enrollment.findMany({
+    where: { studentId: id, status: "WITHDRAWN", updatedAt: { gte: student.deletedAt } },
+    select: {
+      id: true,
+      academicYear: { select: { name: true } },
+      classGroup: { select: { name: true, level: { select: { name: true } } } },
+    },
+  });
+
+  const namesakes = await prisma.student.findMany({
+    where: {
+      id: { not: id },
+      firstName: { equals: student.firstName, mode: "insensitive" },
+      lastName: { equals: student.lastName, mode: "insensitive" },
+    },
+    select: { id: true, admissionNo: true, deletedAt: true, createdAt: true },
+    orderBy: { admissionNo: "asc" },
+  });
+
+  return { student, deletedBy: deletion?.actor?.name ?? null, enrolments, namesakes };
+}
+
 export async function getStudent(id: string) {
   const student = await prisma.student.findUnique({
     where: { id },

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
-import { getStudent, getStudentFormOptions } from "@/lib/student-data";
+import { getDeletedStudent, getStudent, getStudentFormOptions } from "@/lib/student-data";
 import { deleteStudent, withdrawStudent } from "@/lib/student-actions";
 import { formatCedis } from "@/lib/money";
 import { Alert, Card, StatusBadge } from "../../ui";
@@ -13,6 +13,7 @@ import { SubmitButton } from "../../submit-button";
 import { EditStudentForm } from "../student-form";
 import { EnrolForm } from "./enrol-form";
 import { AddNewGuardianForm, LinkExistingGuardianForm } from "./guardian-form";
+import { DeletedStudent } from "./deleted-student";
 
 const COLUMNS_0: Column[] = [
   { label: "Name" },
@@ -62,7 +63,13 @@ export default async function StudentDetailPage({
 
   const result = await getStudent(id);
   if (!result) {
-    notFound();
+    // A deleted pupil is still reachable from the class roster, and may be the
+    // real child — offer the way back rather than a 404.
+    const deleted = await getDeletedStudent(id);
+    if (!deleted) {
+      notFound();
+    }
+    return <DeletedStudent data={deleted} />;
   }
 
   const { student, year, enrollments, invoices, termResults, outstanding, availableGuardians } =
@@ -92,6 +99,16 @@ export default async function StudentDetailPage({
           · {student.status.toLowerCase()}
         </p>
       </div>
+
+      {query.restored ? (
+        <Alert tone="success">
+          {student.firstName} is restored
+          {student.currentClassGroup
+            ? ` and back in ${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
+            : ""}
+          .
+        </Alert>
+      ) : null}
 
       {query.error === "has-money" ? (
         <Alert tone="error">

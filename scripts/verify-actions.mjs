@@ -610,6 +610,47 @@ async function deleteGuards(cookie) {
       `${enrolled.student.firstName} ${enrolled.student.lastName}`,
     );
     check("but not the deleted duplicate", !register.html.includes(`Duplicate${stamp}`));
+
+    // A school that deleted the REAL copy — or both — needs the way back.
+    const roster = await fetchPage(`/classes/${enrolled.classGroupId}`, cookie);
+    const rosterRow = roster.html.split(student.admissionNo)[1]?.split("</tr>")[0] ?? "";
+    check("the class roster says the pupil was deleted, not withdrawn", rosterRow.includes(">deleted<"));
+    const gone = await fetchPage(path, cookie);
+    check("a deleted pupil's link opens, rather than a 404", gone.status === 200, `HTTP ${gone.status}`);
+    check("and says it was deleted", gone.html.includes("was deleted on"));
+    const restore = await postForm(path, formWith(gone.html, "Restore Verify"), {}, cookie);
+    check("and offers to restore it", (restore.location ?? "").includes("restored=1"), restore.location ?? "no redirect");
+    const back = await db(() =>
+      prisma.student.findUnique({
+        where: { id: student.id },
+        select: { deletedAt: true, currentClassGroupId: true, enrollments: { select: { status: true } } },
+      }),
+    );
+    check("a restored pupil is no longer deleted", back?.deletedAt === null);
+    check("and is back in their class", back?.currentClassGroupId === enrolled.classGroupId, String(back?.currentClassGroupId));
+    check(
+      "with the enrolment the delete ended reopened",
+      (back?.enrollments ?? []).every((row) => row.status === "ACTIVE"),
+      (back?.enrollments ?? []).map((row) => row.status).join(","),
+    );
+
+    // A pupil genuinely withdrawn BEFORE being deleted stays withdrawn.
+    await db(() => prisma.enrollment.updateMany({ where: { studentId: student.id }, data: { status: "WITHDRAWN" } }));
+    await db(() =>
+      prisma.student.update({ where: { id: student.id }, data: { currentClassGroupId: null, deletedAt: new Date(Date.now() + 60_000) } }),
+    );
+    await postForm(path, formWith((await fetchPage(path, cookie)).html, "Restore Verify"), {}, cookie);
+    const kept = await db(() =>
+      prisma.student.findUnique({
+        where: { id: student.id },
+        select: { deletedAt: true, currentClassGroupId: true, enrollments: { select: { status: true } } },
+      }),
+    );
+    check(
+      "but an enrolment ended before the delete stays ended",
+      kept?.deletedAt === null && kept?.currentClassGroupId === null && (kept?.enrollments ?? []).every((row) => row.status === "WITHDRAWN"),
+      (kept?.enrollments ?? []).map((row) => row.status).join(","),
+    );
   } finally {
     // Cascades the enrolment and the invoice.
     await db(() => prisma.student.delete({ where: { id: student.id } }));
