@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { ACADEMIC } from "@/lib/permissions";
 import { getMockBroadsheet } from "@/lib/mock-data";
+import { getBillSchool } from "@/lib/invoice-data";
 import { ordinal } from "@/lib/results-engine";
 import { paperWatermark } from "@/lib/paper";
 import { PrintButton } from "../../../print-button";
+import { BillLetterhead } from "../../../bill-letterhead";
 
 export const metadata: Metadata = { title: "Mock result slips · School OS" };
 
@@ -14,6 +16,11 @@ export const metadata: Metadata = { title: "Mock result slips · School OS" };
  * One slip per candidate, for parents: each subject's mark, grade and remark,
  * the aggregate and the year-group position. `.paper`, so it prints light in
  * dark mode, and a page break after each slip.
+ *
+ * Each slip carries the school's whole letterhead — crest, motto, address and
+ * contacts — because it leaves the building on its own, and is numbered in
+ * broadsheet order so the office can tell at a glance that none is missing
+ * from the pile.
  *
  * Not a report card and must not read as one: it says "mock" in its heading
  * and carries no term, no attendance and no promotion.
@@ -27,6 +34,8 @@ export default async function MockSlipsPage({ params, searchParams }: PageProps<
   const data = await getMockBroadsheet(id, classGroupId);
   if (!data) notFound();
   const { mock, subjects, rows, candidates } = data;
+  const school = await getBillSchool(auth.schoolId);
+  if (!school) notFound();
   const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
   return (
@@ -50,27 +59,23 @@ export default async function MockSlipsPage({ params, searchParams }: PageProps<
           }`}
           style={paperWatermark(auth.schoolCrestUrl)}
         >
-          <header className="flex items-center gap-4 border-b-2 border-brand-800 pb-4">
-            {auth.schoolCrestUrl ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={auth.schoolCrestUrl} alt="" className="h-14 w-14 shrink-0 object-contain" />
-              </>
-            ) : null}
-            <div className="min-w-0 flex-1 text-center">
-              <h1 className="font-display text-2xl text-slate-900">{auth.schoolName}</h1>
-              <p className="mt-2 text-sm font-semibold tracking-wide text-brand-800">
-                {mock.title} examination · result slip
-              </p>
-              <p className="text-xs text-slate-500">
-                {mock.level.name} · {mock.academicYear.name}
-                {mock.sittingDate ? ` · sat ${dateFmt.format(mock.sittingDate)}` : ""}
-              </p>
-            </div>
-            {auth.schoolCrestUrl ? <div className="h-14 w-14 shrink-0" /> : null}
-          </header>
+          <BillLetterhead school={school}>
+            <p className="mt-2 text-sm font-semibold tracking-wide text-brand-800">
+              {mock.title} examination · result slip
+            </p>
+            <p className="text-xs text-slate-500">
+              {mock.level.name} · {mock.academicYear.name}
+              {mock.sittingDate ? ` · sat ${dateFmt.format(mock.sittingDate)}` : ""}
+            </p>
+          </BillLetterhead>
 
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-b border-slate-200 py-4 text-sm sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-b border-slate-200 py-4 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-xs text-slate-500">No.</dt>
+              <dd className="tabular-nums text-slate-900">
+                {index + 1} <span className="text-slate-500">of {rows.length}</span>
+              </dd>
+            </div>
             <div>
               <dt className="text-xs text-slate-500">Candidate</dt>
               <dd className="font-medium text-slate-900">

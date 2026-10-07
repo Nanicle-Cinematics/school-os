@@ -236,6 +236,31 @@ if (!(await appIsUp())) {
       check("and a 75 as the school's scale says", presentRow?.cells.get(english.id)?.grade !== null, presentRow?.cells.get(english.id)?.grade ?? "none");
       check("nobody has an aggregate from English alone", (sheetData?.rows ?? []).every((r) => r.aggregate === null));
 
+      // Every slip leaves the building on its own, so each carries the school's
+      // letterhead and its number in the pile. The broadsheet prints the same
+      // letterhead and numbers its rows, since its positions are all dashes
+      // until the marks are in.
+      const letterhead = await prisma.school.findUniqueOrThrow({ where: { id: schoolId }, select: { name: true, address: true } });
+      const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
+      const count = (html: string, needle: string) => html.split(needle).length - 1;
+      const slips = await get(`/mocks/${mock.id}/slips?class=${classGroupId}`, ownerToken);
+      const slipCount = count(slips.html, "<article");
+      check("the slips print one per candidate", slipCount === roll.length, `${slipCount} slips, ${roll.length} enrolled`);
+      check("and every slip carries the school's name", count(slips.html, `>${escape(letterhead.name)}</h1>`) === roll.length);
+      if (letterhead.address) {
+        check("and its address", count(slips.html, escape(letterhead.address)) >= roll.length);
+      }
+      check(
+        "and is numbered out of the pile",
+        // React separates adjacent text and expressions with `<!-- -->`.
+        [1, roll.length].every((n) =>
+          new RegExp(`>${n}(?:<!-- -->)? <span[^>]*>of (?:<!-- -->)?${roll.length}<`).test(slips.html),
+        ),
+      );
+      const printed = await get(`/mocks/${mock.id}?class=${classGroupId}`, ownerToken);
+      check("the broadsheet prints the school's letterhead", printed.html.includes(`>${escape(letterhead.name)}</h1>`));
+      check("and numbers its rows", printed.html.includes(">No.</th>"));
+
       // A teacher NOT assigned to JHS 3 English is refused by the action itself.
       const outsider = await prisma.membership.findFirst({
         where: {
