@@ -229,7 +229,7 @@ select s.name,
        (select count(*) from "Staff"      t where t."schoolId" = s.id) as staff,
        (select count(*) from "Membership" t where t."schoolId" = s.id) as memberships,
        (select count(*) from "Invoice"    t where t."schoolId" = s.id) as invoices,
-       (select coalesce(string_agg(u.email, ', '), 'none')
+       (select coalesce(string_agg(u.email, ', ' order by u.email), 'none')
           from "User" u
          where u."isPlatformAdmin" = false
            and (u."schoolId" = s.id
