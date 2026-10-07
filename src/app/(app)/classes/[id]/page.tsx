@@ -241,7 +241,9 @@ export default async function ClassDetailPage({
                     {enrollment.student.gender.toLowerCase()}
                   </td>
                   <td className="whitespace-nowrap px-4 py-2 text-slate-600">
-                    {enrollment.status.toLowerCase()}
+                    {/* A deleted pupil's enrolment reads WITHDRAWN, which is how the
+                        real child and its deleted duplicate came to look identical. */}
+                    {enrollment.student.deletedAt ? "deleted" : enrollment.status.toLowerCase()}
                   </td>
                 </Row>
               ))}

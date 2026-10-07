@@ -115,6 +115,7 @@ export async function getClassGroup(id: string) {
               lastName: true,
               gender: true,
               status: true,
+              deletedAt: true,
             },
           },
         },

@@ -534,6 +534,68 @@ export async function withdrawStudent(formData: FormData): Promise<void> {
 }
 
 /**
+ * Undo a delete — the wrong copy of a duplicate, or both of them.
+ *
+ * Deleting ends the pupil's ACTIVE enrolments (and a data migration ended them
+ * for pupils deleted before it did), so restoring has to put them back or the
+ * pupil returns with no class. Only enrolments ended AT OR AFTER the delete are
+ * reopened: delete and the migration both stamp `updatedAt` no earlier than
+ * `deletedAt`, while a pupil who was genuinely withdrawn first carries an older
+ * stamp and stays withdrawn.
+ */
+export async function restoreStudent(formData: FormData): Promise<void> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext(auth.tenant);
+  const studentId = String(formData.get("studentId") ?? "");
+  if (!studentId) {
+    return;
+  }
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    const student = await tx.student.findUnique({
+      where: { id: studentId },
+      select: { admissionNo: true, firstName: true, lastName: true, deletedAt: true },
+    });
+    if (!student?.deletedAt) {
+      return;
+    }
+    const ended = await tx.enrollment.findMany({
+      where: { studentId, status: "WITHDRAWN", updatedAt: { gte: student.deletedAt } },
+      select: { id: true, classGroupId: true, academicYear: { select: { isCurrent: true } } },
+    });
+    if (ended.length > 0) {
+      await tx.enrollment.updateMany({
+        where: { id: { in: ended.map((e) => e.id) } },
+        data: { status: "ACTIVE" },
+      });
+    }
+    const current = ended.find((e) => e.academicYear.isCurrent);
+    await tx.student.update({
+      where: { id: studentId },
+      data: { deletedAt: null, ...(current ? { currentClassGroupId: current.classGroupId } : {}) },
+    });
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "student.restore",
+      entity: "Student",
+      entityId: studentId,
+      before: { deletedAt: student.deletedAt.toISOString() },
+      after: {
+        admissionNo: student.admissionNo,
+        name: `${student.firstName} ${student.lastName}`,
+        enrolmentsRestored: ended.length,
+        currentClassGroupId: current?.classGroupId ?? null,
+      },
+    });
+  });
+  revalidatePath("/students");
+  revalidatePath("/classes");
+  revalidatePath("/attendance");
+  redirect(`/students/${studentId}?restored=1`);
+}
+
+/**
  * Remove a record entered by mistake — a duplicate admission, typically.
  *
  * A soft delete: the row stays, with `deletedAt` set, so its audit history
