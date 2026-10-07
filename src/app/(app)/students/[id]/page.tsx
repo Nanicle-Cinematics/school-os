@@ -4,7 +4,7 @@ import { CircleAlert, FileText, GraduationCap, Heart, LineChart } from "lucide-r
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { OFFICE } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { getDeletedStudent, getStudent, getStudentFormOptions } from "@/lib/student-data";
 import { deleteStudent, withdrawStudent } from "@/lib/student-actions";
 import { formatCedis } from "@/lib/money";
@@ -57,7 +57,7 @@ export default async function StudentDetailPage({
   params,
   searchParams,
 }: PageProps<"/students/[id]">) {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
   const { id } = await params;
   const query = await searchParams;
 
@@ -77,6 +77,10 @@ export default async function StudentDetailPage({
   const { classGroups, houses, programmes } = await getStudentFormOptions();
 
   const owes = outstanding.greaterThan(0);
+  // A pupil in JHS now, or with a JHS year on record, has a cumulative record.
+  const hasJhsRecord =
+    student.currentClassGroup?.level.stage === "JHS" ||
+    enrollments.some((e) => e.classGroup.level.stage === "JHS");
   const onRoll = student.status === "ACTIVE";
 
   return (
@@ -299,7 +303,21 @@ export default async function StudentDetailPage({
         </div>
       </Card>
 
-      <Card title="Results">
+      <Card
+        title="Results"
+        action={
+          // The JHS 1–3 record, for leadership: it draws on the earlier-year
+          // records, which are the office's own and not published.
+          canAccess(auth.roles, LEADERSHIP) && hasJhsRecord ? (
+            <Link
+              href={`/results/${student.id}/cumulative`}
+              className="text-sm font-medium text-brand-ink hover:underline"
+            >
+              JHS record
+            </Link>
+          ) : null
+        }
+      >
         <div className="overflow-x-auto">
           <DataTable
             columns={COLUMNS_3}

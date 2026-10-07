@@ -10,6 +10,7 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { applyYearPromotion, computeClassResults, computeSubjectScore, gradeFor, rank, ordinal } from "@/lib/results-engine";
 import { rosterWhere } from "@/lib/class-roster";
+import { assembleCumulativeRecord, type CumulativeInput } from "@/lib/cumulative";
 import {
   isEarlierYear,
   parseRecordedMark,
@@ -679,6 +680,83 @@ console.log("\nResults from records — against the database");
   } finally {
     await prisma.academicYear.delete({ where: { id: pastYear.id } });
   }
+}
+
+// ── The JHS cumulative record: which years print, and every row lines up ────
+console.log("\nThe JHS cumulative record");
+{
+  const j1 = { id: "j1", name: "JHS 1", order: 9 };
+  const j2 = { id: "j2", name: "JHS 2", order: 10 };
+  const j3 = { id: "j3", name: "JHS 3", order: 11 };
+  const year = (id: string, start: string) => ({ id, name: id, startDate: new Date(start) });
+  const y24 = year("2024/2025", "2024-09-01");
+  const y25 = year("2025/2026", "2025-09-01");
+  const y26 = year("2026/2027", "2026-09-01");
+  const termsOf = (y: { id: string }) =>
+    [1, 2, 3].map((sequence) => ({ id: `${y.id}-t${sequence}`, academicYearId: y.id, sequence }));
+  const base: CumulativeInput = {
+    levels: [j3, j1, j2],
+    currentLevelOrder: 11,
+    enrolments: [
+      { academicYear: y24, classGroup: { name: "Gold", level: j1 } },
+      { academicYear: y25, classGroup: { name: "JHS 2 Gold", level: j2 } },
+      { academicYear: y26, classGroup: { name: "Gold", level: j3 } },
+    ],
+    terms: [...termsOf(y24), ...termsOf(y25), ...termsOf(y26)],
+    termResults: [
+      { termId: "2024/2025-t1", totalMarks: 600, possibleMarks: 1000, percentage: 60, classPosition: 3, classSize: 30, status: "APPROVED", source: "RECORDS" },
+      { termId: "2026/2027-t1", totalMarks: 700, possibleMarks: 1000, percentage: 70, classPosition: 1, classSize: 30, status: "DRAFT", source: "COMPUTED" },
+    ],
+    subjectResults: [
+      { termId: "2024/2025-t1", subjectId: "eng", totalScore: 61, grade: "4" },
+      { termId: "2026/2027-t1", subjectId: "mat", totalScore: 72.5, grade: "2" },
+    ],
+    subjects: [
+      { id: "mat", name: "Mathematics", order: 2 },
+      { id: "eng", name: "English Language", order: 1 },
+    ],
+  };
+
+  const full = assembleCumulativeRecord(base);
+  const cols = full.years.length * 3;
+  assert("a JHS 3 pupil with all three years prints nine term columns",
+    full.years.length === 3 && cols === 9, `${cols}`);
+  assert("the years run JHS 1, JHS 2, JHS 3 whatever order the levels arrive in",
+    full.years.map((y) => y.levelName).join(",") === "JHS 1,JHS 2,JHS 3");
+  assert("every subject row has a cell for every term column",
+    full.rows.every((r) => r.cells.length === cols));
+  assert("subjects follow the curriculum order", full.rows[0].name === "English Language");
+  assert("a mark lands in its own term's column",
+    full.rows[0].cells[0]?.total === 61 && full.rows[1].cells[6]?.total === 72.5);
+  assert("a term with no mark is an empty cell, not a missing column", full.rows[0].cells[1] === null);
+  const y1 = full.years[0];
+  const y3 = full.years[2];
+  assert("a term from paper records is marked as such",
+    y1.kind === "year" && y1.terms[0].source === "RECORDS" && !y1.terms[0].provisional);
+  assert("a draft computed term is marked provisional", y3.kind === "year" && y3.terms[0].provisional);
+  assert("a class named only by its stream reads with its level", y1.kind === "year" && y1.className === "JHS 1 Gold");
+  assert("a class named in full is not doubled", full.years[1].kind === "year" && full.years[1].className === "JHS 2 Gold");
+
+  const joinedLate = assembleCumulativeRecord({ ...base, enrolments: base.enrolments.slice(1) });
+  assert("a JHS 3 pupil with no JHS 1 enrolment shows JHS 1 as not recorded",
+    joinedLate.years[0].kind === "missing" && joinedLate.years.length === 3);
+  assert("and the gap keeps its three columns so the rows still line up",
+    joinedLate.rows.every((r) => r.cells.length === 9 && r.cells[0] === null));
+
+  const inJhs2 = assembleCumulativeRecord({ ...base, currentLevelOrder: 10, enrolments: base.enrolments.slice(0, 2) });
+  assert("a JHS 2 pupil has no JHS 3 columns yet", inJhs2.years.length === 2);
+
+  const repeater = assembleCumulativeRecord({
+    ...base,
+    enrolments: [
+      base.enrolments[0],
+      { academicYear: y25, classGroup: { name: "Gold", level: j2 } },
+      { academicYear: y26, classGroup: { name: "Gold", level: j2 } },
+    ],
+    currentLevelOrder: 10,
+  });
+  assert("a pupil who repeated JHS 2 shows both years at it",
+    repeater.years.filter((y) => y.levelName === "JHS 2").length === 2);
 }
 
 await prisma.$disconnect();

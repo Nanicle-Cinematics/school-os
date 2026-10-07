@@ -52,6 +52,10 @@ const DOCUMENTS = [
   // it too — this is the convention on the document, not somebody reaching for
   // `uppercase` to make a caption look like a caption.
   "payments/payment-receipt.tsx",
+  // A pupil's JHS 1–3 cumulative record: the report card's sibling, printed on
+  // the letterhead, signed by the head and filed. "CUMULATIVE RECORD" heads it
+  // for the same reason "TERMINAL REPORT" heads the card.
+  "results/cumulative-record.tsx",
 ];
 
 console.log("Colour says one thing at a time");
@@ -118,6 +122,7 @@ console.log("\nOne set of primitives, not thirty copies");
  */
 const NOT_LISTS = [
   "results/report-card.tsx",
+  "results/cumulative-record.tsx",
   "invoices/invoice-bill.tsx",
   // PRINTED DOCUMENTS, as above: a fee table on a document a parent keeps, not
   // a list on a screen. It shares the bill's columns on purpose.

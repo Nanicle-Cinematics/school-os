@@ -143,7 +143,7 @@ export async function getStudent(id: string) {
   const student = await prisma.student.findUnique({
     where: { id },
     include: {
-      currentClassGroup: { select: { id: true, name: true, level: { select: { name: true } } } },
+      currentClassGroup: { select: { id: true, name: true, level: { select: { name: true, stage: true } } } },
       house: { select: { id: true, name: true } },
       programme: { select: { id: true, name: true } },
       guardians: {
@@ -167,7 +167,7 @@ export async function getStudent(id: string) {
     where: { studentId: id },
     include: {
       academicYear: { select: { id: true, name: true, isCurrent: true } },
-      classGroup: { select: { id: true, name: true, level: { select: { name: true } } } },
+      classGroup: { select: { id: true, name: true, level: { select: { name: true, stage: true } } } },
     },
     orderBy: { academicYear: { startDate: "desc" } },
   });
