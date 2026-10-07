@@ -11,6 +11,7 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { applyYearPromotion, computeClassResults, computeSubjectScore, gradeFor, rank, ordinal } from "@/lib/results-engine";
 import { rosterWhere } from "@/lib/class-roster";
 import { assembleCumulativeRecord, type CumulativeInput } from "@/lib/cumulative";
+import { assembleJhsBroadsheet } from "@/lib/jhs-broadsheet";
 import {
   isEarlierYear,
   parseRecordedMark,
@@ -757,6 +758,56 @@ console.log("\nThe JHS cumulative record");
   });
   assert("a pupil who repeated JHS 2 shows both years at it",
     repeater.years.filter((y) => y.levelName === "JHS 2").length === 2);
+}
+
+// ── The JHS 1–3 broadsheet: averages, totals and positions across three years
+console.log("\nThe JHS 1–3 broadsheet");
+{
+  const pupil = (id: string, lastName: string) => ({ id, firstName: id.toUpperCase(), lastName, admissionNo: id });
+  const sheet = assembleJhsBroadsheet({
+    pupils: [pupil("ama", "Mensah"), pupil("kofi", "Boateng"), pupil("esi", "Owusu"), pupil("yaw", "Addo")],
+    subjects: [
+      { id: "mat", name: "Mathematics", order: 2 },
+      { id: "eng", name: "English Language", order: 1 },
+    ],
+    termResults: [
+      // Ama: 3 terms, 150 + 160 + 170 of 200 each = 480 / 600 = 80%
+      { studentId: "ama", termId: "t1", totalMarks: 150, possibleMarks: 200, source: "RECORDS" },
+      { studentId: "ama", termId: "t2", totalMarks: 160, possibleMarks: 200, source: "RECORDS" },
+      { studentId: "ama", termId: "t3", totalMarks: 170, possibleMarks: 200, source: "COMPUTED" },
+      // Kofi: one term, 160 / 200 = 80% — ties Ama
+      { studentId: "kofi", termId: "t3", totalMarks: 160, possibleMarks: 200, source: "COMPUTED" },
+      // Esi: 120 / 200 = 60%
+      { studentId: "esi", termId: "t3", totalMarks: 120, possibleMarks: 200, source: "COMPUTED" },
+      // Yaw: nothing on record
+    ],
+    subjectResults: [
+      { studentId: "ama", termId: "t1", subjectId: "eng", totalScore: 70 },
+      { studentId: "ama", termId: "t2", subjectId: "eng", totalScore: 80 },
+      { studentId: "ama", termId: "t3", subjectId: "eng", totalScore: 85 },
+      { studentId: "ama", termId: "t1", subjectId: "mat", totalScore: 80 },
+      // Ama's term-2 mathematics was never recorded.
+      { studentId: "ama", termId: "t3", subjectId: "mat", totalScore: 85 },
+      { studentId: "esi", termId: "t3", subjectId: "eng", totalScore: null },
+    ],
+  });
+  const row = (id: string) => sheet.rows.find((r) => r.pupil.id === id)!;
+  assert("columns follow the curriculum order", sheet.subjects.map((s) => s.id).join(",") === "eng,mat");
+  assert("a subject average is the mean of the terms recorded", row("ama").cells[0].average === 78.3,
+    `${row("ama").cells[0].average}`);
+  assert("and says how many terms it averages", row("ama").cells[0].terms === 3);
+  assert("a term with no mark is left out of the average, and the count shows it",
+    row("ama").cells[1].average === 82.5 && row("ama").cells[1].terms === 2);
+  assert("a null mark is not a zero", row("esi").cells[0].average === null && row("esi").cells[0].terms === 0);
+  assert("overall is all marks over all marks available", row("ama").marks === 480 && row("ama").possible === 600
+    && row("ama").percentage === 80);
+  assert("equal percentages share a position", row("ama").position === 1 && row("kofi").position === 1);
+  assert("and the next position skips", row("esi").position === 3);
+  assert("a pupil with nothing on record has no position and no percentage",
+    row("yaw").position === null && row("yaw").percentage === null);
+  assert("rows run best first, the unrecorded last", sheet.rows[sheet.rows.length - 1].pupil.id === "yaw"
+    && sheet.rows[2].pupil.id === "esi");
+  assert("a pupil with a transcribed term is flagged", row("ama").fromRecords && !row("kofi").fromRecords);
 }
 
 await prisma.$disconnect();

@@ -63,9 +63,14 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
           // Leadership only, like the screens it opens: an IT admin can read
           // this page but would be turned away from the records.
           canAccess(auth.roles, LEADERSHIP) ? (
-            <ButtonLink href="/results/records" variant="secondary">
-              Earlier years
-            </ButtonLink>
+            <div className="flex flex-wrap gap-2">
+              <ButtonLink href="/results/jhs-broadsheet" variant="secondary">
+                JHS 1–3 broadsheet
+              </ButtonLink>
+              <ButtonLink href="/results/records" variant="secondary">
+                Earlier years
+              </ButtonLink>
+            </div>
           ) : null
         }
       />

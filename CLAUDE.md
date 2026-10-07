@@ -751,6 +751,20 @@ from paper records and * when it is not yet approved, because a transcribed mark
 and a computed one look identical once printed. No derived SBA figure yet: that
 waits on the exact GES/WAEC rule.
 
+**The JHS 1–3 broadsheet** (`/results/jhs-broadsheet`, LEADERSHIP, linked from
+`/results`) is the class-wide companion: one of this year's JHS classes, pupils
+down, subjects across, every JHS term on record. `assembleJhsBroadsheet` in
+`src/lib/jhs-broadsheet.ts` is pure and pinned by `verify:results`. Each subject
+cell is the pupil's AVERAGE term mark across the terms recorded, printed with
+HOW MANY terms it averages — a missing term is left out of the average (dividing
+by nine when three were never entered would print the school's paperwork as the
+child's weakness) but the count keeps the hole on the page. The overall figure is
+all marks over all marks available, the promotion rule stretched to three years,
+and positions follow it, ties shared. It says on its face that it is a working
+summary, not the official SBA figure. The loader is a fixed number of bulk
+queries for the whole class — never per pupil — and only terms from years the
+pupil spent in JHS count, so Basic 6 marks never leak in.
+
 ⚠️ The loader scopes its level query to the pupil's school EXPLICITLY. Row
 security does that in production, but a development database holds several
 schools with RLS off, and the first render printed every JHS level twice — once
