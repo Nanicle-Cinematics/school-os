@@ -1311,26 +1311,29 @@ page rather than a stale report card.
 generic mark. `/manifest.webmanifest` above is the anonymous default — logged
 out, or a school with no crest uploaded. Once `(app)/layout.tsx` or
 `(portal)/layout.tsx` resolves a session, their `generateMetadata` points
-`manifest` at `/api/manifest` instead, which reads the SAME static file off
-disk and swaps only its `icons` array — one source of truth for name,
-description, colours; the crest is the only thing allowed to differ per
-school.
+`manifest` at `/api/manifest?school=<id>&v=<crest version>` instead, which
+reads the SAME static file off disk and swaps only its `icons` array — one
+source of truth for name, description, colours; the crest is the only thing
+allowed to differ per school.
 
-`/api/school-icon/[variant]` (`src/lib/school-icon.ts`) composites the raw
-crest — uploaded for print, so no guarantee it is square or padded — onto a
-white square with `sharp`. The maskable and apple-touch variants shrink the
-crest further first, into the W3C safe zone, because a crest has no
+`/api/school-icon/[schoolId]/[variant]` (`src/lib/school-icon.ts`) composites
+the raw crest — uploaded for print, so no guarantee it is square or padded —
+onto a white square with `sharp`. The maskable and apple-touch variants shrink
+the crest further first, into the W3C safe zone, because a crest has no
 hand-drawn `maskable.svg` twin to bleed full-frame the way the generic mark
 does.
 
-⚠️ **`/api/manifest` reads the session cookie, so it is `Cache-Control:
-private, no-store` — never cached by anything shared.** The icon URLs it
-returns are the opposite: versioned with the crest's own `?v=` token
-(`schoolIconUrls` in `src/lib/manifest-data.ts` borrows it rather than minting
-a second one), so those ARE `immutable` and a re-upload changes the url
-instead of the bytes behind it. Getting the two backwards either serves one
-school's crest to the next session that shares a shared cache, or never picks
-up a reprinted crest at all.
+⚠️ **Neither route may read the session cookie, because neither ever gets
+one.** A `<link rel="manifest">` is fetched with credentials mode "omit" unless
+it says `crossorigin="use-credentials"` (Next adds that only on Vercel
+previews), and the OS's icon fetches drop cookies too. The first version of
+`/api/manifest` read the session, saw nobody on every real install, and
+redirected to the generic file — so every school's home screen showed the green
+"S" while the page head named the right crest. Both are keyed by school id in
+the url and public, which is safe: a crest is printed on every bill. Both urls
+carry the crest's own `?v=` token (`schoolIconUrls` in
+`src/lib/manifest-data.ts` borrows it rather than minting a second one), so a
+re-upload changes the url instead of the bytes behind it.
 
 A school with no crest gets a 404 from `/api/school-icon/*` and a redirect
 from `/api/manifest` back to the generic file — decided one layer up, in

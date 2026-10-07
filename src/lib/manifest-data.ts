@@ -9,19 +9,25 @@ import "server-only";
  * crest changes the icon URLs for free, with no second invalidation channel to
  * keep in step with the first.
  *
- * ⚠️ The school id is IN THE URL, not read from the session the way
- * `/api/manifest` is. These urls are handed to the OS, not fetched by the
- * page itself — a browser's manifest-icon harvester and iOS's Add to Home
- * Screen icon fetch are well documented to drop cookies on exactly this kind
- * of sub-resource request, even same-origin. A session-gated icon url simply
- * never resolves in that context: the manifest JSON itself (fetched as a
- * normal `<link rel="manifest">`) carries cookies fine and reports the right
- * crest, but every one of its `icons[].src` entries 404'd silently, and the
- * OS fell back to its own generated mark — which is indistinguishable from
- * this app's generic one at a glance. A crest is not sensitive — it is the
- * same mark printed on every bill — so there is nothing wrong with serving it
- * off an explicit, public, cacheable url instead of one gated on a cookie
- * that may never arrive.
+ * ⚠️ The school id is IN THE URL — the manifest's as well as the icons' —
+ * never read from the session. These urls are handed to the OS, not fetched
+ * by the page itself, and none of those fetches can be relied on to carry a
+ * cookie:
+ *
+ * - a browser's manifest-icon harvester and iOS's Add to Home Screen icon
+ *   fetch drop cookies on exactly this kind of sub-resource request;
+ * - the MANIFEST ITSELF is fetched with credentials mode "omit". The HTML
+ *   spec says so for any `<link rel="manifest">` without
+ *   `crossorigin="use-credentials"`, and Next only adds that attribute on
+ *   Vercel preview deployments. The first per-school manifest read the session
+ *   cookie, so in production it never saw one, redirected every install to the
+ *   generic file, and every school's home screen showed the green "S" — while
+ *   the page head, fetched normally, pointed at the right crest.
+ *
+ * A crest is not sensitive — it is the same mark printed on every bill — so
+ * there is nothing wrong with serving it, and a manifest naming it, off an
+ * explicit, public, cacheable url instead of one gated on a cookie that never
+ * arrives.
  */
 export function schoolIconUrls(schoolId: string, crestUrl: string | null) {
   if (!crestUrl) {
@@ -29,6 +35,7 @@ export function schoolIconUrls(schoolId: string, crestUrl: string | null) {
   }
   const v = new URL(crestUrl, "http://school-os.invalid").searchParams.get("v") ?? "0";
   return {
+    manifest: `/api/manifest?school=${encodeURIComponent(schoolId)}&v=${v}`,
     icon192: `/api/school-icon/${schoolId}/192?v=${v}`,
     icon512: `/api/school-icon/${schoolId}/512?v=${v}`,
     maskable512: `/api/school-icon/${schoolId}/maskable-512?v=${v}`,
