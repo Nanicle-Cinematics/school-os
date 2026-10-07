@@ -739,6 +739,23 @@ A refused sheet hands back what was typed (`RecordsState.values`): React resets
 the form when the action completes, and a refusal over one bad mark must not
 wipe the thirty-nine good ones.
 
+**The JHS cumulative record** (`/results/[studentId]/cumulative`, LEADERSHIP,
+linked as "JHS record" from the pupil's page) prints every subject, every term,
+JHS 1 to JHS 3, on one landscape A4 sheet on the letterhead. The grid is
+`assembleCumulativeRecord` in `src/lib/cumulative.ts` — pure, pinned by
+`verify:results`. A JHS level the pupil sat is shown with all three terms (a term
+with nothing in it prints a dash, never disappears); a level BELOW theirs with no
+enrolment is shown as "not recorded at this school"; a level above theirs is left
+out; a repeated level shows both years. A column is marked R when its term came
+from paper records and * when it is not yet approved, because a transcribed mark
+and a computed one look identical once printed. No derived SBA figure yet: that
+waits on the exact GES/WAEC rule.
+
+⚠️ The loader scopes its level query to the pupil's school EXPLICITLY. Row
+security does that in production, but a development database holds several
+schools with RLS off, and the first render printed every JHS level twice — once
+as the pupil's year and once as "not recorded".
+
 ## Mock exams are not term assessments
 
 The BECE year (the top JHS level — found by stage and order, never by code:
