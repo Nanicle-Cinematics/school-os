@@ -698,6 +698,47 @@ year's saves were silently dropped. Use `rosterWhere` for anything term-scoped.
 `verify:results` builds a 1990 year with one of today's pupils in it and asserts
 the engine computes that child alone — on the old engine it computed all four.
 
+## Earlier years come from the school's paper records
+
+GES expects a JHS 3 candidate's record to run back to JHS 1, and a school that
+adopts School OS in a pupil's final year holds JHS 1 and JHS 2 only on paper.
+`/results/records` (LEADERSHIP) takes them, in two steps:
+
+1. **Earlier classes** (`/results/records/classes`) — for one of today's classes
+   and an earlier year, which class each pupil sat in then. Written as an
+   `Enrollment` for that year (status COMPLETED), so the term's roll is
+   `rosterWhere` like any other. Each row is pre-filled with
+   `proposeEarlierClass`: the level that many rungs down, same stream. It is a
+   guess, labelled as one on every unsaved row; the office corrects repeaters,
+   stream changes and late joiners. A pupil whose earlier year already holds
+   results keeps their placement.
+2. **Results from records** (`/results/records`) — one subject's TERM figures
+   for that class: class score and exam score, or a total out of 100 when that
+   is all the paper holds. Blank is no record, never zero. They go straight into
+   `SubjectResult` with `source: RECORDS`, graded on the school's scale, and
+   `rollUpRecords` derives the `TermResult` (same arithmetic as the engine: out
+   of the level's curriculum, positions shared on ties), also `source: RECORDS`,
+   status APPROVED.
+
+⚠️ **Only a year that ENDED before the current one began takes records**
+(`isEarlierYear`), re-checked in the action. The current year is marked on the
+mark sheet, and two sources claiming one term is the bug this avoids.
+
+⚠️ **Three guards keep RECORDS rows out of the computed path**, each with a test
+in `verify:results` that fails when it is removed:
+
+- `computeClassResults` treats a pupil with a RECORDS term as settled — there are
+  no marks behind it, so a recompute would blank it — and never deletes a
+  RECORDS subject line;
+- `applyYearPromotion` never reads a RECORDS third term — that year's promotions
+  were decided by people, years ago;
+- `setResultsStatus` only ever moves COMPUTED rows, so records are never
+  published, never shown in the portal and never texted to a parent.
+
+A refused sheet hands back what was typed (`RecordsState.values`): React resets
+the form when the action completes, and a refusal over one bad mark must not
+wipe the thirty-nine good ones.
+
 ## Mock exams are not term assessments
 
 The BECE year (the top JHS level — found by stage and order, never by code:

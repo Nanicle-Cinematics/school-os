@@ -99,13 +99,17 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
         ? await tx.termResult.findMany({
             // Never published before: withdrawing and re-publishing a class to
             // fix a typo must not text every parent a second time.
-            where: { termId, classGroupId, status: { not: "PUBLISHED" }, publishedAt: null },
+            where: { termId, classGroupId, source: "COMPUTED", status: { not: "PUBLISHED" }, publishedAt: null },
             select: { studentId: true },
           })
         : [];
 
+    // COMPUTED only. A term transcribed from paper records is the office's own
+    // record of a year before School OS, not a report card: publishing it would
+    // put it in front of parents and text every one of them about a term that
+    // ended years ago.
     const updated = await tx.termResult.updateMany({
-      where: { termId, classGroupId },
+      where: { termId, classGroupId, source: "COMPUTED" },
       data: {
         status: status as "DRAFT",
         // Kept when a class is withdrawn, so "first published" survives a correction.
@@ -113,7 +117,7 @@ export async function setResultsStatus(formData: FormData): Promise<void> {
     });
     if (status === "PUBLISHED") {
       await tx.termResult.updateMany({
-        where: { termId, classGroupId, publishedAt: null },
+        where: { termId, classGroupId, source: "COMPUTED", publishedAt: null },
         data: { publishedAt: new Date() },
       });
     }
