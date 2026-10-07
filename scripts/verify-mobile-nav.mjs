@@ -18,12 +18,13 @@
  *   npm run verify:mobile-nav
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
-const PORT = 9371;
 const WIDTH = 390;
 const HEIGHT = 844;
 
@@ -65,38 +66,112 @@ const session = await prisma.session.create({
 await prisma.$disconnect();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const chrome = spawn(CHROME, [
-  "--headless=new", `--remote-debugging-port=${PORT}`, "--hide-scrollbars", "--disable-gpu",
-  "--no-sandbox", "--no-first-run", `--user-data-dir=/tmp/school-os-mobile-nav-${Date.now()}`, "about:blank",
-], { stdio: ["ignore", "ignore", "pipe"] });
 
-// A silent failure here used to read only "chrome did not start" — eighteen
-// seconds of polling a port that was never going to answer, with no reason
-// why. Capture stderr and the exit itself so the NEXT one says what actually
-// happened (missing shared lib, sandbox refusal, OOM-killed) instead of
-// making someone reproduce it on a runner to find out.
-let stderr = "";
-chrome.stderr.on("data", (chunk) => { stderr += chunk; });
-let exited = null;
-chrome.on("exit", (code, signal) => { exited = { code, signal }; });
-
-let target;
-for (let i = 0; i < 60; i++) {
-  if (exited) break; // no point polling a process that has already died
+/** The login borrowed above, removed on EVERY way out, not just the happy one. */
+async function dropSession() {
+  const cleanup = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL });
   try {
-    const listed = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
-    target = listed.find((t) => t.type === "page");
-    if (target) break;
+    await cleanup.session.deleteMany({ where: { id: session.id } });
+  } finally {
+    await cleanup.$disconnect();
+  }
+}
+
+/**
+ * Start headless Chrome and wait for a page to drive.
+ *
+ * ⚠️ This failed twice on 2026-10-06, on two different branches, as "chrome
+ * never opened the debugging port": the process was alive, had written NOTHING
+ * to stderr, and 18 seconds of polling a fixed port found no listener. Each
+ * time a re-run of the job passed. Three changes, each aimed at a way that
+ * happens:
+ *
+ *  - `--remote-debugging-port=0`, and the port read back from the
+ *    `DevToolsActivePort` file Chrome writes in its profile. A fixed port can be
+ *    held by anything else on a shared runner, and then the failure looks
+ *    exactly like a slow start.
+ *  - A 45-second budget instead of 18. A healthy start takes about a second;
+ *    a cold runner's first launch (font cache, shared memory) can take far
+ *    longer, and running out of patience is not a finding about the menu.
+ *  - ONE retry, with a fresh profile, after killing the whole process GROUP. A
+ *    Chrome wedged before it binds stays wedged; a second launch does not
+ *    inherit its state. This is the browser starting, before any assertion —
+ *    a test that fails is never retried.
+ *
+ * `--disable-dev-shm-usage` because /dev/shm in CI containers is small and
+ * Chrome stalls rather than erroring when it runs out.
+ */
+const START_BUDGET_MS = 45_000;
+
+function devtoolsPort(profile, stderr) {
+  try {
+    const port = Number(readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]);
+    if (port > 0) return port;
   } catch {}
-  await sleep(300);
+  const match = /DevTools listening on ws:\/\/[^:]+:(\d+)\//.exec(stderr);
+  return match ? Number(match[1]) : null;
 }
-if (!target) {
-  chrome.kill();
+
+function stopChrome(child, profile) {
+  // detached: true put Chrome and its helpers in their own process group, so
+  // one signal reaches all of them — killing the parent alone left renderer
+  // and crashpad processes for the runner to reap ("Terminate orphan process").
+  try { process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch {} }
+  try { rmSync(profile, { recursive: true, force: true }); } catch {}
+}
+
+async function launchChrome(attempt) {
+  const profile = mkdtempSync(join(tmpdir(), "school-os-mobile-nav-"));
+  const child = spawn(CHROME, [
+    "--headless=new", "--remote-debugging-port=0", "--hide-scrollbars", "--disable-gpu",
+    "--no-sandbox", "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
+    "--disable-extensions", "--disable-background-networking", "--disable-component-update",
+    `--user-data-dir=${profile}`, "about:blank",
+  ], { stdio: ["ignore", "ignore", "pipe"], detached: true });
+
+  // Capture stderr and the exit itself, so a failure says what happened
+  // (missing shared lib, sandbox refusal, OOM-killed) rather than only that
+  // it did.
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  let exited = null;
+  child.on("exit", (code, signal) => { exited = { code, signal }; });
+
+  const started = Date.now();
+  while (Date.now() - started < START_BUDGET_MS) {
+    if (exited) break; // no point polling a process that has already died
+    const port = devtoolsPort(profile, stderr);
+    if (port) {
+      try {
+        const listed = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+        const target = listed.find((t) => t.type === "page");
+        if (target) {
+          console.log(`chrome ready in ${((Date.now() - started) / 1000).toFixed(1)}s (attempt ${attempt}, port ${port})`);
+          return { child, profile, target };
+        }
+      } catch {}
+    }
+    await sleep(250);
+  }
+
+  stopChrome(child, profile);
   const why = exited
-    ? `chrome exited (code ${exited.code}, signal ${exited.signal})`
-    : "chrome never opened the debugging port";
-  throw new Error(`chrome did not start — ${why}${stderr ? `\n${stderr.trim()}` : ""}`);
+    ? `exited (code ${exited.code}, signal ${exited.signal})`
+    : `no page to drive after ${START_BUDGET_MS / 1000}s${devtoolsPort(profile, stderr) ? "" : ", debugging port never opened"}`;
+  return { error: `attempt ${attempt}: ${why}${stderr.trim() ? `\n${stderr.trim()}` : " (nothing on stderr)"}` };
 }
+
+let launched = await launchChrome(1);
+if (launched.error) {
+  console.log(`chrome did not start — ${launched.error}\nretrying once with a fresh profile`);
+  const first = launched.error;
+  launched = await launchChrome(2);
+  if (launched.error) {
+    await dropSession();
+    throw new Error(`chrome did not start, twice:\n${first}\n${launched.error}`);
+  }
+}
+const { child: chrome, profile: chromeProfile, target } = launched;
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
@@ -138,7 +213,8 @@ const seen = JSON.parse(await ev(
 console.log(`\nPhone menu at ${seen.w}x${seen.h}`);
 if (seen.w >= 1024) {
   console.log(`  FAIL viewport is below the lg breakpoint — got ${seen.w}px, the rail is not collapsed there`);
-  chrome.kill();
+  stopChrome(chrome, chromeProfile);
+  await dropSession();
   process.exit(1);
 }
 
@@ -209,10 +285,8 @@ if (hasButton === "true") {
 }
 
 ws.close();
-chrome.kill();
-const cleanup = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL });
-await cleanup.session.delete({ where: { id: session.id } });
-await cleanup.$disconnect();
+stopChrome(chrome, chromeProfile);
+await dropSession();
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 process.exit(failures.length ? 1 : 0);
