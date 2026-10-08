@@ -262,6 +262,100 @@ async function main() {
       }
     }
 
+    /**
+     * Conduct and remarks for EVERY class, by the same rule (MARK_ANY_CLASS).
+     *
+     * Again a refusal on purpose: every row's days present is forged to
+     * "abc", so saveClassRemarks gets past its class check and stops at
+     * validation, and nothing is written. A class with a pupil whose card is
+     * not yet published is needed for that — a published card is skipped
+     * before validation, as an approved component is on the mark sheet.
+     */
+    console.log("\nIt writes conduct and remarks for every class");
+    if (!currentTerm) {
+      check("the seed has a current term to test remarks against", false);
+    } else {
+      const remarksPage = await get(`/results/remarks?term=${currentTerm.id}`, token);
+      const remarksPicker = remarksPage.html.match(/<select name="class"[\s\S]*?<\/select>/)?.[0] ?? "";
+      const remarksListed = classIds.filter((id) => remarksPicker.includes(`value="${id}"`)).length;
+      check(
+        "the remarks class picker lists every class",
+        remarksListed === classIds.length,
+        `${remarksListed} of ${classIds.length}`,
+      );
+
+      const published = new Set(
+        (
+          await withBypass(() =>
+            prisma.termResult.findMany({
+              where: { schoolId: school.id, termId: currentTerm.id, status: "PUBLISHED" },
+              select: { studentId: true },
+            }),
+          )
+        ).map((r) => r.studentId),
+      );
+      const year = await withBypass(() =>
+        prisma.term.findUniqueOrThrow({ where: { id: currentTerm.id }, select: { academicYearId: true } }),
+      );
+      const enrolments = await withBypass(() =>
+        prisma.enrollment.findMany({
+          where: { schoolId: school.id, academicYearId: year.academicYearId, status: { not: "WITHDRAWN" } },
+          select: { classGroupId: true, studentId: true },
+        }),
+      );
+      const target = enrolments.find((e) => !published.has(e.studentId))?.classGroupId;
+      if (!target) {
+        check("the seed has a class with an unpublished card to test against", false);
+      } else {
+        const url = `/results/remarks?term=${currentTerm.id}&class=${target}`;
+        const page = await get(url, token);
+        check("the class opens with no refusal", !/You do not teach in that class/.test(page.html));
+        const form = [...page.html.matchAll(/<form\b[^>]*>([\s\S]*?)<\/form>/g)]
+          .map((match) => match[1])
+          .find((inner) => inner.includes('name="conduct:'));
+        check("the remarks form posts without JavaScript", Boolean(form));
+        if (form) {
+          const unescape = (value: string) =>
+            value
+              .replace(/&quot;/g, '"')
+              .replace(/&#x27;/g, "'")
+              .replace(/&lt;/g, "<")
+              .replace(/&gt;/g, ">")
+              .replace(/&amp;/g, "&");
+          const body = new FormData();
+          for (const tag of form.match(/<(?:input|select|textarea)\b[^>]*>/g) ?? []) {
+            const name = tag.match(/name="([^"]*)"/)?.[1];
+            if (!name) continue;
+            const value = name.startsWith("daysPresent:") ? "abc" : unescape(tag.match(/value="([^"]*)"/)?.[1] ?? "");
+            body.append(unescape(name), value);
+          }
+          // A pupil whose register is derived renders no days boxes, so make
+          // sure every row carries the forged field.
+          for (const row of form.match(/name="row:([^"]+)"/g) ?? []) {
+            const id = row.slice('name="row:'.length, -1);
+            if (!body.has(`daysPresent:${id}`)) body.append(`daysPresent:${id}`, "abc");
+          }
+          const posted = await fetch(BASE + url, {
+            method: "POST",
+            headers: { Cookie: `${COOKIE}=${token}` },
+            body,
+            redirect: "manual",
+          });
+          const reply = await posted.text();
+          check(
+            "saveClassRemarks lets it past the class check",
+            posted.status < 400 && !/You do not teach in that class|not linked to a staff record/.test(reply),
+            `HTTP ${posted.status}`,
+          );
+          check(
+            "and stops at the forged days instead, writing nothing",
+            /Days present must be a whole number/.test(reply),
+            "the validation message is in the reply",
+          );
+        }
+      }
+    }
+
     console.log("\nBut not the money");
     for (const path of FORBIDDEN) {
       const res = await get(path, token);

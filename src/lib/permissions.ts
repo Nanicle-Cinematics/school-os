@@ -69,14 +69,14 @@ export const ACCOUNT_CREATOR: Role[] = [...ROLE_ADMIN, "IT_ADMIN"];
 export const MARKING: Role[] = [...LEADERSHIP, "TEACHER", "IT_ADMIN"];
 
 /**
- * Who may enter marks for ANY class and subject on the mark sheet, rather than
- * only the pairs a teaching assignment names.
+ * Who may enter marks, conduct and remarks for ANY class, rather than only the
+ * classes a teaching assignment names.
  *
  * IT_ADMIN is here on the school's request (2026-10-08): the IT admin keys in
- * marks for every class when the teachers hand them in on paper. It covers
- * entering marks only. Changing a component's total marks stays LEADERSHIP
- * (`mayChangeTotals` in sheet-actions.ts), because that rescales every mark
- * already entered against it.
+ * marks, and the conduct and remarks, for every class when the teachers hand
+ * them in on paper. It covers entering them only. Changing a component's total
+ * marks stays LEADERSHIP (`mayChangeTotals` in sheet-actions.ts), because that
+ * rescales every mark already entered against it.
  */
 export const MARK_ANY_CLASS: Role[] = [...LEADERSHIP, "IT_ADMIN"];
 

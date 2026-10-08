@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { buttonClass } from "../../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { getClassRemarks, getSheetOptions } from "@/lib/sheet-data";
 import { prisma } from "@/lib/prisma";
 import { PageHeader, Card, Alert, inputClass } from "../../ui";
@@ -34,11 +34,11 @@ function teachingDays(start: Date, end: Date) {
 export default async function ClassRemarksPage({ searchParams }: PageProps<"/results/remarks">) {
   const auth = await requireRole(MARKING);
   const query = await searchParams;
-  const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  const anyClass = canAccess(auth.roles, MARK_ANY_CLASS);
 
   const { terms, classGroups, pairs } = await getSheetOptions({
     staffId: auth.staffId,
-    anyClass: isLeadership,
+    anyClass,
   });
 
   const termId =
@@ -84,10 +84,10 @@ export default async function ClassRemarksPage({ searchParams }: PageProps<"/res
         }
         action={
           <Link
-            href={isLeadership ? "/results" : "/assessments/sheet"}
+            href={anyClass ? "/results" : "/assessments/sheet"}
             className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            {isLeadership ? "Results" : "Mark sheet"}
+            {anyClass ? "Results" : "Mark sheet"}
           </Link>
         }
       />
