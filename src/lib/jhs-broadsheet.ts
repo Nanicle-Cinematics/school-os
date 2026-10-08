@@ -1,4 +1,5 @@
 import { rank } from "@/lib/results-engine";
+import { sbaFigure } from "@/lib/sba";
 
 /**
  * A JHS class's results across JHS 1 to JHS 3, one row per pupil.
@@ -28,12 +29,23 @@ export type BroadsheetInput = {
   subjects: { id: string; name: string; order: number }[];
   /** JHS terms only — the loader decides which years count. */
   termResults: { studentId: string; termId: string; totalMarks: number | null; possibleMarks: number | null; source: string }[];
-  subjectResults: { studentId: string; termId: string; subjectId: string; totalScore: number | null }[];
+  subjectResults: {
+    studentId: string;
+    termId: string;
+    subjectId: string;
+    totalScore: number | null;
+    /** Scaled to `classWeight`; null for a term entered as a total only. */
+    classScore?: number | null;
+  }[];
+  /** termId → academicYearId, so the SBA figure can weight each JHS year equally. */
+  yearOfTerm?: Record<string, string>;
+  /** What a class score is out of (SchoolSettings.classScoreWeight). */
+  classWeight?: number;
 };
 
 export type BroadsheetRow = {
   pupil: BroadsheetInput["pupils"][number];
-  cells: { average: number | null; terms: number }[];
+  cells: { average: number | null; terms: number; sba: number | null; sbaYears: number }[];
   termsOnRecord: number;
   fromRecords: boolean;
   marks: number | null;
@@ -51,12 +63,21 @@ export function assembleJhsBroadsheet(input: BroadsheetInput): {
   const subjects = [...input.subjects].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 
   const rows: BroadsheetRow[] = input.pupils.map((pupil) => {
-    const lines = input.subjectResults.filter((r) => r.studentId === pupil.id && r.totalScore !== null);
+    const own = input.subjectResults.filter((r) => r.studentId === pupil.id);
+    const lines = own.filter((r) => r.totalScore !== null);
     const cells = subjects.map((subject) => {
       const marks = lines.filter((r) => r.subjectId === subject.id).map((r) => r.totalScore as number);
+      const sba = sbaFigure(
+        own
+          .filter((r) => r.subjectId === subject.id)
+          .map((r) => ({ yearId: input.yearOfTerm?.[r.termId] ?? r.termId, classScore: r.classScore ?? null })),
+        input.classWeight ?? 30,
+      );
       return {
         average: marks.length ? round1(marks.reduce((a, b) => a + b, 0) / marks.length) : null,
         terms: marks.length,
+        sba: sba.sba,
+        sbaYears: sba.years,
       };
     });
 

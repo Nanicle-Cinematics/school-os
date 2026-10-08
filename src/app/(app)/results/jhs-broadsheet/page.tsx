@@ -22,6 +22,9 @@ export default async function JhsBroadsheetPage({ searchParams }: PageProps<"/re
   const auth = await requireRole(LEADERSHIP);
   const query = await searchParams;
   const classGroupId = typeof query.class === "string" ? query.class : "";
+  // Twelve more columns do not fit a landscape sheet, so the SBA is a second
+  // VIEW of the same cells rather than a second set of them.
+  const view = query.view === "sba" ? "sba" : "averages";
 
   const { current, classes, classGroup, sheet } = await getJhsBroadsheet(auth.schoolId, classGroupId);
   const school = sheet ? await getBillSchool(auth.schoolId) : null;
@@ -60,6 +63,13 @@ export default async function JhsBroadsheetPage({ searchParams }: PageProps<"/re
               ))}
             </select>
           </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Show</span>
+            <select name="view" defaultValue={view} className={filterClass}>
+              <option value="averages">Term averages</option>
+              <option value="sba">SBA (out of 30)</option>
+            </select>
+          </label>
           <button type="submit" className={buttonClass("primary")}>
             Show broadsheet
           </button>
@@ -86,6 +96,7 @@ export default async function JhsBroadsheetPage({ searchParams }: PageProps<"/re
           subjects={sheet.subjects}
           rows={sheet.rows}
           showClassPosition={settings?.showClassPosition ?? true}
+          view={view}
           printedOn={new Date()}
         />
       ) : null}

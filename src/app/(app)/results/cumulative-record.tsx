@@ -105,6 +105,10 @@ export function CumulativeRecordSheet({
                   )}
                 </th>
               ))}
+              <th rowSpan={2} className="border border-slate-300 px-2 py-1.5 text-center font-semibold">
+                SBA
+                <span className="block text-[10px] font-normal opacity-80">out of 30</span>
+              </th>
             </tr>
             <tr className="bg-slate-100 text-slate-700">
               {termCells.map((term, i) => (
@@ -132,6 +136,18 @@ export function CumulativeRecordSheet({
                     ) : null}
                   </td>
                 ))}
+                <td className="border border-slate-300 px-1 py-1 text-center tabular-nums font-semibold text-slate-900">
+                  {row.sba.sba !== null ? (
+                    <>
+                      {row.sba.sba.toFixed(1)}
+                      <span className="ml-1 text-[9.5px] font-normal text-slate-500">
+                        {row.sba.years} {row.sba.years === 1 ? "yr" : "yrs"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-normal text-slate-400">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -145,6 +161,7 @@ export function CumulativeRecordSheet({
                     : ""}
                 </td>
               ))}
+              <td className="border border-slate-300" />
             </tr>
             <tr className="bg-slate-50">
               <td className="border border-slate-300 px-2 py-1 text-slate-900">Percentage</td>
@@ -153,6 +170,7 @@ export function CumulativeRecordSheet({
                   {term?.percentage !== null && term?.percentage !== undefined ? `${term.percentage.toFixed(1)}%` : ""}
                 </td>
               ))}
+              <td className="border border-slate-300" />
             </tr>
             {showClassPosition ? (
               <tr className="bg-slate-50">
@@ -162,12 +180,19 @@ export function CumulativeRecordSheet({
                     {term?.classPosition ? `${ordinal(term.classPosition)} of ${term.classSize ?? "—"}` : ""}
                   </td>
                 ))}
+                <td className="border border-slate-300" />
               </tr>
             ) : null}
           </tfoot>
         </table>
       </div>
 
+      <p className="text-[11px] text-slate-600">
+        SBA (out of 30): each term&rsquo;s class score as a percentage of what it is marked out of,
+        averaged within each JHS year, the years averaged equally, then scaled to 30. Terms with no
+        class score (paper records entered as a total only) are left out; &ldquo;yrs&rdquo; is how many
+        years the figure rests on. The exam score is not part of it.
+      </p>
       {fromRecords || provisional ? (
         <p className="text-[11px] text-slate-600">
           {fromRecords ? (
@@ -184,7 +209,7 @@ export function CumulativeRecordSheet({
         </p>
       ) : null}
 
-      <footer className="mt-6 flex items-end justify-between gap-6 text-xs text-slate-600">
+      <footer className="mt-6 flex items-end justify-between gap-6 text-xs text-slate-600 print:mt-3">
         <p>Printed {dateFmt.format(printedOn)}</p>
         <div className="text-center">
           {headSignatureUrl ? (
