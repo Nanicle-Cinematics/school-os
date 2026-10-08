@@ -166,6 +166,102 @@ async function main() {
       `HTTP ${broadsheet.status}`,
     );
 
+    /**
+     * The mark sheet for EVERY class (MARK_ANY_CLASS in permissions.ts).
+     *
+     * This probe holds no staff record and no teaching assignment, so before
+     * the change it was a teacher with nothing assigned: an empty class picker,
+     * and "not assigned" from both the page and saveSheet. The save is a
+     * REFUSAL on purpose: the form is posted with its subject swapped for one
+     * this class has no sheet for this term, so the action gets past `mayTeach`
+     * and stops at "not open yet", and nothing is written. (A forged score
+     * would not do: the seed approves every component, and saveSheet skips an
+     * approved component's scores before it validates them.)
+     */
+    console.log("\nIt enters marks for every class");
+    const classIds = (
+      await withBypass(() => prisma.classGroup.findMany({ where: { schoolId: school.id }, select: { id: true } }))
+    ).map((c) => c.id);
+    const currentTerm = await withBypass(() =>
+      prisma.term.findFirst({ where: { schoolId: school.id, isCurrent: true }, select: { id: true } }),
+    );
+    const opened = currentTerm
+      ? await withBypass(() =>
+          prisma.assessment.findFirst({
+            where: { schoolId: school.id, termId: currentTerm.id },
+            select: { classGroupId: true, subjectId: true },
+            orderBy: { createdAt: "asc" },
+          }),
+        )
+      : null;
+    if (!currentTerm || !opened) {
+      check("the seed has an open mark sheet to test against", false, "no assessment in the current term");
+    } else {
+      const sheetUrl = `/assessments/sheet?term=${currentTerm.id}&class=${opened.classGroupId}&subject=${opened.subjectId}`;
+      const sheet = await get(sheetUrl, token);
+      const picker = sheet.html.match(/<select name="class"[\s\S]*?<\/select>/)?.[0] ?? "";
+      const listed = classIds.filter((id) => picker.includes(`value="${id}"`)).length;
+      check("the class picker lists every class", listed === classIds.length, `${listed} of ${classIds.length}`);
+      check("the sheet opens with no assignment", !/not assigned to teach/i.test(sheet.html));
+      const scoreInputs = (sheet.html.match(/name="score:/g) ?? []).length;
+      check("with score boxes to fill in", scoreInputs > 0, `${scoreInputs} score inputs`);
+      check(
+        "but a component's total marks stay with leadership",
+        !/name="max:/.test(sheet.html),
+        "no max: field rendered",
+      );
+
+      const unescape = (value: string) =>
+        value
+          .replace(/&quot;/g, '"')
+          .replace(/&#x27;/g, "'")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&");
+      const sheetForm = [...sheet.html.matchAll(/<form\b[^>]*>([\s\S]*?)<\/form>/g)]
+        .map((match) => match[1])
+        .find((inner) => inner.includes('name="score:'));
+      check("the sheet form posts without JavaScript", Boolean(sheetForm));
+      if (sheetForm) {
+        const withSheet = await withBypass(() =>
+          prisma.assessment.findMany({
+            where: { schoolId: school.id, termId: currentTerm.id, classGroupId: opened.classGroupId },
+            select: { subjectId: true },
+          }),
+        );
+        const unopened = await withBypass(() =>
+          prisma.subject.findFirst({
+            where: { schoolId: school.id, id: { notIn: withSheet.map((a) => a.subjectId) } },
+            select: { id: true },
+          }),
+        );
+        const body = new FormData();
+        for (const tag of sheetForm.match(/<input\b[^>]*>/g) ?? []) {
+          const name = tag.match(/name="([^"]*)"/)?.[1];
+          if (!name) continue;
+          const value = unescape(tag.match(/value="([^"]*)"/)?.[1] ?? "");
+          body.append(unescape(name), name === "subjectId" && unopened ? unopened.id : value);
+        }
+        const posted = await fetch(BASE + sheetUrl, {
+          method: "POST",
+          headers: { Cookie: `${COOKIE}=${token}` },
+          body,
+          redirect: "manual",
+        });
+        const reply = await posted.text();
+        check(
+          "saveSheet lets it past the assignment check",
+          posted.status < 400 && !/not assigned to teach/i.test(reply),
+          `HTTP ${posted.status}`,
+        );
+        check(
+          "and stops at the unopened sheet instead, writing nothing",
+          Boolean(unopened) && /not open yet/i.test(reply),
+          unopened ? "the next refusal is in the reply" : "every subject has a sheet in this class",
+        );
+      }
+    }
+
     console.log("\nBut not the money");
     for (const path of FORBIDDEN) {
       const res = await get(path, token);

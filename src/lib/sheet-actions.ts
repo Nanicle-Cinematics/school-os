@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, LEADERSHIP, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { materialiseComponents } from "@/lib/assessment-templates";
 import { computeClassResults } from "@/lib/results-engine";
@@ -15,8 +15,9 @@ export type SheetState = { error?: string; ok?: string; savedAt?: string };
 
 /**
  * A teacher may only touch a class and subject they are actually assigned.
- * Leadership is exempt — a head covering an absent teacher must not be locked
- * out of their own school's marks.
+ * MARK_ANY_CLASS is exempt — a head covering an absent teacher must not be
+ * locked out of their own school's marks, and the IT admin keys in the marks
+ * teachers hand in on paper.
  */
 async function mayTeach(
   auth: { roles: Parameters<typeof canAccess>[0]; staffId: string | null },
@@ -24,7 +25,7 @@ async function mayTeach(
   classGroupId: string,
   subjectId: string,
 ) {
-  if (canAccess(auth.roles, LEADERSHIP)) {
+  if (canAccess(auth.roles, MARK_ANY_CLASS)) {
     return true;
   }
   if (!auth.staffId) {

@@ -112,7 +112,8 @@ export async function getClassRemarks(termId: string, classGroupId: string) {
 /** Terms, and the class/subject pairs this person is allowed to mark. */
 export async function getSheetOptions(auth: {
   staffId: string | null;
-  isLeadership: boolean;
+  /** MARK_ANY_CLASS: every class and subject, not only assigned pairs. */
+  anyClass: boolean;
 }) {
   const terms = await prisma.term.findMany({
     orderBy: [{ academicYear: { name: "desc" } }, { sequence: "asc" }],
@@ -120,7 +121,7 @@ export async function getSheetOptions(auth: {
     take: 12,
   });
 
-  if (auth.isLeadership) {
+  if (auth.anyClass) {
     const classGroups = await prisma.classGroup.findMany({
       orderBy: [{ level: { order: "asc" } }, { name: "asc" }],
       include: { level: { select: { name: true } } },
