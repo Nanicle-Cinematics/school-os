@@ -38,7 +38,7 @@ export default async function ClassRemarksPage({ searchParams }: PageProps<"/res
 
   const { terms, classGroups, pairs } = await getSheetOptions({
     staffId: auth.staffId,
-    isLeadership,
+    anyClass: isLeadership,
   });
 
   const termId =

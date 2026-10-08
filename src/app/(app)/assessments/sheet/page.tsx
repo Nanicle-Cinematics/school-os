@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { buttonClass } from "../../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, LEADERSHIP, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { getSheet, getSheetOptions } from "@/lib/sheet-data";
 import { PageHeader, Card, Alert, inputClass } from "../../ui";
 import { SheetForm } from "./sheet-form";
@@ -15,11 +15,14 @@ const TERM_NAME: Record<string, string> = { FIRST: "First", SECOND: "Second", TH
 export default async function SheetPage({ searchParams }: PageProps<"/assessments/sheet">) {
   const auth = await requireRole(MARKING);
   const query = await searchParams;
+  // Leadership alone may change a component's total marks; MARK_ANY_CLASS
+  // (leadership and the IT admin) may enter marks for every class.
   const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  const anyClass = canAccess(auth.roles, MARK_ANY_CLASS);
 
   const { terms, classGroups, subjects, pairs } = await getSheetOptions({
     staffId: auth.staffId,
-    isLeadership,
+    anyClass,
   });
 
   const termId =
@@ -53,10 +56,10 @@ export default async function SheetPage({ searchParams }: PageProps<"/assessment
         }
         action={
           <Link
-            href={isLeadership ? "/assessments" : "/results/remarks"}
+            href={anyClass ? "/assessments" : "/results/remarks"}
             className="rounded-full border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-card transition hover:bg-slate-50"
           >
-            {isLeadership ? "Single assessments" : "Conduct & remarks"}
+            {anyClass ? "Single assessments" : "Conduct & remarks"}
           </Link>
         }
       />
