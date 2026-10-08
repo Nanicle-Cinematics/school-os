@@ -878,11 +878,12 @@ current-year assignment in.
   `ACADEMIC` is now `LEADERSHIP`; the `ACADEMIC` constant is gone, because a
   role list that no longer matches any screen is how the wrong page gets opened.
 - **`MARK_ANY_CLASS`** (leadership + `IT_ADMIN`, added 2026-10-08 on the
-  school's request) may enter marks for every class and subject on the mark
-  sheet without a teaching assignment — the IT admin keys in marks teachers hand
-  in on paper. It is checked in `mayTeach` and in the sheet's pickers; changing a
-  component's total marks stays `LEADERSHIP`. `verify:it-admin` proves both the
-  page and `saveSheet` with a probe that holds no staff record.
+  school's request) may enter marks, conduct and remarks for every class without
+  a teaching assignment — the IT admin keys in what teachers hand in on paper.
+  It is checked in `mayTeach`, in `saveClassRemarks` and in both screens'
+  pickers; changing a component's total marks stays `LEADERSHIP`.
+  `verify:it-admin` proves both pages and both actions with a probe that holds
+  no staff record.
 - **`isTeacherOnly`** distinguishes a teacher from a head who also teaches. A
   head keeps the whole app; only a login whose every role is `TEACHER` is
   narrowed.

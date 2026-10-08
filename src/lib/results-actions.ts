@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { MARKING, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { MARKING, LEADERSHIP, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
@@ -247,10 +247,11 @@ export async function saveClassRemarks(
     return { error: "That term does not exist." };
   }
 
-  // A teacher may write remarks for a class they teach anything in; leadership
-  // for any class. Subject-level assignment is too narrow here — the form
-  // teacher writes the remark, and they may not teach every subject.
-  if (!canAccess(auth.roles, LEADERSHIP)) {
+  // A teacher may write remarks for a class they teach anything in;
+  // MARK_ANY_CLASS (leadership and the IT admin) for any class. Subject-level
+  // assignment is too narrow here — the form teacher writes the remark, and
+  // they may not teach every subject.
+  if (!canAccess(auth.roles, MARK_ANY_CLASS)) {
     if (!auth.staffId) {
       return { error: "Your account is not linked to a staff record." };
     }
