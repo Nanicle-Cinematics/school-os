@@ -56,6 +56,9 @@ const DOCUMENTS = [
   // the letterhead, signed by the head and filed. "CUMULATIVE RECORD" heads it
   // for the same reason "TERMINAL REPORT" heads the card.
   "results/cumulative-record.tsx",
+  // Its class-wide companion: the JHS 1–3 broadsheet, printed on the letterhead
+  // and filed with the BECE papers. Same heading convention.
+  "results/jhs-broadsheet/broadsheet-sheet.tsx",
 ];
 
 console.log("Colour says one thing at a time");
@@ -130,6 +133,8 @@ const NOT_LISTS = [
   "assessments/sheet/sheet-form.tsx",
   "assessments/[id]/score-grid.tsx",
   "results/broadsheet/page.tsx",
+  // The same MATRIX across three years: pupils down, subjects across.
+  "results/jhs-broadsheet/broadsheet-sheet.tsx",
   // The mock broadsheet is the term broadsheet's twin — a wide grid of
   // candidates by subject — and the mock sheet is the mark sheet's. The slip is
   // a printed document a parent keeps, like the report card.
