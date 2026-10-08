@@ -80,7 +80,7 @@ export async function getCumulativeRecord(studentId: string) {
   });
   const subjectResults = await prisma.subjectResult.findMany({
     where: { studentId, termId: { in: termIds } },
-    select: { termId: true, subjectId: true, totalScore: true, grade: true },
+    select: { termId: true, subjectId: true, totalScore: true, grade: true, classScore: true },
   });
 
   // The rows: what the JHS curriculum offers, plus anything that carries a
@@ -98,7 +98,7 @@ export async function getCumulativeRecord(studentId: string) {
 
   const settings = await prisma.schoolSettings.findFirst({
     where: { schoolId: student.schoolId },
-    select: { showClassPosition: true },
+    select: { showClassPosition: true, classScoreWeight: true },
   });
 
   const record = assembleCumulativeRecord({
@@ -111,8 +111,13 @@ export async function getCumulativeRecord(studentId: string) {
       totalMarks: num(r.totalMarks),
       percentage: num(r.percentage),
     })),
-    subjectResults: subjectResults.map((r) => ({ ...r, totalScore: num(r.totalScore) })),
+    subjectResults: subjectResults.map((r) => ({
+      ...r,
+      totalScore: num(r.totalScore),
+      classScore: num(r.classScore),
+    })),
     subjects,
+    classWeight: settings?.classScoreWeight ?? 30,
   });
 
   return {

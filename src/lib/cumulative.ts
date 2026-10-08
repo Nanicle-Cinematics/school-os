@@ -1,3 +1,5 @@
+import { sbaFigure } from "@/lib/sba";
+
 /**
  * A JHS pupil's results across the three JHS years, as one grid.
  *
@@ -42,9 +44,18 @@ export type CumulativeInput = {
     status: string;
     source: string;
   }[];
-  subjectResults: { termId: string; subjectId: string; totalScore: number | null; grade: string | null }[];
+  subjectResults: {
+    termId: string;
+    subjectId: string;
+    totalScore: number | null;
+    grade: string | null;
+    /** Scaled to `classWeight`; null for a term entered as a total only. */
+    classScore?: number | null;
+  }[];
   /** The curriculum of the levels shown, plus anything with a result. */
   subjects: { id: string; name: string; order: number }[];
+  /** What a class score is out of (SchoolSettings.classScoreWeight), for the SBA figure. */
+  classWeight?: number;
 };
 
 export type CumulativeTerm = {
@@ -67,7 +78,13 @@ export type CumulativeYear =
 
 export type CumulativeRecord = {
   years: CumulativeYear[];
-  rows: { subjectId: string; name: string; cells: ({ total: number | null; grade: string | null } | null)[] }[];
+  rows: {
+    subjectId: string;
+    name: string;
+    cells: ({ total: number | null; grade: string | null } | null)[];
+    /** Out of 30 — see sbaFigure for the rule. */
+    sba: { sba: number | null; years: number };
+  }[];
 };
 
 const SETTLED = new Set(["PUBLISHED", "APPROVED"]);
@@ -129,6 +146,7 @@ export function assembleCumulativeRecord(input: CumulativeInput): CumulativeReco
   );
 
   const byKey = new Map(input.subjectResults.map((r) => [`${r.termId}:${r.subjectId}`, r]));
+  const yearOfTerm = new Map(input.terms.map((t) => [t.id, t.academicYearId]));
   const rows = [...input.subjects]
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
     .map((subject) => ({
@@ -139,6 +157,12 @@ export function assembleCumulativeRecord(input: CumulativeInput): CumulativeReco
         const hit = byKey.get(`${termId}:${subject.id}`);
         return hit ? { total: hit.totalScore, grade: hit.grade } : null;
       }),
+      sba: sbaFigure(
+        input.subjectResults
+          .filter((r) => r.subjectId === subject.id && columns.includes(r.termId))
+          .map((r) => ({ yearId: yearOfTerm.get(r.termId) ?? "", classScore: r.classScore ?? null })),
+        input.classWeight ?? 30,
+      ),
     }));
 
   return { years, rows };

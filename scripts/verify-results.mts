@@ -12,6 +12,7 @@ import { applyYearPromotion, computeClassResults, computeSubjectScore, gradeFor,
 import { rosterWhere } from "@/lib/class-roster";
 import { assembleCumulativeRecord, type CumulativeInput } from "@/lib/cumulative";
 import { assembleJhsBroadsheet } from "@/lib/jhs-broadsheet";
+import { sbaFigure } from "@/lib/sba";
 import {
   isEarlierYear,
   parseRecordedMark,
@@ -808,6 +809,92 @@ console.log("\nThe JHS 1–3 broadsheet");
   assert("rows run best first, the unrecorded last", sheet.rows[sheet.rows.length - 1].pupil.id === "yaw"
     && sheet.rows[2].pupil.id === "esi");
   assert("a pupil with a transcribed term is flagged", row("ama").fromRecords && !row("kofi").fromRecords);
+}
+
+// ── The SBA figure: class scores, each JHS year equal, out of 30 ────────────
+console.log("\nThe SBA figure");
+{
+  // 30/70 school: year A class scores 24 and 21 of 30 (80%, 70%), year B 27 (90%).
+  const twoYears = sbaFigure(
+    [
+      { yearId: "A", classScore: 24 },
+      { yearId: "A", classScore: 21 },
+      { yearId: "B", classScore: 27 },
+    ],
+    30,
+  );
+  assert("each year counts equally: (75 + 90) / 2 = 82.5%, scaled to 30 = 24.8",
+    twoYears.sba === 24.8 && twoYears.years === 2, `${twoYears.sba} over ${twoYears.years}`);
+  assert("which is not the plain term average (80% = 24.0) — the year with one term still counts a half",
+    twoYears.sba !== 24);
+  const fifty = sbaFigure([{ yearId: "A", classScore: 40 }], 50);
+  assert("a 50/50 school's class score is read out of 50: 40 / 50 = 80% = 24.0 / 30", fifty.sba === 24);
+  const holes = sbaFigure(
+    [
+      { yearId: "A", classScore: null },
+      { yearId: "B", classScore: 15 },
+    ],
+    30,
+  );
+  assert("a term with no class score (a total-only record) is left out, not counted as zero",
+    holes.sba === 15 && holes.years === 1, `${holes.sba} over ${holes.years}`);
+  // Out of 50: year A 68%, 50%, 64% (mean 60.67), year B 66%, 84% (mean 75):
+  // (60.67 + 75) / 2 = 67.83%, scaled to 30 is exactly 20.35, which floating
+  // point stores as 20.3499… and plain rounding prints as 20.3.
+  const half = sbaFigure(
+    [
+      { yearId: "A", classScore: 34 },
+      { yearId: "A", classScore: 25 },
+      { yearId: "A", classScore: 32 },
+      { yearId: "B", classScore: 33 },
+      { yearId: "B", classScore: 42 },
+    ],
+    50,
+  );
+  assert("an exact .x5 rounds up, as it does on paper: 20.35 prints 20.4", half.sba === 20.4, `${half.sba}`);
+  const none = sbaFigure([{ yearId: "A", classScore: null }], 30);
+  assert("no class scores at all gives no SBA, not a zero", none.sba === null && none.years === 0);
+  assert("a nonsense class weight gives no SBA rather than a division by zero",
+    sbaFigure([{ yearId: "A", classScore: 20 }], 0).sba === null);
+
+  // The two sheets read the same rule.
+  const cum = assembleCumulativeRecord({
+    levels: [{ id: "j1", name: "JHS 1", order: 9 }, { id: "j2", name: "JHS 2", order: 10 }],
+    currentLevelOrder: 10,
+    enrolments: [
+      { academicYear: { id: "A", name: "A", startDate: new Date("2024-09-01") }, classGroup: { name: "Gold", level: { id: "j1", name: "JHS 1", order: 9 } } },
+      { academicYear: { id: "B", name: "B", startDate: new Date("2025-09-01") }, classGroup: { name: "Gold", level: { id: "j2", name: "JHS 2", order: 10 } } },
+    ],
+    terms: [
+      { id: "A1", academicYearId: "A", sequence: 1 },
+      { id: "A2", academicYearId: "A", sequence: 2 },
+      { id: "B1", academicYearId: "B", sequence: 1 },
+    ],
+    termResults: [],
+    subjectResults: [
+      { termId: "A1", subjectId: "eng", totalScore: 70, grade: null, classScore: 24 },
+      { termId: "A2", subjectId: "eng", totalScore: 65, grade: null, classScore: 21 },
+      { termId: "B1", subjectId: "eng", totalScore: 80, grade: null, classScore: 27 },
+    ],
+    subjects: [{ id: "eng", name: "English Language", order: 1 }],
+    classWeight: 30,
+  });
+  assert("the cumulative record's SBA column applies the same rule", cum.rows[0].sba.sba === 24.8,
+    `${cum.rows[0].sba.sba}`);
+  const board = assembleJhsBroadsheet({
+    pupils: [{ id: "p", firstName: "P", lastName: "Q", admissionNo: "1" }],
+    subjects: [{ id: "eng", name: "English Language", order: 1 }],
+    termResults: [],
+    subjectResults: [
+      { studentId: "p", termId: "A1", subjectId: "eng", totalScore: 70, classScore: 24 },
+      { studentId: "p", termId: "A2", subjectId: "eng", totalScore: 65, classScore: 21 },
+      { studentId: "p", termId: "B1", subjectId: "eng", totalScore: 80, classScore: 27 },
+    ],
+    yearOfTerm: { A1: "A", A2: "A", B1: "B" },
+    classWeight: 30,
+  });
+  assert("and so does the broadsheet's SBA view", board.rows[0].cells[0].sba === 24.8
+    && board.rows[0].cells[0].sbaYears === 2, `${board.rows[0].cells[0].sba}`);
 }
 
 await prisma.$disconnect();

@@ -23,6 +23,7 @@ export function JhsBroadsheetSheet({
   subjects,
   rows,
   showClassPosition,
+  view,
   printedOn,
 }: {
   school: BillSchool;
@@ -31,6 +32,7 @@ export function JhsBroadsheetSheet({
   subjects: { id: string; name: string }[];
   rows: BroadsheetRow[];
   showClassPosition: boolean;
+  view: "averages" | "sba";
   printedOn: Date;
 }) {
   const anyRecords = rows.some((r) => r.fromRecords);
@@ -43,7 +45,7 @@ export function JhsBroadsheetSheet({
 
       <BillLetterhead school={school}>
         <p className="mt-2 text-sm font-semibold uppercase tracking-[0.14em] text-brand-800">
-          JHS 1–3 Broadsheet · {className}
+          JHS 1–3 {view === "sba" ? "SBA" : "Broadsheet"} · {className}
         </p>
         <p className="text-xs text-slate-500">Academic year {yearName}</p>
       </BillLetterhead>
@@ -83,7 +85,18 @@ export function JhsBroadsheetSheet({
                 </td>
                 {row.cells.map((cell, i) => (
                   <td key={i} className="border border-slate-300 px-1 py-1 text-center tabular-nums text-slate-900">
-                    {cell.average !== null ? (
+                    {view === "sba" ? (
+                      cell.sba !== null ? (
+                        <>
+                          {cell.sba.toFixed(1)}
+                          <span className="block text-[9px] text-slate-500">
+                            {cell.sbaYears} {cell.sbaYears === 1 ? "yr" : "yrs"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )
+                    ) : cell.average !== null ? (
                       <>
                         {cell.average}
                         <span className="block text-[9px] text-slate-500">{cell.terms} t</span>
@@ -109,12 +122,22 @@ export function JhsBroadsheetSheet({
       </div>
 
       <div className="space-y-0.5 text-[10.5px] text-slate-600">
-        <p>
-          Each subject shows the pupil&rsquo;s average term mark out of 100 across the JHS terms on
-          record, with the number of terms (t) it averages. Marks and % are all marks over all marks
-          available across those terms. This is a working summary, not the official school-based
-          assessment figure.
-        </p>
+        {view === "sba" ? (
+          <p>
+            Each subject shows the pupil&rsquo;s SBA out of 30: each term&rsquo;s class score as a
+            percentage of what it is marked out of, averaged within each JHS year, the years averaged
+            equally, then scaled to 30. Terms with no class score (paper records entered as a total
+            only) are left out; &ldquo;yrs&rdquo; is how many years the figure rests on. The exam score is
+            not part of it. Marks and % are all marks over all marks available across the JHS terms.
+          </p>
+        ) : (
+          <p>
+            Each subject shows the pupil&rsquo;s average term mark out of 100 across the JHS terms on
+            record, with the number of terms (t) it averages. Marks and % are all marks over all marks
+            available across those terms. Choose &ldquo;SBA (out of 30)&rdquo; for the school-based
+            assessment figure.
+          </p>
+        )}
         {anyRecords ? (
           <p>
             <sup className="font-semibold">R</sup> Includes terms transcribed from the school&rsquo;s own

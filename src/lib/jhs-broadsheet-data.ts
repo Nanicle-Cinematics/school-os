@@ -82,7 +82,7 @@ export async function getJhsBroadsheet(schoolId: string, classGroupId: string) {
   const subjectResults = (
     await prisma.subjectResult.findMany({
       where: { schoolId, studentId: { in: pupilIds }, termId: { in: terms.map((t) => t.id) } },
-      select: { studentId: true, termId: true, subjectId: true, totalScore: true },
+      select: { studentId: true, termId: true, subjectId: true, totalScore: true, classScore: true },
     })
   ).filter((r) => counts(r.studentId, r.termId));
 
@@ -97,11 +97,22 @@ export async function getJhsBroadsheet(schoolId: string, classGroupId: string) {
     select: { id: true, name: true, order: true },
   });
 
+  const settings = await prisma.schoolSettings.findFirst({
+    where: { schoolId },
+    select: { classScoreWeight: true },
+  });
+
   const sheet = assembleJhsBroadsheet({
     pupils,
     subjects,
     termResults: termResults.map((r) => ({ ...r, totalMarks: num(r.totalMarks) })),
-    subjectResults: subjectResults.map((r) => ({ ...r, totalScore: num(r.totalScore) })),
+    subjectResults: subjectResults.map((r) => ({
+      ...r,
+      totalScore: num(r.totalScore),
+      classScore: num(r.classScore),
+    })),
+    yearOfTerm: Object.fromEntries(yearOfTerm),
+    classWeight: settings?.classScoreWeight ?? 30,
   });
 
   return { current, classes, classGroup, sheet };

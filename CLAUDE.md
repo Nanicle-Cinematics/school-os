@@ -765,6 +765,22 @@ summary, not the official SBA figure. The loader is a fixed number of bulk
 queries for the whole class — never per pupil — and only terms from years the
 pupil spent in JHS count, so Basic 6 marks never leak in.
 
+**The SBA figure (out of 30)** is `sbaFigure` in `src/lib/sba.ts`, the one place
+the rule lives; the cumulative record prints it as a final column and the
+broadsheet as a second VIEW of its subject cells (`?view=sba` — twelve more
+columns do not fit landscape A4). The rule was the school's decision on
+2026-10-08, because the public GES/WAEC material gives the 30/70 split and not how
+the 30 is built: **class scores only** (never the exam), each term's class score
+as a percentage of the class weight it was marked out of, **each JHS year
+weighted equally** (terms averaged within a year first), then **scaled to 30**.
+A term with no class score — a paper record entered as a total only — is left
+out, never counted as zero, and the cell says how many years it rests on.
+
+⚠️ Round half UP with a tolerance (`Math.round(v * 10 + 1e-9)`). 20.35 is
+stored as 20.3499…, so plain rounding printed 20.3 against a head's hand
+calculation of 20.4 — found by checking a real pupil's figure by hand, pinned
+in `verify:results`.
+
 ⚠️ The loader scopes its level query to the pupil's school EXPLICITLY. Row
 security does that in production, but a development database holds several
 schools with RLS off, and the first render printed every JHS level twice — once
