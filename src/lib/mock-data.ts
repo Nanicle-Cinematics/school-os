@@ -94,14 +94,14 @@ export async function getMockOverview() {
 }
 
 /** The level's classes and subjects, and which pairs this person may mark. */
-export async function getMockSheetOptions(levelId: string, academicYearId: string, staffId: string | null, isLeadership: boolean) {
+export async function getMockSheetOptions(levelId: string, academicYearId: string, staffId: string | null, anyClass: boolean) {
   const classGroups = await prisma.classGroup.findMany({
     where: { levelId },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
   const subjects = await levelSubjects(levelId);
-  if (isLeadership) {
+  if (anyClass) {
     return { classGroups, subjects, pairs: null };
   }
   const pairs = staffId

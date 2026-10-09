@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP, MARKING, canAccess } from "@/lib/permissions";
+import { MARKING, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { getMockSheet, getMockSheetOptions } from "@/lib/mock-data";
 import { buttonClass } from "../../../button-style";
@@ -15,7 +15,8 @@ export default async function MockSheetPage({ params, searchParams }: PageProps<
   const auth = await requireRole(MARKING);
   const { id } = await params;
   const query = await searchParams;
-  const isLeadership = canAccess(auth.roles, LEADERSHIP);
+  // Leadership and the IT admin mark any class; a teacher, their assignments.
+  const anyClass = canAccess(auth.roles, MARK_ANY_CLASS);
 
   const mock = await prisma.mockExam.findUnique({
     where: { id },
@@ -27,7 +28,7 @@ export default async function MockSheetPage({ params, searchParams }: PageProps<
     mock.levelId,
     mock.academicYearId,
     auth.staffId,
-    isLeadership,
+    anyClass,
   );
 
   // A teacher is offered only the classes and subjects they are assigned.
