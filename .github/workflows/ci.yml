@@ -39,7 +39,12 @@ jobs:
     # no benefit.
     services:
       postgres:
-        image: postgres:17
+        # The same official image, from AWS's public mirror of Docker Hub's
+        # library. Docker Hub rate-limits anonymous pulls per IP, and GitHub's
+        # runners share IPs: on 2026-10-09 every run died pulling the image
+        # ("toomanyrequests") before a single step ran. ECR Public throttles
+        # anonymous pulls per second rather than capping them per six hours.
+        image: public.ecr.aws/docker/library/postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
