@@ -176,6 +176,7 @@ if (!(await appIsUp())) {
   const schoolId = school!.id;
   const tokens: string[] = [];
   let mockId: string | null = null;
+  let probeUserId: string | null = null;
   const title = `Verify mock ${Date.now()}`;
 
   try {
@@ -303,6 +304,43 @@ if (!(await appIsUp())) {
         }
       }
 
+      // The IT admin keys in marks handed in on paper, for every class
+      // (MARK_ANY_CLASS). This probe holds no staff record and no teaching
+      // assignment, so before the change it was a teacher with nothing
+      // assigned: an empty picker and "not assigned" from the action.
+      const probe = await prisma.user.create({
+        data: {
+          name: "Verify IT admin",
+          email: `verify-it-mocks-${Date.now()}@example.com`,
+          passwordHash: randomBytes(32).toString("hex"),
+          schoolId,
+        },
+      });
+      probeUserId = probe.id;
+      await prisma.membership.create({
+        data: { schoolId, userId: probe.id, role: "IT_ADMIN", status: "ACTIVE", invitedAt: new Date(), acceptedAt: new Date() },
+      });
+      const itToken = await openSession(probe.id, schoolId);
+      tokens.push(itToken);
+      const itSheet = await get(sheetPath, itToken);
+      const itForm = formFields(itSheet.html, 'name="score:');
+      check("an IT admin with no assignment opens any class's mock sheet", Boolean(itForm), `HTTP ${itSheet.status}`);
+      const itPicker = itSheet.html.match(/<select name="class"[\s\S]*?<\/select>/)?.[0] ?? "";
+      const levelClasses = await prisma.classGroup.findMany({ where: { levelId: level.id }, select: { id: true } });
+      check(
+        "and is offered every class of the level",
+        levelClasses.every((c) => itPicker.includes(`value="${c.id}"`)),
+        `${levelClasses.filter((c) => itPicker.includes(`value="${c.id}"`)).length} of ${levelClasses.length}`,
+      );
+      if (itForm) {
+        await post(sheetPath, itToken, [
+          ...itForm.filter(([n]) => !n.startsWith("score:") && !n.startsWith("absent:")),
+          ...roll.map((r) => [`score:${r.studentId}`, "55"] as [string, string]),
+        ]);
+        const itRows = await prisma.mockScore.count({ where: { mockExamId: mock.id, subjectId: english.id, rawScore: 55 } });
+        check("and saves its marks", itRows === roll.length, `${itRows} of ${roll.length} rows`);
+      }
+
       // Closed means final.
       const list = await get("/mocks", ownerToken);
       const closeForm = [...list.html.matchAll(/<form\b[^>]*>([\s\S]*?)<\/form>/g)]
@@ -337,6 +375,10 @@ if (!(await appIsUp())) {
       }
       for (const token of tokens) {
         await owner.session.deleteMany({ where: { tokenHash: createHash("sha256").update(token).digest("hex") } });
+      }
+      if (probeUserId) {
+        await owner.membership.deleteMany({ where: { userId: probeUserId } });
+        await owner.user.deleteMany({ where: { id: probeUserId } });
       }
       check("the fixture mock is removed again", mockId === null || (await owner.mockExam.count({ where: { id: mockId } })) === 0);
     } finally {

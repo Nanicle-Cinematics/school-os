@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { ACADEMIC, LEADERSHIP, MARKING, canAccess } from "@/lib/permissions";
+import { ACADEMIC, MARKING, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { candidateLevel } from "@/lib/mock-data";
@@ -120,7 +120,8 @@ export async function deleteMock(_prev: MockState, formData: FormData): Promise<
  * Save one class's marks for one subject of a mock.
  *
  * The same rule as the term mark sheet: a teacher may enter only a class and
- * subject they are assigned to IN THE MOCK'S YEAR; leadership may enter any.
+ * subject they are assigned to IN THE MOCK'S YEAR; MARK_ANY_CLASS (leadership
+ * and the IT admin, who keys in marks handed in on paper) may enter any.
  * Marks are out of 100. Blank means not marked yet; absent counts as 0, which
  * is what absence costs in the real exam.
  *
@@ -154,7 +155,7 @@ export async function saveMockSheet(_prev: MockState, formData: FormData): Promi
   const offered = await prisma.levelSubject.count({ where: { levelId: mock.levelId, subjectId } });
   if (!classGroup || offered === 0) return { error: "Choose a class and subject of this mock." };
 
-  if (!canAccess(auth.roles, LEADERSHIP)) {
+  if (!canAccess(auth.roles, MARK_ANY_CLASS)) {
     const assigned = auth.staffId
       ? await prisma.teachingAssignment.count({
           where: { staffId: auth.staffId, classGroupId, subjectId, academicYearId: mock.academicYearId },

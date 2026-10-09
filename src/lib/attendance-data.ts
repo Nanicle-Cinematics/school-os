@@ -60,7 +60,10 @@ export async function termForDate(date: Date) {
   });
 }
 
-/** The classes a register may be taken for, narrowed for a teacher. */
+/**
+ * The classes a register may be taken for: every class for the office, and for
+ * a teacher only the class they form-teach — the same rule as `mayMark`.
+ */
 export async function getRegisterSetup(options: { staffId: string | null; teacherOnly: boolean }) {
   const year = await prisma.academicYear.findFirst({
     where: { isCurrent: true },
@@ -76,14 +79,7 @@ export async function getRegisterSetup(options: { staffId: string | null; teache
         where: { formTeacherId: options.staffId },
         select: { id: true },
       });
-      const teaching = year
-        ? await prisma.teachingAssignment.findMany({
-            where: { staffId: options.staffId, academicYearId: year.id },
-            select: { classGroupId: true },
-            distinct: ["classGroupId"],
-          })
-        : [];
-      allowedIds = [...new Set([...formOf.map((c) => c.id), ...teaching.map((t) => t.classGroupId)])];
+      allowedIds = formOf.map((c) => c.id);
     }
   }
 

@@ -355,6 +355,102 @@ async function yearScoping() {
       (currentList.html.match(/href="\/classes\/[a-z0-9]+"/g) ?? []).length === 1,
     `${(currentList.html.match(/href="\/classes\/[a-z0-9]+"/g) ?? []).length} class links`);
 
+  /**
+   * The attendance register is the FORM teacher's alone (mayMark in
+   * attendance-actions.ts). A subject assignment opens the mark sheet above,
+   * but must not open the register: the school asked that the Basic 1 teacher
+   * mark Basic 1 and nothing else.
+   */
+  const registerOptions = (html: string) =>
+    (html.match(/<select name="class"[\s\S]*?<\/select>/)?.[0] ?? "").match(/<option value="[^"]+"/g) ?? [];
+  const assignedOnly = await get("/attendance", token);
+  check("a subject assignment alone does not offer that class's attendance register",
+    !registerOptions(assignedOnly.html).some((option) => option.includes(classGroup!.id)),
+    `${registerOptions(assignedOnly.html).length} classes offered`);
+
+  const originalFormTeacher = classGroup!.formTeacherId;
+  const otherClass = await withBypass(() =>
+    prisma.classGroup.findFirst({ where: { schoolId: school.id, id: { not: classGroup!.id } }, select: { id: true } }),
+  );
+  await withBypass(() =>
+    prisma.classGroup.update({ where: { id: classGroup!.id }, data: { formTeacherId: staff.id } }),
+  );
+  try {
+    const day = term.startDate.toISOString().slice(0, 10);
+    const own = await get(`/attendance?class=${classGroup!.id}&date=${day}`, token);
+    const offered = registerOptions(own.html);
+    check("the form teacher is offered their own class's register, and only it",
+      offered.length === 1 && offered[0].includes(classGroup!.id), `${offered.length} classes offered`);
+
+    // A forged post for another class IN WHICH THIS TEACHER TEACHES A SUBJECT
+    // is refused by the action itself, not merely left out of the picker.
+    // That is the case the old rule allowed; a class they have nothing to do
+    // with was refused before as well, and would prove nothing.
+    const unescape = (value: string) =>
+      value.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    const registerForm = [...own.html.matchAll(/<form\b[^>]*>([\s\S]*?)<\/form>/g)]
+      .map((match) => match[1])
+      .find((inner) => inner.includes('name="mark:'));
+    check("their register renders a form to mark", Boolean(registerForm));
+    if (registerForm && otherClass) {
+      const otherAssignment = await withBypass(() =>
+        prisma.teachingAssignment.create({
+          data: {
+            schoolId: school.id,
+            academicYearId: year.id,
+            staffId: staff.id,
+            classGroupId: otherClass.id,
+            subjectId: offering!.subjectId,
+          },
+        }),
+      );
+      const before = await withBypass(() =>
+        prisma.attendanceDay.findMany({ where: { classGroupId: otherClass.id }, select: { id: true } }),
+      );
+      // The other class's own pupils, all present: a register the action would
+      // accept from anyone allowed to take it.
+      const otherRoll = await withBypass(() =>
+        prisma.enrollment.findMany({
+          where: { classGroupId: otherClass.id, academicYearId: year.id, status: "ACTIVE" },
+          select: { studentId: true },
+        }),
+      );
+      const body = new FormData();
+      for (const tag of registerForm.match(/<input\b[^>]*>/g) ?? []) {
+        const name = tag.match(/name="([^"]*)"/)?.[1];
+        if (!name || name.startsWith("mark:") || name.startsWith("note:")) continue;
+        const value = unescape(tag.match(/value="([^"]*)"/)?.[1] ?? "");
+        body.append(unescape(name), name === "classGroupId" ? otherClass.id : value);
+      }
+      for (const row of otherRoll) body.append(`mark:${row.studentId}`, "PRESENT");
+      const posted = await fetch(`${BASE}/attendance?class=${classGroup!.id}&date=${day}`, {
+        method: "POST",
+        headers: { Cookie: `${COOKIE}=${token}` },
+        body,
+        redirect: "manual",
+      });
+      const reply = await posted.text();
+      const after = await withBypass(() =>
+        prisma.attendanceDay.findMany({ where: { classGroupId: otherClass.id }, select: { id: true } }),
+      );
+      const written = after.filter((day) => !before.some((old) => old.id === day.id)).map((day) => day.id);
+      check("a register posted for a class they only teach a subject in is refused",
+        /Only the class/.test(reply) && written.length === 0,
+        `HTTP ${posted.status}, ${written.length} registers written`);
+      await withBypass(async () => {
+        if (written.length) {
+          await prisma.attendanceEntry.deleteMany({ where: { attendanceDayId: { in: written } } });
+          await prisma.attendanceDay.deleteMany({ where: { id: { in: written } } });
+        }
+        await prisma.teachingAssignment.delete({ where: { id: otherAssignment.id } });
+      });
+    }
+  } finally {
+    await withBypass(() =>
+      prisma.classGroup.update({ where: { id: classGroup!.id }, data: { formTeacherId: originalFormTeacher } }),
+    );
+  }
+
   await withBypass(async () => {
     await prisma.session.deleteMany({
       where: { tokenHash: createHash("sha256").update(token).digest("hex") },

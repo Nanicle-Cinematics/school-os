@@ -801,8 +801,9 @@ missing core subject or fewer than two others means NO aggregate rather than a
 flattering partial one; absent is 0, the lowest grade. Positions are year-group
 wide, ties shared. Nothing is stored — grades, aggregates and positions are
 derived on read. Subject teachers enter marks for their own current-year
-assignments (`/mocks` is MARKING); the broadsheet, slips and progress are
-ACADEMIC. `npm run verify:mocks` (CI, after the app starts) pins the aggregate
+assignments (`/mocks` is MARKING), and `MARK_ANY_CLASS` (leadership and the IT
+admin) for every class, as on the term mark sheet; the broadsheet, slips and
+progress are ACADEMIC. `npm run verify:mocks` (CI, after the app starts) pins the aggregate
 and drives the sheet as leadership, an assigned teacher and an unassigned one.
 
 ## The register, and the day nobody marked it
@@ -870,8 +871,12 @@ it is a deliberate exception to the rule below that every write on a class stays
 `OFFICE`. Routing the register through the office would mean forty slips of
 paper walking down a corridor every morning, which is the thing it replaces. The
 role list is only the outer door; `mayMark` in `attendance-actions.ts` is the
-inner one, narrowing a teacher to the classes they form-teach or have a
-current-year assignment in.
+inner one, narrowing a teacher to the class they FORM-TEACH. A subject
+assignment used to count too, so a JHS subject teacher could take every register
+they taught in; on 2026-10-09 the school asked for one class per teacher (the
+Basic 1 teacher marks Basic 1 only), and the picker (`getRegisterSetup`) follows
+the same rule. `verify:teacher` proves an assignment alone offers no register and
+that a register forged for another class is refused by the action.
 
 - **`MARKING`** (in `permissions.ts`) is those two screens and their actions —
   `openSheet`, `saveSheet`, `saveClassRemarks`. Everything else that used to be
@@ -880,8 +885,8 @@ current-year assignment in.
 - **`MARK_ANY_CLASS`** (leadership + `IT_ADMIN`, added 2026-10-08 on the
   school's request) may enter marks, conduct and remarks for every class without
   a teaching assignment — the IT admin keys in what teachers hand in on paper.
-  It is checked in `mayTeach`, in `saveClassRemarks` and in both screens'
-  pickers; changing a component's total marks stays `LEADERSHIP`.
+  It is checked in `mayTeach`, in `saveClassRemarks`, in `saveMockSheet` and
+  in all three screens' pickers; changing a component's total marks stays `LEADERSHIP`.
   `verify:it-admin` proves both pages and both actions with a probe that holds
   no staff record.
 - **`isTeacherOnly`** distinguishes a teacher from a head who also teaches. A

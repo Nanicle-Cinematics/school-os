@@ -102,9 +102,9 @@ export const CLASS_REGISTER: Role[] = [...OFFICE, "TEACHER"];
  * every morning, which is the thing this replaces.
  *
  * The role list is the outer door. The inner one is `mayMark` in
- * `attendance-actions.ts`, which narrows a teacher to the classes they form-
- * teach or have a current-year assignment in — a teacher may open the screen,
- * but only for their own classes.
+ * `attendance-actions.ts`, which narrows a teacher to the class they form-
+ * teach — a teacher may open the screen, but only for their own class. A
+ * subject assignment does not count (2026-10-09, on the school's request).
  */
 export const ATTENDANCE: Role[] = [...OFFICE, "TEACHER"];
 

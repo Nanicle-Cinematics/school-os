@@ -131,8 +131,9 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
             </>
           ) : (
             <>
-              You are not the form teacher of any class and have no teaching assignment this year,
-              so there is no register for you to take. The office sets that up under Classes.
+              You are not the form teacher of any class, so there is no register for you to take.
+              A register is taken by its class&rsquo;s form teacher; the office sets the form
+              teacher on the class&rsquo;s page under Classes.
             </>
           )}
         </Notice>

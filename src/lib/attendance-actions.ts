@@ -15,7 +15,14 @@ export type RegisterState = { error?: string; ok?: string; savedAt?: string };
 const MARKS: AttendanceMark[] = ["PRESENT", "LATE", "EXCUSED", "ABSENT"];
 
 /**
- * A teacher marks the classes they actually teach; the office marks any.
+ * A teacher marks the register of the class they FORM-TEACH, and no other; the
+ * office marks any.
+ *
+ * Until 2026-10-09 a current-year teaching assignment was enough too, so a JHS
+ * subject teacher who takes Mathematics in B7, B8 and B9 could take all three
+ * registers, and the Basic 1 teacher could mark Basic 2. The school asked for
+ * one class per teacher: the register is the form teacher's job, and a class
+ * marked by whoever opened it first is a class whose absences nobody owns.
  *
  * This is the first WRITE a plain teacher makes against a class, which is why
  * it is checked here and not only by the page: /classes renders read-only for
@@ -24,7 +31,6 @@ const MARKS: AttendanceMark[] = ["PRESENT", "LATE", "EXCUSED", "ABSENT"];
 async function mayMark(
   auth: { roles: Parameters<typeof canAccess>[0]; staffId: string | null },
   classGroupId: string,
-  academicYearId: string,
 ) {
   if (canAccess(auth.roles, OFFICE)) {
     return true;
@@ -35,13 +41,7 @@ async function mayMark(
   const isFormTeacher = await prisma.classGroup.count({
     where: { id: classGroupId, formTeacherId: auth.staffId },
   });
-  if (isFormTeacher > 0) {
-    return true;
-  }
-  const teaches = await prisma.teachingAssignment.count({
-    where: { staffId: auth.staffId, classGroupId, academicYearId },
-  });
-  return teaches > 0;
+  return isFormTeacher > 0;
 }
 
 /** Mark, or re-mark, one class's register for one day. */
@@ -69,8 +69,8 @@ export async function saveRegister(
     };
   }
 
-  if (!(await mayMark(auth, classGroupId, term.academicYearId))) {
-    return { error: "You do not take the register for that class." };
+  if (!(await mayMark(auth, classGroupId))) {
+    return { error: "Only the class's form teacher, or the office, takes its register." };
   }
 
   // The roll as it stands, so a mark cannot be posted for a child who is not
