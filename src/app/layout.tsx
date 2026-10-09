@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Newsreader, Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { headers } from "next/headers";
 import "./globals.css";
 import { ServiceWorker } from "./service-worker";
@@ -13,22 +13,34 @@ import { ServiceWorker } from "./service-worker";
  * fee invoice. A serif page title read well on paper and looked apologetic on a
  * dashboard, which is why the app's own headings are now bold sans.
  *
- * Both are self-hosted by next/font, so a school on a slow link is not waiting
- * on Google.
+ * ⚠️ Both are VENDORED in ./fonts, not fetched by next/font/google. The Google
+ * loader downloads the CSS and files at BUILD time, so Google became a build
+ * dependency: on 2026-10-09 production failed ("next/font/google queries have
+ * exactly one entry") on a commit that had built cleanly locally and in CI, and
+ * only a redeploy without the build cache recovered it. A file in the repo
+ * cannot fail that way.
+ *
+ * The files are the Latin variable-weight cuts (200–800) from Fontsource 5.3.0,
+ * under the SIL Open Font Licence (OFL-*.txt beside them). One variable file
+ * covers every weight the app uses, so it is no heavier than the five static
+ * weights it replaces. To update, take the same files from a newer
+ * `@fontsource-variable/*` package — never re-add the Google import.
  */
-const sans = Plus_Jakarta_Sans({
+const plusJakartaSans = localFont({
+  src: "./fonts/plus-jakarta-sans-latin-wght-normal.woff2",
+  weight: "200 800",
   variable: "--font-sans-ui",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
-const display = Newsreader({
+const newsreader = localFont({
+  src: [
+    { path: "./fonts/newsreader-latin-wght-normal.woff2", weight: "200 800", style: "normal" },
+    { path: "./fonts/newsreader-latin-wght-italic.woff2", weight: "200 800", style: "italic" },
+  ],
   variable: "--font-display-serif",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
   display: "swap",
+  adjustFontFallback: "Times New Roman",
 });
 
 export const metadata: Metadata = {
@@ -126,7 +138,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${sans.variable} ${display.variable} h-full antialiased`}
+      className={`${plusJakartaSans.variable} ${newsreader.variable} h-full antialiased`}
     >
       <head>
         <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
