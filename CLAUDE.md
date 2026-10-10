@@ -124,7 +124,7 @@ stable handle and is derived only on create.
 `DB_RLS="on"` and the app connects through `APP_DATABASE_URL` as the restricted
 `school_os_app` role. 40 tables have RLS enabled and FORCED with a
 `tenant_isolation` policy; `npm run db:rls` (re)applies them and is idempotent.
-Verified by `npm run verify:isolation` (9/9) and `npm run verify:actions` (43/43).
+Verified by `npm run verify:isolation` (14/14) and `npm run verify:actions` (43/43).
 
 Four things had to be true at once, and each was broken:
 
@@ -168,6 +168,47 @@ zero rows is indistinguishable from a guard with nothing to find.
 **Adding `schoolId` to a `where` clause does not substitute for this.** Under RLS
 the policy filters first: `updateUserRoles` already filtered by `schoolId`
 explicitly and still saw nothing when the GUC was empty.
+
+**The connected role is asked about, not assumed.** `verifyRestrictedRole` in
+prisma.ts asks Postgres once per process whether the role behind
+`APP_DATABASE_URL` is a superuser or has BYPASSRLS, and in production refuses to
+serve if it is. The boot guard only proved the variable was SET, and the owner's
+connection string satisfies that exactly as well as the restricted role's: with
+the owner every policy is skipped while the site boots, every page renders and
+every test passes. The daily `audit:rls` asks the same of `school_os_app` and also
+fails a role that OWNS tables, because an owner can `alter table … disable row
+level security` on them. `verify:isolation` proves the verdict flags the owner
+(a verdict that cannot say no proves nothing) and then counts every tenant table
+as the restricted role, once as the school and once as a school that does not
+exist, instead of the three tables it used to name.
+
+⚠️ **What row security does NOT defend against** (audited 2026-10-10). It is a net
+under a query that forgot its school. It is not a wall around a process that has
+been subverted, and "enforcement is LIVE" should not be read as one:
+
+- **The bypass is a setting any statement can change.** The policy passes every
+  row when `app.bypass_rls` is `'on'`, and that is a plain `set_config`, so code
+  that can run an arbitrary SQL string can lift isolation for itself. On a
+  development database one such statement took a session scoped to a school of
+  44 pupils to all 110 in the database. Raw SQL today is 3 tagged templates
+  (advisory locks) and 2 fixed strings in `prisma.ts`; `npm run verify:raw-sql`
+  (source-only, in CI) fails on `$queryRawUnsafe`, `$executeRawUnsafe` or
+  `Prisma.raw` anywhere else in `src/`. A second database role for the bypass
+  would close it properly, at the cost of a second connection pool that this
+  instance cannot spare.
+- **`User` and `Session` have no policy.** Sign-in happens before a school is
+  known, so from any school's context the app role can read every login's password
+  hash, encrypted TOTP secret, recovery-code hashes and every session token hash
+  (16 users across 4 schools and 29 sessions on the same development database).
+  The only protection is that tenant code reaches users through `Membership`,
+  which is under RLS; one unfiltered `user.findMany` in tenant code would expose
+  all of them. Policies on these two tables are feasible, since sign-in already
+  uses the bypass, and are proposed rather than built.
+- **Foreign-reference constraints ignore row security.** A school can insert a
+  row pointing at another school's id and Postgres accepts it. The row cannot be
+  read back through a join, so the harm is untidy data and a way to learn that an
+  id exists. Actions re-read ids server-side before writing; a new one that writes
+  a posted id without reading it first is the shape to watch for.
 
 **`connection_limit`**: with RLS on, every model op becomes a transaction, which
 `connection_limit=1` cannot serve (P2024). The app role's URL uses **4**.

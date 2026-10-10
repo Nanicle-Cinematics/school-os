@@ -119,6 +119,58 @@ try {
     process.exitCode = 1;
   }
 
+  /**
+   * The role the app connects as must be one Postgres actually applies policies to.
+   *
+   * ⚠️ Everything above audits the POLICIES, and a policy is skipped entirely for
+   * a superuser or any role with BYPASSRLS. If the deployment's APP_DATABASE_URL
+   * ever named the owner, all of it would pass: policies present, forced, grants
+   * clean, and not one of them applied. This asks about the role itself.
+   *
+   * It also fails a role that OWNS a table. FORCE makes an owner obey policies,
+   * but an owner can `alter table … disable row level security` — so an app role
+   * that owns anything is one injected statement from switching its own isolation
+   * off. apply-rls.mjs creates the role owning nothing, and this keeps it so.
+   */
+  const roleRows = await prisma.$queryRawUnsafe(
+    `select rolname, rolsuper, rolbypassrls, rolcanlogin from pg_roles where rolname = $1`,
+    appRole,
+  );
+  const ownedTables =
+    roleRows.length === 0
+      ? []
+      : await prisma.$queryRawUnsafe(
+          `select tablename from pg_tables where schemaname = 'public' and tableowner = $1 order by tablename`,
+          appRole,
+        );
+  const roleProblems = [];
+  if (roleRows.length === 0) {
+    roleProblems.push(`the role ${appRole} does not exist in this database`);
+  } else {
+    const role = roleRows[0];
+    if (role.rolsuper) roleProblems.push("it is a SUPERUSER, which Postgres exempts from every policy");
+    if (role.rolbypassrls) roleProblems.push("it has BYPASSRLS, which Postgres exempts from every policy");
+    if (ownedTables.length > 0) {
+      roleProblems.push(
+        `it owns ${ownedTables.length} table(s) (${ownedTables.slice(0, 5).map((t) => t.tablename).join(", ")}), so it could switch row security off for them`,
+      );
+    }
+  }
+  if (roleProblems.length > 0) {
+    console.error(`\nTHE APP ROLE DOES NOT ENFORCE ISOLATION — ${appRole}:`);
+    for (const problem of roleProblems) {
+      console.error(`  ${problem}`);
+    }
+    console.error(
+      "\nFix: node --env-file=<env with DIRECT_URL> scripts/apply-rls.mjs forces\n" +
+        "NOBYPASSRLS. A role that is a superuser or owns tables must be replaced, and the\n" +
+        "deployment's APP_DATABASE_URL must name the replacement, never the owner.",
+    );
+    process.exitCode = 1;
+  } else {
+    console.log(`app role ${appRole}: no superuser, no BYPASSRLS, owns no tables`);
+  }
+
   const gaps = rows.filter((r) => !r.rls || !r.forced || r.policies === 0);
 
   // Count the same way apply-rls.mjs reports it, so the two are comparable and

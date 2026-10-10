@@ -129,6 +129,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Row security stops a query that forgot its school. It cannot stop an
+      # injected statement: the policy passes every row when app.bypass_rls is
+      # 'on', and any code that can run a SQL string can set that for itself.
+      # This keeps string-built SQL out of src/ (it needs no database).
+      - name: Raw SQL — no string-built queries outside prisma.ts
+        run: npm run verify:raw-sql
+
       - name: Money — payments, allocations and invoice balances
         run: npm run db:verify
 
