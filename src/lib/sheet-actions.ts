@@ -10,6 +10,7 @@ import { materialiseComponents } from "@/lib/assessment-templates";
 import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
 import { rosterWhere } from "@/lib/class-roster";
+import { ownsSheet } from "@/lib/ownership";
 
 export type SheetState = { error?: string; ok?: string; savedAt?: string };
 
@@ -63,6 +64,13 @@ export async function openSheet(_prev: SheetState, formData: FormData): Promise<
 
   if (!termId || !classGroupId || !subjectId) {
     return { error: "Choose a term, class and subject." };
+  }
+  // MARK_ANY_CLASS is exempt from "may teach" without a single read, and a
+  // teacher is only proven for the class and subject by an assignment row. Either
+  // way the ids are about to be written into new assessments, so they must be this
+  // school's own: see ownership.ts.
+  if (!(await ownsSheet(termId, classGroupId, subjectId))) {
+    return { error: "That term, class or subject was not found." };
   }
   if (!(await mayTeach(auth, termId, classGroupId, subjectId))) {
     return { error: "You are not assigned to teach that subject in that class." };

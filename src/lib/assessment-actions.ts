@@ -9,6 +9,7 @@ import { LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { rosterWhere } from "@/lib/class-roster";
+import { ownsSheet } from "@/lib/ownership";
 
 const ASSESSMENT_TYPES = Object.keys(AssessmentType);
 
@@ -60,6 +61,13 @@ export async function createAssessment(
   }
   if (!Number.isFinite(maxScore) || maxScore <= 0) {
     return { error: "Maximum score must be greater than zero." };
+  }
+  // ⚠️ BEFORE the teaching check, which leadership passes without reading
+  // anything. An assessment is unique on (term, class, subject, title) with no
+  // school in the index, so one on another school's ids would also stop that
+  // school opening its own sheet for the title.
+  if (!(await ownsSheet(termId, classGroupId, subjectId))) {
+    return { error: "That term, class or subject was not found." };
   }
   if (!(await assertMayTeach(auth, classGroupId, subjectId))) {
     return { error: "You are not assigned to teach that subject in that class." };
