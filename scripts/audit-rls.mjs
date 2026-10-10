@@ -24,9 +24,10 @@ if (!url) {
   process.exit(2);
 }
 
-// Same exclusions as apply-rls.mjs: sign-in happens before a tenant is known,
-// so the auth tables cannot be tenant-scoped.
-const UNSCOPED = ["User", "Session", "_prisma_migrations"];
+// Same exclusion as apply-rls.mjs. User and Session used to be excluded here too
+// ("sign-in happens before a tenant is known"), which is why nothing noticed that
+// they had no policy: they are audited now, with policies of their own.
+const UNSCOPED = ["_prisma_migrations"];
 
 const prisma = new PrismaClient({ datasources: { db: { url } } });
 
@@ -49,6 +50,7 @@ try {
        and c.relname <> all($1::text[])
        and (
          c.relname = 'School'
+         or c.relname = 'Session' -- no schoolId column, but it holds every login's token hash
          or exists (
            select 1 from information_schema.columns col
             where col.table_schema = 'public'

@@ -211,7 +211,9 @@ export async function removeStaff(formData: FormData): Promise<void> {
     });
     if (logins.length > 0) {
       const userIds = [...new Set(logins.map((m) => m.userId))];
-      await tx.membership.deleteMany({ where: { schoolId: auth.schoolId, staffId: id } });
+      // ⚠️ Sessions BEFORE the memberships: the policy on Session shows a school
+      // the sessions of its own members, so after the memberships are gone a session
+      // with no school chosen would no longer be visible and would survive this delete.
       // Only sessions working in THIS school; the same login may hold another's.
       await tx.session.deleteMany({
         where: {
@@ -219,6 +221,7 @@ export async function removeStaff(formData: FormData): Promise<void> {
           OR: [{ activeSchoolId: auth.schoolId }, { activeSchoolId: null }],
         },
       });
+      await tx.membership.deleteMany({ where: { schoolId: auth.schoolId, staffId: id } });
     }
     await writeAudit(tx, {
       schoolId: auth.schoolId,

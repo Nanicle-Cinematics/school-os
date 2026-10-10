@@ -27,9 +27,19 @@ const APP_ROLE = process.env.APP_DB_ROLE ?? "school_os_app";
 /** Tables the app may add to but never change. See the revoke below. */
 const APPEND_ONLY = ["AuditLog", "JournalEntry", "JournalLine"];
 
-/** Auth tables are deliberately not tenant-scoped: sign-in happens before a
- *  tenant is known, and both are keyed by id/token rather than by school. */
-const UNSCOPED = new Set(["User", "Session", "_prisma_migrations"]);
+/** Not application data at all. */
+const UNSCOPED = new Set(["_prisma_migrations"]);
+
+/**
+ * The two auth tables. Sign-in happens before a tenant is known, so they cannot
+ * use the generic `schoolId = current school` policy, and until 2026-10-10 they
+ * had no policy at all: from any school's context the app role could read every
+ * login's password hash, TOTP secret and recovery-code hashes, and every session
+ * token hash in the database. They get policies of their own (see
+ * enableAuthTables); every path that runs before a tenant is known already runs
+ * under the bypass, which the policies honour like any other table's.
+ */
+const AUTH_TABLES = new Set(["User", "Session"]);
 
 async function main() {
   const password = process.env.APP_DB_PASSWORD ?? randomBytes(18).toString("base64url");
@@ -90,10 +100,13 @@ async function main() {
 
   const applied = [];
   for (const { table_name: table } of tenantTables) {
-    if (UNSCOPED.has(table)) continue;
+    if (UNSCOPED.has(table) || AUTH_TABLES.has(table)) continue;
     await enable(table, `"schoolId"`);
     applied.push(table);
   }
+
+  await enableAuthTables();
+  applied.push(...AUTH_TABLES);
 
   // The School row itself is keyed by id, not schoolId.
   await enable("School", `"id"`);
@@ -133,6 +146,61 @@ async function main() {
       `every table with a schoolId is protected (deliberately excluded: ${[...UNSCOPED].join(", ")})`,
     );
   }
+}
+
+/**
+ * User and Session: visible to a school only through its own people.
+ *
+ * A school sees a login when it is that login's home school or the login holds a
+ * membership there — which is what "this school's staff and parents" means, and is
+ * how every tenant screen reaches users already (through Membership, itself under
+ * RLS). It sees a session on the same terms, plus any session working in it, so
+ * that ending a removed person's sessions still works after their membership has
+ * gone.
+ *
+ * Sessions are never created or moved from a tenant: sign-in, school switching and
+ * sign-out all run under the bypass, so WITH CHECK admits the bypass alone.
+ *
+ * ⚠️ A person who belongs to two schools has their sessions visible to both. That
+ * is deliberate: a password reset or a suspension from either school must be able
+ * to end every one of them, and either school can already reset that password.
+ * What the policy removes is the other 99 per cent — logins and sessions of people
+ * who have nothing to do with the school asking.
+ */
+async function enableAuthTables() {
+  const bypass = `current_setting('app.bypass_rls', true) = 'on'`;
+  const school = `current_setting('app.school_id', true)`;
+
+  for (const table of AUTH_TABLES) {
+    await prisma.$executeRawUnsafe(`alter table "${table}" enable row level security`);
+    await prisma.$executeRawUnsafe(`alter table "${table}" force row level security`);
+    await prisma.$executeRawUnsafe(`drop policy if exists tenant_isolation on "${table}"`);
+  }
+
+  const member = (userColumn) => `exists (
+          select 1 from "Membership" m
+           where m."userId" = ${userColumn} and m."schoolId" = ${school}
+        )`;
+
+  const userVisible = `
+        ${bypass}
+        or "schoolId" = ${school}
+        or ${member(`"User"."id"`)}`;
+  await prisma.$executeRawUnsafe(`
+    create policy tenant_isolation on "User"
+      using (${userVisible})
+      with check (${userVisible})
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    create policy tenant_isolation on "Session"
+      using (
+        ${bypass}
+        or "activeSchoolId" = ${school}
+        or ${member(`"Session"."userId"`)}
+      )
+      with check (${bypass})
+  `);
 }
 
 async function enable(table, column) {

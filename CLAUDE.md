@@ -196,14 +196,45 @@ been subverted, and "enforcement is LIVE" should not be read as one:
   `Prisma.raw` anywhere else in `src/`. A second database role for the bypass
   would close it properly, at the cost of a second connection pool that this
   instance cannot spare.
-- **`User` and `Session` have no policy.** Sign-in happens before a school is
-  known, so from any school's context the app role can read every login's password
-  hash, encrypted TOTP secret, recovery-code hashes and every session token hash
-  (16 users across 4 schools and 29 sessions on the same development database).
-  The only protection is that tenant code reaches users through `Membership`,
-  which is under RLS; one unfiltered `user.findMany` in tenant code would expose
-  all of them. Policies on these two tables are feasible, since sign-in already
-  uses the bypass, and are proposed rather than built.
+- **`User` and `Session` are scoped by policies of their own (2026-10-10).** They had
+  none: sign-in happens before a school is known, so the generic
+  `schoolId = current school` template could not apply, and from any school's context
+  the app role could read every login's password hash, encrypted TOTP secret and
+  recovery-code hashes and every session token hash (19 users across 5 schools and 33
+  sessions on the development database). `enableAuthTables` in `apply-rls.mjs` writes
+  them: a school sees a **login** when it is that login's home school or the login holds
+  a membership there, and a **session** on the same terms or when the session is working
+  in that school. Nothing but the bypass may write a Session (`WITH CHECK` admits the
+  bypass alone): sign-in, school switching and sign-out all run under it already.
+  `verify:isolation` proves it as the restricted role against the owner's view of what
+  exists (the demo school sees 9 of 19 logins and 13 of 33 sessions), and every write
+  probe runs in a rolled-back transaction so a missing policy cannot cost a real login
+  its sessions. Four things it took, each found by forcing a check red:
+
+  - ⚠️ **End the sessions BEFORE removing the membership.** The membership is what
+    makes a session visible to the school, so deleting it first hid any session that
+    had not chosen a school yet, and `deleteMany` removed nothing while looking like it
+    had worked: a removed person stayed signed in. `removeUserAccess` and the staff
+    removal now delete sessions first; `verify:actions` (`loginGuards`) fails with one
+    session left if that order is undone.
+  - ⚠️ **Taking on a login that has no membership anywhere is done under the bypass.**
+    Its home school can be another school's (it was removed there), which this school's
+    policy hides, so the update through the tenant client found nothing. `createUserAccount`
+    does it before the transaction; a transaction that then fails leaves a login with no
+    membership, the state that branch already treats as reusable.
+  - **`Session` is in the tenant-context guard by name.** It has no `schoolId` column, so
+    reading the models off the schema missed it and an unscoped read would have been
+    answered with nothing instead of refused. `TENANT_MODELS` in `prisma.ts` lists it.
+  - **A login that belongs to two schools is visible to both,** and so are its
+    sessions: a reset or a suspension from either must be able to end all of them, and
+    either school can already reset that password. Tenant tables join `User` only through
+    optional relations (recorder, author, actor), so a login a school cannot see reads as
+    no name rather than an error.
+
+  **Applying it:** the policies exist where `npm run db:rls` has been run. Merging does
+  not change production; `audit:rls` (daily, and on every push to main) now expects them
+  and stays red until `apply-rls.mjs` has been run against production — the ordering
+  working, not a failure.
 - **Foreign-reference constraints ignore row security.** A school can insert a
   row pointing at another school's id and Postgres accepts it. The row cannot be
   read back through a join, so the harm is untidy data and a way to learn that an
@@ -369,8 +400,8 @@ Supabase dialog (not anything in this repo) turned up that `anon` and
 publishable anon key — held DELETE, INSERT, SELECT, TRUNCATE and UPDATE on every
 table in `public`, production included. Two things that protection did not cover:
 
-- **`User` and `Session` carry no `schoolId`**, so they were never in the set the
-  audit checks. `INSERT` on `Session` is account takeover: the app authenticates
+- **`User` and `Session` carry no `schoolId`** (`User` has an optional one, but the
+  audit skipped both), so they were never in the set it checks — they are now. `INSERT` on `Session` is account takeover: the app authenticates
   by looking up `sha256(cookie)` there, so a row with a chosen `tokenHash` and any
   `userId` signs you in as that person, no password involved.
 - **TRUNCATE is not subject to row security.** Policies govern
@@ -1117,8 +1148,8 @@ suite exercise the flow without texting anyone or calling Arkesel from CI.
 ⚠️ **`PasswordReset` carries no `schoolId`.** The flow runs before anyone is
 signed in, so there is no tenant context to scope by — and since the guard in
 prisma.ts, a tenant-scoped query without one is refused outright. It sits outside
-RLS exactly as `Session` and `User` do, so the prod-rls tenant count stays 41.
-Every query in `password-reset.ts` goes through `withBypass` for the same reason.
+RLS (there is no school to scope it by), and every query in `password-reset.ts` goes
+through `withBypass` for the same reason.
 
 ## The SMS gateway
 
