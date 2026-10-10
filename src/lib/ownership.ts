@@ -52,3 +52,29 @@ export async function ownsSheet(
     (await ownsAll([subjectId], (ids) => prisma.subject.count({ where: { id: { in: ids } } })))
   );
 }
+
+/*
+ * One helper per table, each an explicit lambda. A generic helper taking a Prisma
+ * delegate is not used: the extended client's delegates do not share a callable
+ * `count` signature, and the variance errors it produces are unreadable.
+ */
+export const ownsClasses = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.classGroup.count({ where: { id: { in: wanted } } }));
+
+export const ownsHouses = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.house.count({ where: { id: { in: wanted } } }));
+
+export const ownsProgrammes = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.programme.count({ where: { id: { in: wanted } } }));
+
+export const ownsStudents = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.student.count({ where: { id: { in: wanted } } }));
+
+export const ownsGuardians = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.guardian.count({ where: { id: { in: wanted } } }));
+
+export const ownsStaff = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.staff.count({ where: { id: { in: wanted } } }));
+
+export const ownsSubjects = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.subject.count({ where: { id: { in: wanted } } }));

@@ -1132,7 +1132,23 @@ async function withForeignSchool(run) {
     const expenseCategory = await db(() =>
       prisma.expenseCategory.create({ data: { schoolId, name: "Probe spend", code: "ZZSPEND" } }),
     );
-    return await run({ term, classGroup, subject, asset, income, expense, feeCategory, expenseCategory });
+    const house = await db(() => prisma.house.create({ data: { schoolId, name: "Probe House" } }));
+    const programme = await db(() => prisma.programme.create({ data: { schoolId, name: "Probe Programme", code: "ZZPRG" } }));
+    const student = await db(() =>
+      prisma.student.create({
+        data: { schoolId, admissionNo: "ZZ-0001", firstName: "Probe", lastName: "Pupil", gender: "MALE" },
+      }),
+    );
+    const guardian = await db(() =>
+      prisma.guardian.create({ data: { schoolId, firstName: "Probe", lastName: "Guardian", phone: "0200000000" } }),
+    );
+    const staff = await db(() =>
+      prisma.staff.create({ data: { schoolId, staffNo: "ZZ-S-0001", firstName: "Probe", lastName: "Teacher", gender: "FEMALE" } }),
+    );
+    return await run({
+      term, classGroup, subject, asset, income, expense, feeCategory, expenseCategory,
+      house, programme, student, guardian, staff,
+    });
   } finally {
     await remove();
   }
@@ -1288,7 +1304,158 @@ async function foreignIdGuards(cookie) {
       check("an assessment on another school's term, class and subject is refused", says(forged.html, "was not found"), alerts(forged.html)[0]);
       check("and nothing was written", (await touching()) === 0);
     }
+
+    await peopleGuards(cookie, schoolId, foreign, myClass, offered);
   });
+}
+
+/**
+ * Pupils, guardians and staff: the class, house, programme and person ids a
+ * form names must all belong to the school. Each refusal is paired with a
+ * control that the same post is accepted with this school's own ids, so a
+ * dropped request cannot pass as a refusal.
+ */
+/** A forged post. Unfixed, the action throws and the page answers 500; that is a failed check, not a crash. */
+const refusalOf = (cookie) => (path, form, overrides) => postForm(path, form, overrides, cookie, 1).catch(() => ({ html: "" }));
+
+async function peopleGuards(cookie, schoolId, foreign, myClass, offered) {
+  console.log("\nPeople from another school");
+  const refusal = refusalOf(cookie);
+  const own = await db(() => prisma.student.findFirst({ where: { schoolId, deletedAt: null }, orderBy: { createdAt: "asc" } }));
+  if (!own || !myClass) {
+    console.log("  --   this school has no pupil or class to post from, skipping");
+    return;
+  }
+
+  // ---- Enrolling a pupil ---------------------------------------------------
+  const studentPage = `/students/${own.id}`;
+  const page = await fetchPage(studentPage, cookie);
+  const enrolForm = forms(page.html).find((f) => f.fields.some((x) => x.name === "classGroupId") && f.fields.some((x) => x.name === "studentId"));
+  const placedIn = () => db(() => prisma.student.findUnique({ where: { id: own.id }, select: { currentClassGroupId: true } }).then((r) => r?.currentClassGroupId ?? null));
+  if (!enrolForm) {
+    console.log("  --   no enrol form on the pupil page, skipping");
+  } else if (!own.currentClassGroupId) {
+    console.log("  --   the pupil has no class to restore afterwards, skipping the enrol checks");
+  } else {
+    const before = await placedIn();
+    const okClass = await postForm(studentPage, enrolForm, { classGroupId: before }, cookie);
+    check("control: enrolling a pupil in this school's own class is accepted", says(okClass.html, "Placed in class") || alerts(okClass.html).length === 0, alerts(okClass.html)[0]);
+    const badClass = await refusal(studentPage, enrolForm, { classGroupId: foreign.classGroup.id });
+    check("a class from another school is refused at enrolment", says(badClass.html, "class was not found"), alerts(badClass.html)[0]);
+    const badStudent = await refusal(studentPage, enrolForm, { studentId: foreign.student.id, classGroupId: before });
+    check("another school's pupil cannot be enrolled", says(badStudent.html, "student was not found"), alerts(badStudent.html)[0]);
+    check(
+      "and no enrolment points at the other school",
+      (await placedIn()) === before &&
+        (await db(() => prisma.enrollment.count({ where: { OR: [{ classGroupId: foreign.classGroup.id }, { studentId: foreign.student.id }] } }))) === 0,
+    );
+  }
+
+  // ---- Editing a pupil's house and programme ------------------------------
+  const editForm = forms(page.html).find((f) => f.fields.some((x) => x.name === "houseId") && f.fields.some((x) => x.name === "id"));
+  if (!editForm) {
+    console.log("  --   no edit form on the pupil page, skipping");
+  } else {
+    const snapshot = await db(() => prisma.student.findUnique({ where: { id: own.id }, select: { houseId: true, programmeId: true } }));
+    try {
+      const same = await postForm(studentPage, editForm, {}, cookie);
+      check("control: saving a pupil with this school's own values is accepted", says(same.html, "Saved"), alerts(same.html)[0]);
+      const house = await refusal(studentPage, editForm, { houseId: foreign.house.id });
+      check("another school's house is refused", says(house.html, "house was not found"), alerts(house.html)[0]);
+      const programme = await refusal(studentPage, editForm, { programmeId: foreign.programme.id });
+      check("another school's programme is refused", says(programme.html, "programme was not found"), alerts(programme.html)[0]);
+      const stranger = await refusal(studentPage, editForm, { id: foreign.student.id, firstName: "Overwritten" });
+      check("another school's pupil cannot be edited", says(stranger.html, "student was not found"), alerts(stranger.html)[0]);
+      const after = await db(() => prisma.student.findUnique({ where: { id: own.id }, select: { houseId: true, programmeId: true } }));
+      const theirs = await db(() => prisma.student.findUnique({ where: { id: foreign.student.id } }));
+      check("and nothing was written", after?.houseId === snapshot?.houseId && after?.programmeId === snapshot?.programmeId && theirs?.firstName === "Probe");
+    } finally {
+      await db(() => prisma.student.update({ where: { id: own.id }, data: snapshot ?? {} }));
+    }
+  }
+  console.log("  --   the admit form is behind a click, so the admission checks are not driven from here");
+
+  // ---- Linking a guardian ---------------------------------------------------
+  const link = await db(() => prisma.studentGuardian.findFirst({ where: { schoolId }, orderBy: { createdAt: "asc" } }));
+  if (!link) {
+    console.log("  --   no guardian link to use as a control, skipping the link checks");
+  } else {
+    const guardianPage = `/guardians/${link.guardianId}`;
+    const gpage = await fetchPage(guardianPage, cookie);
+    const linkForm = forms(gpage.html).find((f) => f.fields.some((x) => x.name === "studentId") && f.fields.some((x) => x.name === "guardianId"));
+    if (!linkForm) {
+      console.log("  --   no link form on the guardian page, skipping");
+    } else {
+      const primaries = () => db(() => prisma.studentGuardian.findMany({ where: { studentId: link.studentId }, select: { id: true, isPrimary: true }, orderBy: { id: "asc" } }));
+      const wasPrimary = await primaries();
+      try {
+        const okLink = await postForm(guardianPage, linkForm, { studentId: link.studentId, relationship: link.relationship, ...(link.isPrimary ? { isPrimary: "on" } : {}) }, cookie);
+        check("control: linking this school's own pupil and guardian is accepted", says(okLink.html, "Linked"), alerts(okLink.html)[0]);
+        const badStudent = await refusal(guardianPage, linkForm, { studentId: foreign.student.id, isPrimary: "on" });
+        check("another school's pupil cannot be linked", says(badStudent.html, "student was not found"), alerts(badStudent.html)[0]);
+        const badGuardian = await refusal(guardianPage, linkForm, { guardianId: foreign.guardian.id, studentId: link.studentId, isPrimary: "on" });
+        check("another school's guardian cannot be linked", says(badGuardian.html, "guardian was not found"), alerts(badGuardian.html)[0]);
+        const now = await primaries();
+        check(
+          "and the pupil's primary guardian was not demoted",
+          JSON.stringify(now) === JSON.stringify(wasPrimary) &&
+            (await db(() => prisma.studentGuardian.count({ where: { OR: [{ studentId: foreign.student.id }, { guardianId: foreign.guardian.id }] } }))) === 0,
+        );
+      } finally {
+        for (const row of wasPrimary) {
+          await db(() => prisma.studentGuardian.update({ where: { id: row.id }, data: { isPrimary: row.isPrimary } }));
+        }
+        await db(() =>
+          prisma.studentGuardian.update({
+            where: { id: link.id },
+            data: {
+              relationship: link.relationship,
+              receivesBills: link.receivesBills,
+              receivesReports: link.receivesReports,
+              isEmergencyContact: link.isEmergencyContact,
+            },
+          }),
+        );
+      }
+    }
+  }
+
+  // ---- Teaching assignments ---------------------------------------------------
+  const staff = await db(() => prisma.staff.findFirst({ where: { schoolId }, orderBy: { createdAt: "asc" } }));
+  if (!staff || !offered) {
+    console.log("  --   no staff member or offered subject, skipping the assignment checks");
+  } else {
+    const staffPage = `/staff/${staff.id}`;
+    const spage = await fetchPage(staffPage, cookie);
+    const form = forms(spage.html).find((f) => f.fields.some((x) => x.name === "subjectId") && f.fields.some((x) => x.name === "staffId"));
+    const year = await db(() => prisma.academicYear.findFirst({ where: { schoolId, isCurrent: true } }));
+    if (!form || !year) {
+      console.log("  --   no assignment form or current year, skipping");
+    } else {
+      const combo = { academicYearId: year.id, staffId: staff.id, subjectId: offered.subjectId, classGroupId: myClass.id };
+      const existed = (await db(() => prisma.teachingAssignment.count({ where: combo }))) > 0;
+      try {
+        const okAssign = await postForm(staffPage, form, { subjectId: offered.subjectId, classGroupId: myClass.id }, cookie);
+        check("control: an assignment of this school's own staff, subject and class is accepted", (await db(() => prisma.teachingAssignment.count({ where: combo }))) === 1, alerts(okAssign.html)[0]);
+        const results = [];
+        for (const override of [
+          { staffId: foreign.staff.id },
+          { subjectId: foreign.subject.id },
+          { classGroupId: foreign.classGroup.id },
+        ]) {
+          const forged = await refusal(staffPage, form, { subjectId: offered.subjectId, classGroupId: myClass.id, ...override });
+          results.push(says(forged.html, "was not found"));
+        }
+        check("an assignment naming another school's staff, subject or class is refused", results.every(Boolean), results.map((r) => (r ? "refused" : "ACCEPTED")).join(", "));
+        check(
+          "and none was written against them",
+          (await db(() => prisma.teachingAssignment.count({ where: { OR: [{ staffId: foreign.staff.id }, { subjectId: foreign.subject.id }, { classGroupId: foreign.classGroup.id }] } }))) === 0,
+        );
+      } finally {
+        if (!existed) await db(() => prisma.teachingAssignment.deleteMany({ where: combo }));
+      }
+    }
+  }
 }
 
 async function main() {

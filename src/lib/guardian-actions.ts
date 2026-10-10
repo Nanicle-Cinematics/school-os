@@ -8,6 +8,7 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { normalisePhone } from "@/lib/sms-shared";
+import { ownsGuardians, ownsStudents } from "@/lib/ownership";
 import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
 
@@ -101,6 +102,16 @@ export async function linkStudent(
   }
   if (!RELATIONSHIPS.includes(relationship)) {
     return { error: "Pick a relationship." };
+  }
+
+  // Both ids came from the form. This runs before the transaction because the
+  // demotion below would otherwise strip the real primary guardian from an own
+  // pupil on the strength of a guardian that is not ours.
+  if (!(await ownsStudents([studentId]))) {
+    return { error: "That student was not found in this school." };
+  }
+  if (!(await ownsGuardians([guardianId]))) {
+    return { error: "That guardian was not found in this school." };
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {

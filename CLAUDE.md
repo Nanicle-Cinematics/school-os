@@ -219,11 +219,13 @@ been subverted, and "enforcement is LIVE" should not be read as one:
   an audit found sixteen actions that did not. `ownsAll` and `ownsSheet` in
   `src/lib/ownership.ts` are the read. The ledger mappings (`saveCoreAccounts`,
   `setFeeCategoryAccount`, `setExpenseCategoryAccount`) and the assessment entry
-  points (`createAssessment`, `openSheet`) use them, and `verify:actions` posts
-  another school's real ids to each. **Still unfixed**, to be struck off as each
-  lands: admitting, editing and enrolling pupils (class, house, programme),
-  linking a guardian, `addTeachingAssignment`; `recordExpense`, `recordVendorBill`
-  and `setBudget`; `saveSubjectLevels`; a campaign's `templateId`; and the default
+  points (`createAssessment`, `openSheet`) use them, as do admitting, editing and enrolling
+  pupils (class, house, programme), `linkStudent` and `addTeachingAssignment`
+  (`ownsClasses`, `ownsHouses`, `ownsStudents` and the other per-table helpers in
+  `ownership.ts`), and `verify:actions` posts another school's real ids to each.
+  The admit form renders only after a click, so its check is not driven over HTTP;
+  it shares `foreignPlacement` with the edit form, which is. **Still unfixed**, to be struck off as each
+  lands: `recordExpense`, `recordVendorBill` and `setBudget`; `saveSubjectLevels`; a campaign's `templateId`; and the default
   grading scale in Settings. A failure that is only a server error (an update by a
   posted id that row security hides, so Prisma throws P2025) writes nothing and
   is a lower priority.

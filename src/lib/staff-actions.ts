@@ -11,6 +11,7 @@ import { writeAudit } from "@/lib/audit";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
 import { nextNumber } from "@/lib/sequences";
 import { normalisePhone } from "@/lib/sms-shared";
+import { ownsClasses, ownsStaff, ownsSubjects } from "@/lib/ownership";
 
 export type StaffState = { error?: string; ok?: string };
 
@@ -116,6 +117,13 @@ export async function addTeachingAssignment(
 
   if (!staffId || !subjectId || !classGroupId) {
     return { error: "Pick both a subject and a class." };
+  }
+
+  if (!(await ownsStaff([staffId]))) {
+    return { error: "That staff member was not found in this school." };
+  }
+  if (!(await ownsSubjects([subjectId])) || !(await ownsClasses([classGroupId]))) {
+    return { error: "That subject or class was not found in this school. Reload the page and try again." };
   }
 
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
