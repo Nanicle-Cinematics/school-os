@@ -1080,6 +1080,33 @@ every session; the admin signs in with their password and enrols again.
 Tests: `npm run verify:totp` (RFC 6238 vectors, replay, window, encryption, recovery hashing; no
 database; runs in CI).
 
+⚠️ **A platform admin on a TEMPORARY password chooses their own before anything else
+(2026-10-10).** `make:admin` prints the password to a terminal and says it "must be changed
+at the first sign-in", but the divert that keeps that promise lives in the `(app)` and
+`(portal)` layouts and `/admin` is in neither, so a flagged admin went straight on to enrol an
+authenticator and the temporary password stayed in force. `requirePlatformAdminSession` now
+sends a flagged login to `/admin/password`, which covers every console page and every
+console action (enrolment included). `/account/password` cannot serve this account: it needs
+a school, and a platform admin belongs to none, so the console has a page and an action of its
+own (`changePlatformPassword`, which requires the current password, shares the small attempt
+allowance the second factor uses, and signs the other sessions out). The page and the action
+use `requirePlatformAdminUser`, the gate WITHOUT the divert; gating them on the divert would
+loop.
+
+⚠️ **A school cannot reset a platform admin's password.** A platform admin can hold a seat at
+a school, and `resetUserPassword` only asked whether the account had access there, so that
+school's owner could set the password of the account that opens the console and was shown it.
+Account creation already refused these accounts; the reset does now too. Suspending or
+removing the seat is unchanged: it only affects the seat, though it also ends that admin's
+sessions that have no school chosen.
+
+**STILL OPEN: the window before first enrolment.** Until a platform admin has an authenticator,
+the password alone reaches the setup page and a session can attach an authenticator of its
+own, which both opens the console and locks the real admin out (reproduced on 2026-10-10 against
+the development database). The two changes above narrow it and do not close it. Closing it
+needs something the password does not carry: a one-time enrolment code issued by `make:admin`
+and required by `confirmSetup`. Not built; it needs a migration.
+
 ## The subscription is MONTHLY
 
 `paidUntil` is the date a school is paid to, and **ACTIVE means "paid up to that

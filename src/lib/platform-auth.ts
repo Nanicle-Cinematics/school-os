@@ -11,12 +11,12 @@ export type PlatformContext = {
 };
 
 /**
- * A platform admin's session, BEFORE the second factor has been checked.
- *
- * Only the two pages that deal with the second factor (/admin/security and
- * /admin/verify) use this; everything else goes through `requirePlatformAdmin`.
+ * The signed-in platform admin, with NO other condition. Only the page that
+ * replaces a temporary password (and its action) use this, because they are where
+ * the divert below ends: sending a flagged admin to a page that sent them back
+ * would loop.
  */
-export async function requirePlatformAdminSession() {
+export async function requirePlatformAdminUser() {
   const result = await getSessionUser();
   if (!result) {
     redirect("/login");
@@ -37,6 +37,28 @@ export async function requirePlatformAdminSession() {
   }
 
   return { user, session };
+}
+
+/**
+ * A platform admin's session, BEFORE the second factor has been checked.
+ *
+ * Only the two pages that deal with the second factor (/admin/security and
+ * /admin/verify) use this; everything else goes through `requirePlatformAdmin`.
+ *
+ * ⚠️ A login still on its TEMPORARY password is sent to choose its own first.
+ * `make:admin` prints that password to a terminal and promises it "must be changed
+ * at the first sign-in", but the divert that keeps that promise lives in the
+ * (app) and (portal) layouts, and /admin is in neither: a flagged admin went
+ * straight on to enrol an authenticator, and the temporary password stayed in
+ * force. `/account/password` cannot serve them either, because it needs a school
+ * and a platform admin belongs to none — hence a page of their own.
+ */
+export async function requirePlatformAdminSession() {
+  const found = await requirePlatformAdminUser();
+  if (found.user.mustChangePassword) {
+    redirect("/admin/password");
+  }
+  return found;
 }
 
 /**
