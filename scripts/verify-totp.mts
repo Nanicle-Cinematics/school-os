@@ -52,7 +52,10 @@ const sealed = encryptSecret(secret);
 check("round trips", decryptSecret(sealed).equals(secret));
 check("the stored text does not contain the secret", !sealed.includes(base32Encode(secret)) && !sealed.includes(secret.toString("base64url")));
 check("two encryptions of one secret differ (random IV)", encryptSecret(secret) !== sealed);
-check("tampering is detected", (() => { const p = sealed.split("."); p[3] = Buffer.from("x" + Buffer.from(p[3], "base64url").toString("latin1").slice(1), "latin1").toString("base64url"); try { decryptSecret(p.join(".")); return false; } catch { return true; } })());
+// ⚠️ The first version overwrote the first ciphertext byte with "x", which is a no-op
+// one time in 256 (the byte already was "x"), so the "tampered" value decrypted fine and
+// CI failed on a PR that never touched this code. Flipping a bit always changes the byte.
+check("tampering is detected", (() => { const p = sealed.split("."); const bytes = Buffer.from(p[3], "base64url"); bytes[0] ^= 0x01; p[3] = bytes.toString("base64url"); try { decryptSecret(p.join(".")); return false; } catch { return true; } })());
 const goodKey = process.env.TOTP_ENCRYPTION_KEY;
 process.env.TOTP_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString("base64");
 check("a different key cannot read it", (() => { try { decryptSecret(sealed); return false; } catch { return true; } })());
