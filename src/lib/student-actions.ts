@@ -12,6 +12,7 @@ import { nextNumber, takenProbes } from "@/lib/sequences";
 import { writeAudit } from "@/lib/audit";
 import { sameGuardian } from "@/lib/guardian-match";
 import { normalisePhone } from "@/lib/sms-shared";
+import { ownsClasses, ownsHouses, ownsProgrammes, ownsStudents } from "@/lib/ownership";
 
 function mismatchMessage(phone: string, onFile: string) {
   return (
@@ -118,6 +119,23 @@ function validateProfile(profile: ReturnType<typeof readProfile>): string | null
   return null;
 }
 
+/** The class, house and programme a form names must all be this school's own. */
+async function foreignPlacement(
+  profile: { houseId: string | null; programmeId: string | null },
+  classGroupId?: string,
+): Promise<string | null> {
+  if (!(await ownsClasses([classGroupId]))) {
+    return "That class was not found in this school. Reload the page and try again.";
+  }
+  if (!(await ownsHouses([profile.houseId]))) {
+    return "That house was not found in this school. Reload the page and try again.";
+  }
+  if (!(await ownsProgrammes([profile.programmeId]))) {
+    return "That programme was not found in this school. Reload the page and try again.";
+  }
+  return null;
+}
+
 export async function admitStudent(
   _prev: StudentState,
   formData: FormData,
@@ -140,6 +158,14 @@ export async function admitStudent(
   const { guardian, error: guardianError } = readGuardian(formData);
   if (guardianError) {
     return { error: guardianError };
+  }
+
+  // Ids from the form, read back before anything is written: a foreign-reference
+  // constraint ignores row security, so another school's class, house or
+  // programme would be accepted and the pupil would point at it.
+  const placement = await foreignPlacement(profile, classGroupId);
+  if (placement) {
+    return { error: placement };
   }
 
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
@@ -411,6 +437,14 @@ export async function saveStudent(_prev: StudentState, formData: FormData): Prom
     return { error: "Pick a status." };
   }
 
+  if (!(await ownsStudents([id]))) {
+    return { error: "That student was not found in this school." };
+  }
+  const placement = await foreignPlacement(profile);
+  if (placement) {
+    return { error: placement };
+  }
+
   await prisma.student.update({
     where: { id },
     data: {
@@ -444,6 +478,13 @@ export async function enrolStudent(
   const classGroupId = String(formData.get("classGroupId") ?? "");
   if (!studentId || !classGroupId) {
     return { error: "Pick a class." };
+  }
+
+  if (!(await ownsStudents([studentId]))) {
+    return { error: "That student was not found in this school." };
+  }
+  if (!(await ownsClasses([classGroupId]))) {
+    return { error: "That class was not found in this school. Reload the page and try again." };
   }
 
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
