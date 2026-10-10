@@ -1,5 +1,6 @@
 "use server";
 
+import { ownsSubjects } from "@/lib/ownership";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
@@ -82,6 +83,12 @@ export async function saveSubjectLevels(
   const subjectId = String(formData.get("subjectId") ?? "");
   if (!subjectId) {
     return { error: "Missing subject." };
+  }
+  // The levels below are read through the tenant client, so only this id can
+  // point elsewhere: a LevelSubject row naming another school's subject is
+  // accepted by the foreign key and the other school never sees it.
+  if (!(await ownsSubjects([subjectId]))) {
+    return { error: "That subject was not found in this school." };
   }
 
   const offered = formData.getAll("offered").map(String);

@@ -229,9 +229,9 @@ been subverted, and "enforcement is LIVE" should not be read as one:
   (`ownsExpenseCategories`, `ownsTerms`); the budget panel is on the page, but the
   expense and bill forms open on a click, so their checks skip unless
   `useState(false)` in `expense-form.tsx` and `bill-form.tsx` is flipped to `true`
-  for the run. **Still unfixed**, to be struck off as each lands:
-  `saveSubjectLevels`; a campaign's `templateId`; and the default grading scale in
-  Settings. A failure that is only a server error (an update by a
+  for the run. `saveSubjectLevels` checks its subject (`ownsSubjects`). **Still
+  unfixed**, to be struck off as each lands: a campaign's `templateId`; and the
+  default grading scale in Settings. A failure that is only a server error (an update by a
   posted id that row security hides, so Prisma throws P2025) writes nothing and
   is a lower priority.
 

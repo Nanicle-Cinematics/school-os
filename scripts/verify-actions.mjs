@@ -1307,7 +1307,34 @@ async function foreignIdGuards(cookie) {
 
     await peopleGuards(cookie, schoolId, foreign, myClass, offered);
     await financeGuards(cookie, schoolId, foreign);
+    await subjectGuards(cookie, schoolId, foreign);
   });
+}
+
+/** The levels form for a subject: the subject id it posts must be this school's own. */
+async function subjectGuards(cookie, schoolId, foreign) {
+  console.log("\nSubject levels");
+  const refusal = refusalOf(cookie);
+  const offering = await db(() => prisma.levelSubject.findFirst({ where: { schoolId } }));
+  if (!offering) {
+    console.log("  --   no subject is offered at any level here, skipping");
+    return;
+  }
+  const path = `/subjects/${offering.subjectId}`;
+  const page = await fetchPage(path, cookie);
+  const form = forms(page.html).find((f) => f.fields.some((x) => x.name === "offered"));
+  if (!form) {
+    console.log("  --   no levels form on the subject page, skipping");
+    return;
+  }
+  const ok = await postForm(path, form, {}, cookie);
+  check("control: saving this school's own subject unchanged is accepted", says(ok.html, "Offered at"), alerts(ok.html)[0]);
+  const forged = await refusal(path, form, { subjectId: foreign.subject.id });
+  check("another school's subject is refused", says(forged.html, "subject was not found"), alerts(forged.html)[0]);
+  check(
+    "and no level offers it",
+    (await db(() => prisma.levelSubject.count({ where: { subjectId: foreign.subject.id } }))) === 0,
+  );
 }
 
 /**
