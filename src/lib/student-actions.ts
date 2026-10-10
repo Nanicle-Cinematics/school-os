@@ -8,6 +8,7 @@ import { admissionBlocked } from "@/lib/capacity";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
+import { ownsClassGroups, ownsHouses, ownsProgrammes, ownsStudents } from "@/lib/ownership";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import { writeAudit } from "@/lib/audit";
 import { sameGuardian } from "@/lib/guardian-match";
@@ -118,6 +119,21 @@ function validateProfile(profile: ReturnType<typeof readProfile>): string | null
   return null;
 }
 
+/**
+ * Are the class, house and programme a form carried all this school's own?
+ * Not exported: every export of a "use server" module is a callable endpoint.
+ */
+async function ownsPlacement(
+  profile: { houseId: string | null; programmeId: string | null },
+  classGroupId: string,
+): Promise<boolean> {
+  return (
+    (await ownsClassGroups([classGroupId])) &&
+    (await ownsHouses([profile.houseId])) &&
+    (await ownsProgrammes([profile.programmeId]))
+  );
+}
+
 export async function admitStudent(
   _prev: StudentState,
   formData: FormData,
@@ -140,6 +156,10 @@ export async function admitStudent(
   const { guardian, error: guardianError } = readGuardian(formData);
   if (guardianError) {
     return { error: guardianError };
+  }
+
+  if (!(await ownsPlacement(profile, classGroupId))) {
+    return { error: "That class, house or programme was not found." };
   }
 
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
@@ -287,6 +307,9 @@ export async function addGuardianToStudent(
   if (!studentId) {
     return { error: "Missing student." };
   }
+  if (!(await ownsStudents([studentId]))) {
+    return { error: "That student was not found." };
+  }
   if (!name) {
     return { error: "Give the guardian a name." };
   }
@@ -411,6 +434,10 @@ export async function saveStudent(_prev: StudentState, formData: FormData): Prom
     return { error: "Pick a status." };
   }
 
+  if (!(await ownsPlacement(profile, "")) || !(await ownsStudents([id]))) {
+    return { error: "That student, house or programme was not found." };
+  }
+
   await prisma.student.update({
     where: { id },
     data: {
@@ -444,6 +471,9 @@ export async function enrolStudent(
   const classGroupId = String(formData.get("classGroupId") ?? "");
   if (!studentId || !classGroupId) {
     return { error: "Pick a class." };
+  }
+  if (!(await ownsStudents([studentId])) || !(await ownsClassGroups([classGroupId]))) {
+    return { error: "That student or class was not found." };
   }
 
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });

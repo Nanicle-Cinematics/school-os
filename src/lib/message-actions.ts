@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
+import { ownsMessageTemplates } from "@/lib/ownership";
 import { resolveAudience, type AudienceFilter } from "@/lib/message-data";
 import { renderTemplate, countSegments, estimateCost, sendSms, pupilFieldsUsed, RATE_PER_SEGMENT } from "@/lib/sms";
 import { writeAudit } from "@/lib/audit";
@@ -158,6 +159,9 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
   }
   if (!confirmed) {
     return { error: "Tick the confirmation box before sending." };
+  }
+  if (!(await ownsMessageTemplates([templateId]))) {
+    return { error: "That template was not found." };
   }
 
   const filter = readFilter(formData);

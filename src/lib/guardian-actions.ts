@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
+import { ownsGuardians, ownsStudents } from "@/lib/ownership";
 import { normalisePhone } from "@/lib/sms-shared";
 import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
@@ -101,6 +102,9 @@ export async function linkStudent(
   }
   if (!RELATIONSHIPS.includes(relationship)) {
     return { error: "Pick a relationship." };
+  }
+  if (!(await ownsGuardians([guardianId])) || !(await ownsStudents([studentId]))) {
+    return { error: "That guardian or student was not found." };
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {

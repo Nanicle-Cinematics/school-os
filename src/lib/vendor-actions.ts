@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { LEADERSHIP, FINANCE } from "@/lib/permissions";
 import { setTenantContext } from "@/lib/tenant-context";
 import { prisma, tenantTransaction } from "@/lib/prisma";
+import { ownsExpenseCategories } from "@/lib/ownership";
 import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import { allocateFifoBills, recalcVendorBill } from "@/lib/bill-engine";
@@ -106,6 +107,9 @@ export async function recordVendorBill(
   const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { isActive: true } });
   if (!vendor?.isActive) {
     return { error: "Choose an active vendor." };
+  }
+  if (!(await ownsExpenseCategories([categoryId]))) {
+    return { error: "That heading was not found." };
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {

@@ -7,6 +7,7 @@ import { parseAmount } from "@/lib/money";
 import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE, LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
+import { ownsGradingScales } from "@/lib/ownership";
 import { writeAudit } from "@/lib/audit";
 import { Prisma } from "@prisma/client";
 import { sendSms, normalisePhone, countSegments, RATE_PER_SEGMENT } from "@/lib/sms";
@@ -100,6 +101,10 @@ export async function saveAcademicPolicy(
   }
   if (!Number.isFinite(promotionPassPercent) || promotionPassPercent < 0 || promotionPassPercent > 100) {
     return { error: "The pass mark is a percentage between 0 and 100." };
+  }
+
+  if (!(await ownsGradingScales([defaultGradingScaleId]))) {
+    return { error: "That grading scale was not found." };
   }
 
   const data = {

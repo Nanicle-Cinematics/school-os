@@ -52,3 +52,33 @@ export async function ownsSheet(
     (await ownsAll([subjectId], (ids) => prisma.subject.count({ where: { id: { in: ids } } })))
   );
 }
+
+/**
+ * One-line reads for the ids a form can carry. Each answers "are all of these
+ * this school's own?", ignores null and empty ids, and goes through the tenant
+ * client, so another school's row reads as absent.
+ */
+type Ids = ReadonlyArray<string | null | undefined>;
+
+export const ownsClassGroups = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.classGroup.count({ where: { id: { in: wanted } } }));
+export const ownsStudents = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.student.count({ where: { id: { in: wanted } } }));
+export const ownsGuardians = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.guardian.count({ where: { id: { in: wanted } } }));
+export const ownsStaff = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.staff.count({ where: { id: { in: wanted } } }));
+export const ownsSubjects = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.subject.count({ where: { id: { in: wanted } } }));
+export const ownsTerms = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.term.count({ where: { id: { in: wanted } } }));
+export const ownsHouses = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.house.count({ where: { id: { in: wanted } } }));
+export const ownsProgrammes = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.programme.count({ where: { id: { in: wanted } } }));
+export const ownsExpenseCategories = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.expenseCategory.count({ where: { id: { in: wanted } } }));
+export const ownsMessageTemplates = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.messageTemplate.count({ where: { id: { in: wanted } } }));
+export const ownsGradingScales = (ids: Ids) =>
+  ownsAll(ids, (wanted) => prisma.gradingScale.count({ where: { id: { in: wanted } } }));

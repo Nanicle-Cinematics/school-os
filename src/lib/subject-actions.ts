@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
+import { ownsSubjects } from "@/lib/ownership";
 import { writeAudit } from "@/lib/audit";
 
 export type SubjectState = { error?: string; ok?: string };
@@ -82,6 +83,9 @@ export async function saveSubjectLevels(
   const subjectId = String(formData.get("subjectId") ?? "");
   if (!subjectId) {
     return { error: "Missing subject." };
+  }
+  if (!(await ownsSubjects([subjectId]))) {
+    return { error: "That subject was not found." };
   }
 
   const offered = formData.getAll("offered").map(String);

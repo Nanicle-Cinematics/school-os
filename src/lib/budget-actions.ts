@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { LEADERSHIP } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
+import { ownsExpenseCategories, ownsTerms } from "@/lib/ownership";
 import { parseAmount } from "@/lib/money";
 import { writeAudit } from "@/lib/audit";
 
@@ -29,6 +30,9 @@ export async function setBudget(_prev: BudgetState, formData: FormData): Promise
   const categoryId = String(formData.get("categoryId") ?? "");
   if (!termId || !categoryId) {
     return { error: "Pick a term and a heading." };
+  }
+  if (!(await ownsTerms([termId])) || !(await ownsExpenseCategories([categoryId]))) {
+    return { error: "That term or heading was not found." };
   }
 
   const raw = String(formData.get("amount") ?? "").trim();

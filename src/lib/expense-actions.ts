@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE, LEADERSHIP, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
+import { ownsExpenseCategories, ownsTerms } from "@/lib/ownership";
 import { parseAmount } from "@/lib/money";
 import { nextNumber, takenProbes } from "@/lib/sequences";
 import {
@@ -94,6 +95,9 @@ export async function recordExpense(
   }
   if (!METHODS.includes(method)) {
     return { error: "Choose how the money was paid out." };
+  }
+  if (!(await ownsExpenseCategories([categoryId])) || !(await ownsTerms([termId]))) {
+    return { error: "That heading or term was not found." };
   }
   let spentAt = new Date();
   if (spentAtRaw) {

@@ -9,6 +9,7 @@ import { LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { PRIVILEGED_ROLES, countOwners } from "@/lib/user-data";
 import { writeAudit } from "@/lib/audit";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
+import { ownsClassGroups, ownsStaff, ownsSubjects } from "@/lib/ownership";
 import { nextNumber } from "@/lib/sequences";
 import { normalisePhone } from "@/lib/sms-shared";
 
@@ -116,6 +117,13 @@ export async function addTeachingAssignment(
 
   if (!staffId || !subjectId || !classGroupId) {
     return { error: "Pick both a subject and a class." };
+  }
+  if (
+    !(await ownsStaff([staffId])) ||
+    !(await ownsSubjects([subjectId])) ||
+    !(await ownsClassGroups([classGroupId]))
+  ) {
+    return { error: "That teacher, subject or class was not found." };
   }
 
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });

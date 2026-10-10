@@ -220,11 +220,17 @@ been subverted, and "enforcement is LIVE" should not be read as one:
   `src/lib/ownership.ts` are the read. The ledger mappings (`saveCoreAccounts`,
   `setFeeCategoryAccount`, `setExpenseCategoryAccount`) and the assessment entry
   points (`createAssessment`, `openSheet`) use them, and `verify:actions` posts
-  another school's real ids to each. **Still unfixed**, to be struck off as each
-  lands: admitting, editing and enrolling pupils (class, house, programme),
-  linking a guardian, `addTeachingAssignment`; `recordExpense`, `recordVendorBill`
-  and `setBudget`; `saveSubjectLevels`; a campaign's `templateId`; and the default
-  grading scale in Settings. A failure that is only a server error (an update by a
+  another school's real ids to each (the grading-band actions and `saveClassGroup`
+  have their own reads). Added 2026-10-10 on the audit's second pass: admitting,
+  editing and enrolling pupils (class, house, programme), `addGuardianToStudent`,
+  linking a guardian, `addTeachingAssignment`, `recordExpense`, `recordVendorBill`,
+  `setBudget`, `saveSubjectLevels`, a campaign's `templateId` and the default grading
+  scale in Settings, all through the one-line readers at the foot of `ownership.ts`.
+  **Not yet driven by `verify:actions`** — those checks still have to be written, and
+  the reads are untested until they are. Audited and left alone because they read the
+  row before writing: `saveFeeStructure`, `createPlan`, `recordPayment`,
+  `saveMockSheet`, `saveRecordedMarks`, `saveEarlierClasses`, the register, `saveRemarks`
+  and the promotion actions. A failure that is only a server error (an update by a
   posted id that row security hides, so Prisma throws P2025) writes nothing and
   is a lower priority.
 
