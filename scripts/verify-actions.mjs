@@ -11,7 +11,9 @@
  *
  * SAFETY: every assertion here is a REFUSAL or a preview. Nothing in this file
  * is expected to write, which is what makes it safe to run against the seeded
- * database as often as you like. If you add a case, keep that property — a
+ * database as often as you like. The one exception is `foreignIdGuards`, which
+ * builds a throw-away second school to point ids at and deletes it again, and
+ * puts back the two ledger mappings its controls change. If you add a case, keep that property — a
  * verification script that mutates is a liability, not a test.
  *
  *   npm run dev            # in another terminal
@@ -1017,6 +1019,237 @@ async function importChecks(cookie) {
 
 // ── Run ─────────────────────────────────────────────────────────────────────
 
+// ── Ids from another school ────────────────────────────────────────────────
+//
+// Row security hides another school's rows from a READ; it does not stop a WRITE
+// that points at one (foreign-reference checks ignore it, and the new row carries
+// the caller's own schoolId). So every action that writes an id taken from a form
+// must read it back first. These checks post another school's real ids to the
+// actions that were found without that read (2026-10-10) and assert a refusal.
+//
+// ⚠️ They need a SECOND school to point at, and CI seeds exactly one. Rather than
+// skip there — which is where the previous version of this check lived, and an
+// assertion that never runs is not one — the fixture is made here: a throw-away
+// school with just the rows an id can point at, deleted again in `finally`. It is
+// the only thing in this file that writes, and it writes to a school nobody uses.
+
+// ⚠️ This script may be pointed at a database that holds real schools, so it
+// deletes only what it made. The slug is random per run and the school is removed
+// BY ID. A run killed half way leaves its school behind, so leftovers are swept
+// at the start — recognised by the prefix AND the exact name together, which no
+// school anyone registered will have. A fixed slug deleted by slug, as the first
+// version did, would remove a real school that happened to be called that.
+const PROBE_NAME = "ZZZ verify:actions foreign-id probe (safe to delete)";
+const PROBE_SLUG_PREFIX = "zzz-verify-foreign-ids-";
+
+async function withForeignSchool(run) {
+  await db(() =>
+    prisma.school.deleteMany({ where: { slug: { startsWith: PROBE_SLUG_PREFIX }, name: PROBE_NAME } }),
+  );
+  const school = await db(() =>
+    prisma.school.create({
+      data: { name: PROBE_NAME, slug: `${PROBE_SLUG_PREFIX}${randomBytes(4).toString("hex")}` },
+    }),
+  );
+  const remove = () => db(() => prisma.school.deleteMany({ where: { id: school.id } }));
+  try {
+    const schoolId = school.id;
+    const year = await db(() =>
+      prisma.academicYear.create({
+        data: { schoolId, name: "2099/2100", startDate: new Date("2099-09-01"), endDate: new Date("2100-07-31") },
+      }),
+    );
+    const term = await db(() =>
+      prisma.term.create({
+        data: {
+          schoolId,
+          academicYearId: year.id,
+          name: "FIRST",
+          sequence: 1,
+          startDate: new Date("2099-09-01"),
+          endDate: new Date("2099-12-15"),
+        },
+      }),
+    );
+    const level = await db(() =>
+      prisma.level.create({ data: { schoolId, name: "Probe Level", code: "ZZ1", stage: "PRIMARY", order: 1 } }),
+    );
+    const classGroup = await db(() => prisma.classGroup.create({ data: { schoolId, levelId: level.id, name: "Probe" } }));
+    const subject = await db(() => prisma.subject.create({ data: { schoolId, name: "Probe Subject", code: "ZZS" } }));
+    const asset = await db(() =>
+      prisma.ledgerAccount.create({ data: { schoolId, code: "9001", name: "Probe cash", type: "ASSET" } }),
+    );
+    const income = await db(() =>
+      prisma.ledgerAccount.create({ data: { schoolId, code: "9002", name: "Probe income", type: "INCOME" } }),
+    );
+    const expense = await db(() =>
+      prisma.ledgerAccount.create({ data: { schoolId, code: "9003", name: "Probe expense", type: "EXPENSE" } }),
+    );
+    const feeCategory = await db(() =>
+      prisma.feeCategory.create({ data: { schoolId, name: "Probe fee", code: "ZZFEE" } }),
+    );
+    const expenseCategory = await db(() =>
+      prisma.expenseCategory.create({ data: { schoolId, name: "Probe spend", code: "ZZSPEND" } }),
+    );
+    return await run({ term, classGroup, subject, asset, income, expense, feeCategory, expenseCategory });
+  } finally {
+    await remove();
+  }
+}
+
+async function foreignIdGuards(cookie) {
+  console.log("\nIds from another school");
+  if (!hasDb) {
+    console.log("  --   no database access from here; these need a second school to point at");
+    return;
+  }
+
+  const session = await db(() =>
+    prisma.session.findFirst({
+      where: { tokenHash: createHash("sha256").update(cookie).digest("hex") },
+      select: { activeSchoolId: true, user: { select: { memberships: { select: { schoolId: true }, take: 1 } } } },
+    }),
+  );
+  const schoolId = session?.activeSchoolId ?? session?.user.memberships[0]?.schoolId;
+  if (!schoolId) {
+    console.log("  --   cannot tell which school the session is in, skipping");
+    return;
+  }
+
+  await withForeignSchool(async (foreign) => {
+    // ---- The ledger mapping: where every later posting lands ---------------
+    const chart = await fetchPage("/chart-of-accounts", cookie);
+    const KEYS = ["cashAccountId", "bankAccountId", "momoAccountId", "receivableAccountId", "payableAccountId"];
+    const coreForm = forms(chart.html).find((f) => f.fields.some((x) => x.name === "cashAccountId"));
+    if (!coreForm) {
+      console.log("  --   no default-postings form on /chart-of-accounts, skipping the ledger checks");
+    } else {
+      const settingsNow = () => db(() => prisma.schoolSettings.findUnique({ where: { schoolId } }));
+      const before = await settingsNow();
+      const current = Object.fromEntries(KEYS.map((key) => [key, before?.[key] ?? ""]));
+
+      try {
+
+      const same = await postForm("/chart-of-accounts", coreForm, current, cookie);
+      check("control: the unchanged default postings are accepted", says(same.html, "Default postings saved"), alerts(same.html)[0]);
+
+      const refused = [];
+      for (const key of KEYS) {
+        const forged = await postForm("/chart-of-accounts", coreForm, { ...current, [key]: foreign.asset.id }, cookie);
+        if (!says(forged.html, "chart of accounts")) refused.push(key);
+      }
+      check("another school's account is refused for every default posting", refused.length === 0, refused.length ? `accepted for ${refused.join(", ")}` : "5 of 5 refused");
+      const after = await settingsNow();
+      check("and the mapping is unchanged", KEYS.every((key) => (after?.[key] ?? null) === (before?.[key] ?? null)));
+      } finally {
+        // Unfixed, the forged posts WRITE a foreign id into columns that have no
+        // foreign key, and deleting the probe school would leave it there for good.
+        if (before) {
+          await db(() => prisma.schoolSettings.update({ where: { schoolId }, data: Object.fromEntries(KEYS.map((key) => [key, before[key] ?? null])) }));
+        }
+      }
+
+      for (const [kind, formKey, categoryKey, column, model, ownType, foreignAccount, foreignCategory] of [
+        ["fee item", "feeCategoryId", "incomeAccountId", "incomeAccountId", "feeCategory", "INCOME", foreign.income, foreign.feeCategory],
+        ["expense heading", "expenseCategoryId", "expenseAccountId", "expenseAccountId", "expenseCategory", "EXPENSE", foreign.expense, foreign.expenseCategory],
+      ]) {
+        const form = forms(chart.html).find((f) => f.fields.some((x) => x.name === formKey));
+        const own = form ? await db(() => prisma[model].findUnique({ where: { id: form.fields.find((x) => x.name === formKey).value } })) : null;
+        if (!form || !own) {
+          console.log(`  --   no ${kind} to map on this page, skipping`);
+          continue;
+        }
+        const alternative = await db(() =>
+          prisma.ledgerAccount.findFirst({ where: { schoolId, type: ownType, id: { not: own[column] ?? "" } } }),
+        );
+        const read = () => db(() => prisma[model].findUnique({ where: { id: own.id } }).then((row) => row?.[column] ?? null));
+        const original = await read();
+
+        try {
+          // These actions answer with nothing, so a refusal cannot be told from a
+          // dropped request by its message. The control changes the mapping to a
+          // real account of this school, proving the post reaches the action,
+          // and the mapping is put back.
+          if (alternative) {
+            await postForm("/chart-of-accounts", form, { [categoryKey]: alternative.id }, cookie);
+            check(`control: a ${kind} can be mapped to this school's own account`, (await read()) === alternative.id);
+            await postForm("/chart-of-accounts", form, { [categoryKey]: original ?? "" }, cookie);
+          } else {
+            console.log(`  --   no second ${ownType.toLowerCase()} account to use as a control for the ${kind}`);
+          }
+          await postForm("/chart-of-accounts", form, { [categoryKey]: foreignAccount.id }, cookie);
+          check(`another school's account is refused for a ${kind}`, (await read()) === original, `${(await read()) ?? "none"}`);
+
+          // Unfixed, this throws inside the action (Prisma P2025: the row is hidden)
+          // and the script's own retries give up; either way the row must survive.
+          await postForm("/chart-of-accounts", form, { [formKey]: foreignCategory.id, [categoryKey]: alternative?.id ?? "" }, cookie, 1).catch(() => null);
+          const theirs = await db(() => prisma[model].findUnique({ where: { id: foreignCategory.id } }));
+          check(`another school's ${kind} cannot be remapped`, (theirs?.[column] ?? null) === null);
+        } finally {
+          await db(() => prisma[model].update({ where: { id: own.id }, data: { [column]: original } }));
+        }
+      }
+    }
+
+    // ---- Assessments: a title claimed on someone else's term ----------------
+    const myClass = await db(() => prisma.classGroup.findFirst({ where: { schoolId }, orderBy: { createdAt: "asc" } }));
+    const offered = myClass
+      ? await db(() => prisma.levelSubject.findFirst({ where: { levelId: myClass.levelId, schoolId } }))
+      : null;
+    const myTerms = await db(() => prisma.term.findMany({ where: { schoolId }, orderBy: { startDate: "asc" } }));
+    let free = null;
+    for (const term of myTerms) {
+      if (myClass && offered && (await db(() => prisma.assessment.count({ where: { termId: term.id, classGroupId: myClass.id, subjectId: offered.subjectId } }))) === 0) {
+        free = term;
+        break;
+      }
+    }
+    const touching = () =>
+      db(() =>
+        prisma.assessment.count({
+          where: { OR: [{ termId: foreign.term.id }, { classGroupId: foreign.classGroup.id }, { subjectId: foreign.subject.id }] },
+        }),
+      );
+
+    if (!free) {
+      console.log("  --   every class, subject and term here already has a sheet open, skipping the open-sheet check");
+    } else {
+      const page = await fetchPage(`/assessments/sheet?term=${free.id}&class=${myClass.id}&subject=${offered.subjectId}`, cookie);
+      const openForm = forms(page.html).find((f) => f.fields.some((x) => x.name === "termId") && f.fields.some((x) => x.name === "subjectId"));
+      if (!openForm) {
+        console.log("  --   no Open the sheet form for an unopened sheet, skipping");
+      } else {
+        const sheetUrl = `/assessments/sheet?term=${free.id}&class=${myClass.id}&subject=${offered.subjectId}`;
+        const results = [];
+        for (const override of [{ termId: foreign.term.id }, { classGroupId: foreign.classGroup.id }, { subjectId: foreign.subject.id }]) {
+          const forged = await postForm(sheetUrl, openForm, override, cookie);
+          results.push(says(forged.html, "was not found"));
+        }
+        check("opening a sheet on another school's term, class or subject is refused", results.every(Boolean), results.map((r) => (r ? "refused" : "ACCEPTED")).join(", "));
+        check("and no assessment was written against them", (await touching()) === 0);
+      }
+    }
+
+    // New assessment form: it only renders after a click, so it is absent from the
+    // server HTML. Flip `useState(false)` to `true` in new-assessment.tsx to run this.
+    const list = await fetchPage("/assessments", cookie);
+    const newForm = forms(list.html).find((f) => f.fields.some((x) => x.name === "maxScore"));
+    if (!newForm) {
+      console.log("  --   the new-assessment form is behind a click, so it is not on the page; skipping");
+    } else {
+      const forged = await postForm("/assessments", newForm, {
+        termId: foreign.term.id,
+        classGroupId: foreign.classGroup.id,
+        subjectId: foreign.subject.id,
+        title: "ZZ foreign probe",
+        maxScore: "10",
+      }, cookie);
+      check("an assessment on another school's term, class and subject is refused", says(forged.html, "was not found"), alerts(forged.html)[0]);
+      check("and nothing was written", (await touching()) === 0);
+    }
+  });
+}
+
 async function main() {
   try {
     const probe = await fetch(BASE, { redirect: "manual" }).catch(() => null);
@@ -1042,6 +1275,7 @@ async function main() {
       await billChecks(token);
       await componentChecks(token);
       await importChecks(token);
+      await foreignIdGuards(token);
     } finally {
       await closeSession(token);
     }

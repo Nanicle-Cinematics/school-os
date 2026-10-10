@@ -124,7 +124,7 @@ stable handle and is derived only on create.
 `DB_RLS="on"` and the app connects through `APP_DATABASE_URL` as the restricted
 `school_os_app` role. 40 tables have RLS enabled and FORCED with a
 `tenant_isolation` policy; `npm run db:rls` (re)applies them and is idempotent.
-Verified by `npm run verify:isolation` (14/14) and `npm run verify:actions` (43/43).
+Verified by `npm run verify:isolation` (14/14) and `npm run verify:actions`.
 
 Four things had to be true at once, and each was broken:
 
@@ -207,8 +207,26 @@ been subverted, and "enforcement is LIVE" should not be read as one:
 - **Foreign-reference constraints ignore row security.** A school can insert a
   row pointing at another school's id and Postgres accepts it. The row cannot be
   read back through a join, so the harm is untidy data and a way to learn that an
-  id exists. Actions re-read ids server-side before writing; a new one that writes
-  a posted id without reading it first is the shape to watch for.
+  id exists — and, where a uniqueness index has no school in it or a RESTRICT
+  constraint points at the row, obstruction of the OTHER school: a journal line on
+  another school's account makes that account undeletable while its owner sees no
+  line, and an assessment on another school's term, class and subject claims a
+  title in `(term, class, subject, title)` so the owner's own sheet then fails.
+
+  ⚠️ **An id taken from a request must be read back through the tenant client
+  before it is written into a referencing column.** The sentence that stood here
+  until 2026-10-10, "actions re-read ids server-side before writing", was false:
+  an audit found sixteen actions that did not. `ownsAll` and `ownsSheet` in
+  `src/lib/ownership.ts` are the read. The ledger mappings (`saveCoreAccounts`,
+  `setFeeCategoryAccount`, `setExpenseCategoryAccount`) and the assessment entry
+  points (`createAssessment`, `openSheet`) use them, and `verify:actions` posts
+  another school's real ids to each. **Still unfixed**, to be struck off as each
+  lands: admitting, editing and enrolling pupils (class, house, programme),
+  linking a guardian, `addTeachingAssignment`; `recordExpense`, `recordVendorBill`
+  and `setBudget`; `saveSubjectLevels`; a campaign's `templateId`; and the default
+  grading scale in Settings. A failure that is only a server error (an update by a
+  posted id that row security hides, so Prisma throws P2025) writes nothing and
+  is a lower priority.
 
 **`connection_limit`**: with RLS on, every model op becomes a transaction, which
 `connection_limit=1` cannot serve (P2024). The app role's URL uses **4**.
@@ -1685,7 +1703,12 @@ checks (a forged write against a frozen grading scale, demoting the last
 proprietor, deleting a billed student) live inside `"use server"` functions and
 cannot be reached by calling engine code. **Every assertion in it is a refusal or
 a preview, so a full run writes nothing** — keep that property when adding cases,
-or it stops being safe to run against a real database.
+or it stops being safe to run against a real database. The one exception is
+`foreignIdGuards`: CI seeds a single school, so it builds a throw-away second
+school to point ids at and deletes it again, and puts back the ledger mappings its
+controls change. It skips without a database. The new-assessment form renders only
+after a click, so that check skips too unless `useState(false)` in
+`new-assessment.tsx` is flipped to `true` for the run.
 
 It also runs against a deployment, signing in through the real login form so it
 needs no database at all:

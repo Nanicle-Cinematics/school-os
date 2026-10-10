@@ -8,10 +8,24 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
 import { tenantTransaction, prisma } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
+import { ownsAll } from "@/lib/ownership";
 
 export type ActionState = { error?: string; ok?: string };
 
 const ACCOUNT_TYPES: AccountType[] = ["ASSET", "LIABILITY", "EQUITY", "INCOME", "EXPENSE"];
+
+/**
+ * Are these all accounts in THIS school's chart?
+ *
+ * ⚠️ Every posting reads its accounts back from a mapping, and the posting
+ * engine trusts it: `postJournalEntry` writes whatever account id it is handed.
+ * A mapping pointing at another school's account is therefore accepted by the
+ * database (foreign-reference checks ignore row security) and every later
+ * payment, invoice and expense books a line against it. The other school sees no
+ * such line, and cannot delete the account, because the line restricts it.
+ */
+const ownsAccounts = (ids: ReadonlyArray<string | null>) =>
+  ownsAll(ids, (wanted) => prisma.ledgerAccount.count({ where: { id: { in: wanted } } }));
 
 /** Create or rename a ledger account. The code is derived from the name on create only, same as every other category in this app. */
 export async function saveLedgerAccount(
@@ -208,6 +222,15 @@ export async function setFeeCategoryAccount(formData: FormData): Promise<void> {
   if (!feeCategoryId) {
     return;
   }
+  // Both ids came from the request. The category is read first so a foreign one
+  // is a quiet refusal instead of a server error, and the account is read so it
+  // cannot be another school's.
+  if (
+    !(await ownsAll([feeCategoryId], (ids) => prisma.feeCategory.count({ where: { id: { in: ids } } }))) ||
+    !(await ownsAccounts([incomeAccountId]))
+  ) {
+    return;
+  }
   await prisma.feeCategory.update({ where: { id: feeCategoryId }, data: { incomeAccountId } });
   revalidatePath("/chart-of-accounts");
 }
@@ -219,6 +242,14 @@ export async function setExpenseCategoryAccount(formData: FormData): Promise<voi
   const expenseCategoryId = String(formData.get("expenseCategoryId") ?? "");
   const expenseAccountId = String(formData.get("expenseAccountId") ?? "") || null;
   if (!expenseCategoryId) {
+    return;
+  }
+  if (
+    !(await ownsAll([expenseCategoryId], (ids) =>
+      prisma.expenseCategory.count({ where: { id: { in: ids } } }),
+    )) ||
+    !(await ownsAccounts([expenseAccountId]))
+  ) {
     return;
   }
   await prisma.expenseCategory.update({
@@ -239,24 +270,25 @@ export async function saveCoreAccounts(_prev: ActionState, formData: FormData): 
   setTenantContext(auth.tenant);
 
   const field = (key: string) => String(formData.get(key) ?? "") || null;
+  const mapping = {
+    cashAccountId: field("cashAccountId"),
+    bankAccountId: field("bankAccountId"),
+    momoAccountId: field("momoAccountId"),
+    receivableAccountId: field("receivableAccountId"),
+    payableAccountId: field("payableAccountId"),
+  };
+
+  // These columns are plain strings with no foreign-reference constraint, so nothing at the
+  // database would ever object to another school's account id, or to a made-up
+  // one. Only this read does.
+  if (!(await ownsAccounts(Object.values(mapping)))) {
+    return { error: "One of those accounts is not in this school's chart of accounts." };
+  }
 
   await prisma.schoolSettings.upsert({
     where: { schoolId: auth.schoolId },
-    create: {
-      schoolId: auth.schoolId,
-      cashAccountId: field("cashAccountId"),
-      bankAccountId: field("bankAccountId"),
-      momoAccountId: field("momoAccountId"),
-      receivableAccountId: field("receivableAccountId"),
-      payableAccountId: field("payableAccountId"),
-    },
-    update: {
-      cashAccountId: field("cashAccountId"),
-      bankAccountId: field("bankAccountId"),
-      momoAccountId: field("momoAccountId"),
-      receivableAccountId: field("receivableAccountId"),
-      payableAccountId: field("payableAccountId"),
-    },
+    create: { schoolId: auth.schoolId, ...mapping },
+    update: mapping,
   });
 
   revalidatePath("/chart-of-accounts");
