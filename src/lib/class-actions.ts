@@ -35,6 +35,19 @@ export async function saveClassGroup(
     return { error: "Capacity must be a whole number of seats, or blank." };
   }
 
+  // Foreign keys ignore row security, so a level or teacher id belonging to
+  // another school would be accepted by the insert. Read each through the
+  // tenant context first; a row from another school reads as absent.
+  if (!(await prisma.level.findFirst({ where: { id: levelId }, select: { id: true } }))) {
+    return { error: "That level was not found." };
+  }
+  if (
+    formTeacherId &&
+    !(await prisma.staff.findFirst({ where: { id: formTeacherId }, select: { id: true } }))
+  ) {
+    return { error: "That teacher was not found." };
+  }
+
   const data = {
     levelId,
     name,

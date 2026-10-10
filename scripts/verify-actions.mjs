@@ -238,7 +238,7 @@ async function openSession() {
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
     },
   }));
-  return { token, userId: user.id };
+  return { token, userId: user.id, schoolId: user.memberships[0]?.schoolId ?? null };
 }
 
 /** Sign in the way a person does, so no database access is needed. */
@@ -320,7 +320,7 @@ async function deploymentChecks(cookie) {
 
 // ── The checks ──────────────────────────────────────────────────────────────
 
-async function gradingGuards(cookie) {
+async function gradingGuards(cookie, schoolId) {
   console.log("\nGrading scales");
   if (!hasDb) {
     console.log("  --   no database access from here; these need fixtures to assert against");
@@ -328,10 +328,51 @@ async function gradingGuards(cookie) {
   }
   const { html } = await fetchPage("/settings/grading", cookie);
 
+  // ⚠️ Scope every fixture to the school the session is in. This connection is
+  // the owner's, so it sees every school, and an unscoped pick once returned
+  // another school's scale: the probe band was then written onto it.
+  // The id comes from openSession, the same value the session was minted with,
+  // so it cannot differ from the school the app authorises against.
+  if (!schoolId) {
+    console.log("  --   cannot tell which school the session is in, skipping");
+    return;
+  }
+
   const frozen = await db(() => prisma.gradingScale.findFirst({
-    where: { subjectResults: { some: {} } },
+    where: { schoolId, subjectResults: { some: {} } },
     select: { id: true, name: true, _count: { select: { subjectResults: true } } },
   }));
+  // Another school's scale: its id is valid, but it is not ours. The band must
+  // be refused outright, not waved through because the freeze guard counted
+  // zero results on a scale row security hides from this session.
+  const foreign = await db(() => prisma.gradingScale.findFirst({
+    where: { schoolId: { not: schoolId } },
+    select: { id: true },
+  }));
+  const addBandForm = forms(html).find((form) => form.text.includes("Add band"));
+  if (foreign && addBandForm) {
+    const foreignBand = await postForm(
+      "/settings/grading",
+      addBandForm,
+      {
+        gradingScaleId: foreign.id,
+        grade: "ZZ",
+        minScore: "0",
+        maxScore: "1",
+        points: "1",
+        remark: "verification probe",
+      },
+      cookie,
+    );
+    check(
+      "a band posted against another school's scale is refused",
+      says(foreignBand.html, "not found"),
+      alerts(foreignBand.html)[0],
+    );
+  } else {
+    console.log("  --   no second school, or no band form on this page, skipping the foreign-scale check");
+  }
+
   if (!frozen) {
     console.log("  --   no graded scale in this database, skipping the freeze checks");
     return;
@@ -366,7 +407,7 @@ async function gradingGuards(cookie) {
   );
 
   const editable = await db(() => prisma.gradingScale.findFirst({
-    where: { subjectResults: { none: {} }, bands: { some: {} } },
+    where: { schoolId, subjectResults: { none: {} }, bands: { some: {} } },
     include: { bands: { orderBy: { minScore: "desc" } } },
   }));
   if (editable && editable.bands.length >= 2) {
@@ -1261,11 +1302,11 @@ async function main() {
       return;
     }
 
-    const { token, userId } = await openSession();
+    const { token, userId, schoolId } = await openSession();
     try {
       console.log(`Driving ${BASE}${usingForm ? ` as ${EMAIL}` : " as the demo proprietor"}.`);
       await deploymentChecks(token);
-      await gradingGuards(token);
+      await gradingGuards(token, schoolId);
       await accountGuards(token, userId);
       await studentGuards(token);
       await deleteGuards(token);
