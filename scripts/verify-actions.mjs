@@ -1357,6 +1357,7 @@ async function foreignIdGuards(cookie) {
     await subjectGuards(cookie, schoolId, foreign);
     await campaignGuards(cookie, schoolId, foreign);
     await policyGuards(cookie, schoolId, foreign);
+    await loginGuards(cookie, schoolId, foreign);
   });
 }
 
@@ -1421,6 +1422,130 @@ async function campaignGuards(cookie, schoolId, foreign) {
   } finally {
     await db(() => prisma.messageTemplate.deleteMany({ where: { id: foreignTemplate.id } }));
     if (made) await db(() => prisma.messageTemplate.deleteMany({ where: { id: template.id } }));
+  }
+}
+
+/**
+ * Logins and sessions under their row-security policies.
+ *
+ * `User` and `Session` show a school only its own people, so every tenant action
+ * that touches them is a place the policy could silently turn "delete this
+ * person's sessions" into "delete nothing". Each case builds a throwaway login in
+ * this school with two sessions — one that has not chosen a school and one working
+ * in this one — drives the real action, and reads the result back through the
+ * owner connection. The rows are removed afterwards, audit rows included.
+ *
+ * The create-account case reuses a login that has no membership anywhere and whose
+ * home school is ANOTHER school, which the policy hides from this one. Its form
+ * opens on a click, so it skips unless `useState(false)` in users/account-form.tsx
+ * is flipped to `true` for the run.
+ */
+async function loginGuards(cookie, schoolId, foreign) {
+  console.log("\nLogins and sessions under row security");
+  const tag = `zzauth${randomBytes(3).toString("hex")}`;
+  const made = [];
+  const madeStaff = [];
+
+  const makeLogin = async () => {
+    const user = await db(() =>
+      prisma.user.create({
+        data: { name: `ZZ verify:actions ${tag}`, email: `${tag}${made.length}@verify.invalid`, passwordHash: "x", schoolId },
+      }),
+    );
+    made.push(user.id);
+    await db(() => prisma.membership.create({ data: { schoolId, userId: user.id, role: "LIBRARIAN" } }));
+    return user;
+  };
+  const giveSessions = async (userId) => {
+    for (const activeSchoolId of [null, schoolId]) {
+      await db(() =>
+        prisma.session.create({
+          data: { userId, tokenHash: `${tag}-${randomBytes(6).toString("hex")}`, activeSchoolId, expiresAt: new Date(Date.now() + 3600e3) },
+        }),
+      );
+    }
+  };
+  const sessionsOf = (userId) => db(() => prisma.session.count({ where: { userId } }));
+  const formNamed = (html, label) => forms(html).find((f) => f.text.includes(label) && f.fields.some((x) => x.name === "userId"));
+
+  try {
+    // ---- Resetting a password ends every session ----------------------------
+    const a = await makeLogin();
+    await giveSessions(a.id);
+    const pageA = await fetchPage(`/users/${a.id}`, cookie);
+    const resetForm = formNamed(pageA.html, "Reset password");
+    if (!resetForm) {
+      console.log("  --   no reset form on the account page, skipping the login checks");
+      return;
+    }
+    check("setup: the login holds two sessions", (await sessionsOf(a.id)) === 2);
+    const reset = await postForm(`/users/${a.id}`, resetForm, {}, cookie);
+    const after = await db(() => prisma.user.findUnique({ where: { id: a.id }, select: { passwordHash: true, mustChangePassword: true } }));
+    check("resetting a password changes it and forces a new one", after?.passwordHash !== "x" && after?.mustChangePassword === true, alerts(reset.html)[0]);
+    check("and ends every one of the login's sessions", (await sessionsOf(a.id)) === 0, `${await sessionsOf(a.id)} left`);
+
+    // ---- Suspending ends the sessions working in this school ---------------
+    const b = await makeLogin();
+    await giveSessions(b.id);
+    const pageB = await fetchPage(`/users/${b.id}`, cookie);
+    const suspendForm = formNamed(pageB.html, "Suspend account");
+    if (suspendForm) {
+      await postForm(`/users/${b.id}`, suspendForm, {}, cookie);
+      const status = await db(() => prisma.membership.findFirst({ where: { userId: b.id, schoolId }, select: { status: true } }));
+      check("suspending an account suspends its access", status?.status === "SUSPENDED");
+      check("and ends its sessions", (await sessionsOf(b.id)) === 0, `${await sessionsOf(b.id)} left`);
+    }
+
+    // ---- Removing access: the session with no school chosen must go too -----
+    // ⚠️ The membership is what makes a session visible to this school. Delete the
+    // membership first and a session that has not chosen a school vanishes from view
+    // before it can be deleted, so the person stays signed in.
+    const c = await makeLogin();
+    await giveSessions(c.id);
+    const pageC = await fetchPage(`/users/${c.id}`, cookie);
+    const removeForm = formNamed(pageC.html, "Remove access");
+    if (removeForm) {
+      await postForm(`/users/${c.id}`, removeForm, {}, cookie, 2).catch(() => null);
+      check("removing access removes the membership", (await db(() => prisma.membership.count({ where: { userId: c.id, schoolId } }))) === 0);
+      check("and ends BOTH sessions, including the one with no school chosen", (await sessionsOf(c.id)) === 0, `${await sessionsOf(c.id)} left`);
+      check("while the login itself survives", (await db(() => prisma.user.count({ where: { id: c.id } }))) === 1);
+    }
+
+    // ---- Taking on a login whose home school is another school's ------------
+    const usersPage = await fetchPage("/users", cookie);
+    const createForm = forms(usersPage.html).find((f) => f.fields.some((x) => x.name === "staffId") && f.fields.some((x) => x.name === "phone"));
+    if (!createForm) {
+      console.log("  --   the create-account form is behind a click, so it is not on the page; skipping the re-admission check");
+    } else {
+      // Its own member of staff, so the check does not depend on who in the seed lacks a login.
+      const staff = await db(() =>
+        prisma.staff.create({ data: { schoolId, staffNo: `ZZ-${tag}`, firstName: "Probe", lastName: "Staff", gender: "FEMALE" } }),
+      );
+      madeStaff.push(staff.id);
+      const orphan = await db(() =>
+        prisma.user.create({
+          data: { name: `ZZ orphan ${tag}`, phone: "233244999111", passwordHash: "x", schoolId: foreign.school.id },
+        }),
+      );
+      made.push(orphan.id);
+      const created = await postForm("/users", createForm, { staffId: staff.id, phone: "0244999111", email: "", roles: "LIBRARIAN" }, cookie, 2).catch(() => ({ html: "" }));
+      const now = await db(() => prisma.user.findUnique({ where: { id: orphan.id }, select: { schoolId: true, passwordHash: true } }));
+      const seats = await db(() => prisma.membership.count({ where: { userId: orphan.id, schoolId } }));
+      check(
+        "a login with no membership and another school's home is taken on, not refused",
+        now?.schoolId === schoolId && now?.passwordHash !== "x" && seats === 1,
+        alerts(created.html)[0] ?? `home school ${now?.schoolId === schoolId ? "moved" : "unchanged"}, ${seats} seat(s)`,
+      );
+    }
+  } finally {
+    if (made.length) {
+      await db(() => prisma.auditLog.deleteMany({ where: { schoolId, entityId: { in: made } } }));
+      await db(() => prisma.user.deleteMany({ where: { id: { in: made } } }));
+    }
+    if (madeStaff.length) {
+      await db(() => prisma.auditLog.deleteMany({ where: { schoolId, entityId: { in: madeStaff } } }));
+      await db(() => prisma.staff.deleteMany({ where: { id: { in: madeStaff } } }));
+    }
   }
 }
 

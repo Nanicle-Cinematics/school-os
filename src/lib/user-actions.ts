@@ -131,23 +131,38 @@ export async function createUserAccount(
   }
 
   try {
+    /**
+     * Re-admitting a login that has no membership anywhere is done under the
+     * bypass, BEFORE the transaction. Such a login's home school may be a different
+     * one (it was removed there, and this school is now taking the same person on),
+     * and the policy on User shows a school only its own people: through the tenant
+     * client the update would find nothing and fail. If the transaction below then
+     * fails, the login is left with a fresh temporary password and still no
+     * membership — the state this branch already treats as reusable.
+     */
+    if (sameIdentifier) {
+      await withBypass(() =>
+        prisma.user.update({
+          where: { id: sameIdentifier.id },
+          // Re-admitting: a fresh temporary password, and the flag that forces
+          // it to be changed. The old hash must not survive — whoever saw it
+          // last was not necessarily this person.
+          data: {
+            name: `${staff.firstName} ${staff.lastName}`,
+            email: email || null,
+            phone: phoneNormalised,
+            passwordHash,
+            mustChangePassword: true,
+            passwordIssuedAt: new Date(),
+            schoolId: auth.schoolId,
+          },
+        }),
+      );
+    }
+
     await tenantTransaction(auth.schoolId, async (tx) => {
       const user = sameIdentifier
-        ? await tx.user.update({
-            where: { id: sameIdentifier.id },
-            // Re-admitting: a fresh temporary password, and the flag that forces
-            // it to be changed. The old hash must not survive — whoever saw it
-            // last was not necessarily this person.
-            data: {
-              name: `${staff.firstName} ${staff.lastName}`,
-              email: email || null,
-              phone: phoneNormalised,
-              passwordHash,
-              mustChangePassword: true,
-              passwordIssuedAt: new Date(),
-              schoolId: auth.schoolId,
-            },
-          })
+        ? { id: sameIdentifier.id }
         : await tx.user.create({
             data: {
               name: `${staff.firstName} ${staff.lastName}`,
@@ -432,13 +447,17 @@ export async function removeUserAccess(formData: FormData): Promise<void> {
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
-    // The User row survives: it may hold access to another school, and it is
-    // named as the actor on payments and audit rows here.
-    await tx.membership.deleteMany({ where: { schoolId: auth.schoolId, userId } });
+    // ⚠️ Sessions BEFORE the membership. The policy on Session shows a school the
+    // sessions of its own members; once the membership is gone a session that has
+    // not chosen a school yet is no longer visible, and this delete would remove
+    // nothing while looking like it had worked — a removed person still signed in.
     // Only sessions working in THIS school: the same login may hold another school's.
     await tx.session.deleteMany({
       where: { userId, OR: [{ activeSchoolId: auth.schoolId }, { activeSchoolId: null }] },
     });
+    // The User row survives: it may hold access to another school, and it is
+    // named as the actor on payments and audit rows here.
+    await tx.membership.deleteMany({ where: { schoolId: auth.schoolId, userId } });
 
     await writeAudit(tx, {
       schoolId: auth.schoolId,

@@ -47,7 +47,10 @@ function gucArgs() {
  */
 const TENANT_MODELS = new Set(
   Prisma.dmmf.datamodel.models
-    .filter((m) => m.name === "School" || m.fields.some((f) => f.name === "schoolId"))
+    // `Session` has no schoolId column but carries a policy keyed on its user's
+    // memberships (see apply-rls.mjs), so a read with no tenant set would be
+    // answered with nothing rather than refused: the same silence the guard exists to end.
+    .filter((m) => m.name === "School" || m.name === "Session" || m.fields.some((f) => f.name === "schoolId"))
     .map((m) => m.name),
 );
 

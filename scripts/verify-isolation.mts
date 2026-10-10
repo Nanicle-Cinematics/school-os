@@ -125,9 +125,8 @@ async function main() {
          and col.table_name = c.relname
          and col.column_name = 'schoolId'
         where n.nspname = 'public' and c.relkind = 'r'
-          -- Same exclusions as scripts/apply-rls.mjs: sign-in happens before a
-          -- tenant is known, so the auth tables cannot be tenant-scoped.
-          and c.relname not in ('User', 'Session')
+          -- User carries a schoolId and is covered here like any tenant table;
+          -- Session has none and is checked with it in authTables() below.
           and (not c.relrowsecurity or not c.relforcerowsecurity
                or (select count(*) from pg_policies p
                     where p.schemaname = 'public' and p.tablename = c.relname) = 0)
@@ -214,7 +213,197 @@ async function main() {
   check("no probe row was written", leaked === 0, `${leaked} rows`);
 
   await sweepEveryTable(school.id);
+  await authTables(school.id);
 }
+
+/** Thrown to roll a probe back: the count it carries is the answer. */
+class Rollback extends Error {
+  constructor(readonly count: number) {
+    super("rollback");
+  }
+}
+
+/**
+ * User and Session: a school sees its own people, and nobody else's.
+ *
+ * Until 2026-10-10 neither table had a policy, so from any school's context the app
+ * role could read every login's password hash, TOTP secret and recovery-code hashes
+ * and every session token hash in the database. Their policies are not the generic
+ * `schoolId = current school` one (sign-in happens before a school is known), so the
+ * sweep above leaves them out and they are proved separately, as the restricted role:
+ *
+ *   - a school sees exactly the logins that are its own (home school, or a membership
+ *     there) and exactly their sessions, whoever else is in the table;
+ *   - a school that does not exist sees none of either;
+ *   - a school cannot read or change anyone else's login or sessions, and cannot
+ *     create or move a session at all.
+ *
+ * What exists is read through the OWNER connection, for the reason the sweep does:
+ * the truth must not depend on the policies under test. Every write is attempted
+ * inside a transaction that is rolled back, so a missing policy cannot cost a real
+ * login its sessions.
+ */
+async function authTables(schoolId: string) {
+  console.log("\nLogins and sessions");
+  if (!owner) {
+    console.log("  --   no owner connection, so what each school should see cannot be established");
+    return;
+  }
+  const ownerDb = owner;
+
+  const covered = await retry(() =>
+    ownerDb.$queryRawUnsafe<{ table: string; rls: boolean; forced: boolean; policies: number }[]>(`
+      select c.relname as table, c.relrowsecurity as rls, c.relforcerowsecurity as forced,
+             (select count(*)::int from pg_policies p
+               where p.schemaname = 'public' and p.tablename = c.relname) as policies
+        from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind = 'r' and c.relname in ('User', 'Session')
+       order by c.relname
+    `),
+  );
+  const gaps = covered.filter((row) => !row.rls || !row.forced || row.policies === 0);
+  check(
+    "User and Session carry RLS, FORCE and a policy",
+    covered.length === 2 && gaps.length === 0,
+    gaps.length ? `${gaps.map((g) => g.table).join(", ")} — run npm run db:rls` : "both",
+  );
+
+  const rowsOf = async (sql: string, ...args: string[]) =>
+    new Set((await retry(() => ownerDb.$queryRawUnsafe<{ id: string }[]>(sql, ...args))).map((r) => r.id));
+  const usersOf = (id: string) =>
+    rowsOf(
+      `select u.id from "User" u where u."schoolId" = $1
+         or exists (select 1 from "Membership" m where m."userId" = u.id and m."schoolId" = $1)`,
+      id,
+    );
+  const sessionsOf = (id: string) =>
+    rowsOf(
+      `select s.id from "Session" s where s."activeSchoolId" = $1
+         or exists (select 1 from "Membership" m where m."userId" = s."userId" and m."schoolId" = $1)`,
+      id,
+    );
+
+  const mineUsers = await usersOf(schoolId);
+  const mineSessions = await sessionsOf(schoolId);
+  const allUsers = await rowsOf(`select id from "User"`);
+  const allSessions = await rowsOf(`select id from "Session"`);
+
+  const sameSet = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+  const idsOf = (rows: { id: string }[]) => new Set(rows.map((r) => r.id));
+
+  const seenUsers = idsOf(await retry(() => tenant(schoolId, () => prisma.user.findMany({ select: { id: true } }))));
+  const seenSessions = idsOf(await retry(() => tenant(schoolId, () => prisma.session.findMany({ select: { id: true } }))));
+  check(
+    "a school sees exactly its own logins",
+    sameSet(seenUsers, mineUsers),
+    `sees ${seenUsers.size}, owns ${mineUsers.size}, table holds ${allUsers.size}`,
+  );
+  check(
+    "a school sees exactly its own people's sessions",
+    sameSet(seenSessions, mineSessions),
+    `sees ${seenSessions.size}, owns ${mineSessions.size}, table holds ${allSessions.size}`,
+  );
+
+  const strangerUsers = await retry(() => tenant("no-such-school-id", () => prisma.user.count()));
+  const strangerSessions = await retry(() => tenant("no-such-school-id", () => prisma.session.count()));
+  check("a school that does not exist sees no logins", strangerUsers === 0, `${strangerUsers} rows`);
+  check("a school that does not exist sees no sessions", strangerSessions === 0, `${strangerSessions} rows`);
+
+  const viaBypass = await retry(() => withBypass(() => prisma.user.count()));
+  check("the bypass still sees every login", viaBypass === allUsers.size, `${viaBypass} of ${allUsers.size}`);
+
+  // Not vacuous: with every login belonging to this school the checks above cannot
+  // tell a policy from "there is nobody else here".
+  const outsiders = [...allUsers].filter((id) => !mineUsers.has(id));
+  const outsiderSessions = [...allSessions].filter((id) => !mineSessions.has(id));
+  if (outsiders.length === 0) {
+    console.log("  --   every login here belongs to this school, so separation from other logins was not tested");
+  } else {
+    const outsider = outsiders[0];
+    const found = await retry(() => tenant(schoolId, () => prisma.user.findUnique({ where: { id: outsider } })));
+    check("another school's login cannot be read by id", found === null);
+
+    const probe = async (fn: (tx: TenantTxLike) => Promise<{ count: number }>) => {
+      try {
+        await tenantTransaction(schoolId, async (tx) => {
+          throw new Rollback((await fn(tx)).count);
+        });
+      } catch (error) {
+        if (error instanceof Rollback) return error.count;
+        throw error;
+      }
+      return -1;
+    };
+
+    check(
+      "another school's login cannot be changed",
+      (await probe((tx) => tx.user.updateMany({ where: { id: outsider }, data: { name: "isolation probe" } }))) === 0,
+    );
+    if (outsiderSessions.length > 0) {
+      check(
+        "another school's sessions cannot be ended",
+        (await probe((tx) => tx.session.deleteMany({ where: { id: { in: outsiderSessions } } }))) === 0,
+      );
+    } else {
+      console.log("  --   no session belongs to another school here, so ending one was not tested");
+    }
+  }
+
+  // A tenant never creates or moves a session. Tried with a REAL member's id, so the
+  // refusal is the policy's and not a missing foreign key.
+  const member = [...mineUsers][0];
+  if (member) {
+    const created = await (async () => {
+      try {
+        await tenantTransaction(schoolId, async (tx) => {
+          await tx.session.create({
+            data: { userId: member, tokenHash: `isolation-probe-${Date.now()}`, expiresAt: new Date(Date.now() + 60_000) },
+          });
+          throw new Rollback(1);
+        });
+      } catch (error) {
+        return error instanceof Rollback;
+      }
+      return false;
+    })();
+    check("a school cannot create a session", !created);
+  }
+
+  // The legitimate path must still work, or every refusal above is a broken table
+  // rather than a policy: a school can end its own member's sessions.
+  if (member) {
+    const token = `isolation-control-${Date.now()}`;
+    const row = await retry(() =>
+      ownerDb.session.create({ data: { userId: member, tokenHash: token, expiresAt: new Date(Date.now() + 60_000) } }),
+    );
+    try {
+      const ended = await tenantTransaction(schoolId, async (tx) => {
+        try {
+          const gone = await tx.session.deleteMany({ where: { id: row.id } });
+          throw new Rollback(gone.count);
+        } catch (error) {
+          if (error instanceof Rollback) return error.count;
+          throw error;
+        }
+      });
+      check("control: a school can end its own member's session", ended === 1, `${ended} of 1`);
+    } finally {
+      await ownerDb.session.deleteMany({ where: { id: row.id } });
+    }
+  }
+
+  // Refused, not answered with nothing: Session has no schoolId, so it needed adding to
+  // the guard's list by hand, and this is what notices if that is undone.
+  let refused = false;
+  try {
+    await prisma.session.count();
+  } catch (error) {
+    refused = error instanceof TenantContextMissingError;
+  }
+  check("a session query with no tenant set is REFUSED, not answered with nothing", refused);
+}
+
+type TenantTxLike = Parameters<Parameters<typeof tenantTransaction>[1]>[0];
 
 /**
  * Every tenant table, not the three above.
@@ -234,8 +423,8 @@ async function main() {
  * than a transaction per table.
  */
 async function sweepEveryTable(schoolId: string) {
-  // The same exclusions as apply-rls.mjs: sign-in happens before a tenant is
-  // known, so User and Session cannot be scoped (see CLAUDE.md, Tenancy).
+  // User and Session are scoped by their own policies, not this template, and are
+  // proved separately in authTables() below.
   const tables = Prisma.dmmf.datamodel.models
     .filter((m) => m.name === "School" || m.fields.some((f) => f.name === "schoolId"))
     .filter((m) => m.name !== "User" && m.name !== "Session")
