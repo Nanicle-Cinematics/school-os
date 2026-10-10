@@ -20,6 +20,26 @@ function duplicate(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+const SCALE_NOT_FOUND = "That grading scale was not found.";
+
+/**
+ * Whether the scale is one of this school's own.
+ *
+ * ⚠️ Run this BEFORE `assertEditable`. Under row security another school's scale
+ * reads as absent, so its result count is 0 and the freeze guard concludes
+ * nothing is in the way. A foreign key check ignores row security, and the band
+ * carries the caller's own `schoolId`, so the insert would then pass the
+ * policy's WITH CHECK as well. Adding `schoolId` to the later reads does not
+ * help for the same reason: they would simply find nothing.
+ */
+async function ownsScale(gradingScaleId: string): Promise<boolean> {
+  const scale = await prisma.gradingScale.findFirst({
+    where: { id: gradingScaleId },
+    select: { id: true },
+  });
+  return scale !== null;
+}
+
 /** Bands may only be touched while nothing has been graded against the scale. */
 async function assertEditable(gradingScaleId: string): Promise<string | null> {
   const used = await prisma.subjectResult.count({ where: { gradingScaleId } });
@@ -41,6 +61,10 @@ export async function saveScale(_prev: GradingState, formData: FormData): Promis
 
   if (!name) {
     return { error: "Give the scale a name, e.g. Basic School 1–9." };
+  }
+
+  if (id && !(await ownsScale(id))) {
+    return { error: SCALE_NOT_FOUND };
   }
 
   try {
@@ -139,6 +163,10 @@ export async function deleteScale(formData: FormData): Promise<void> {
     return;
   }
 
+  if (!(await ownsScale(id))) {
+    return;
+  }
+
   const used = await prisma.subjectResult.count({ where: { gradingScaleId: id } });
   if (used > 0) {
     return;
@@ -181,6 +209,22 @@ export async function saveBand(_prev: GradingState, formData: FormData): Promise
 
   if (!gradingScaleId) {
     return { error: "Missing scale." };
+  }
+
+  if (!(await ownsScale(gradingScaleId))) {
+    return { error: SCALE_NOT_FOUND };
+  }
+
+  // An edited band must hang on the scale it was posted with, or the update
+  // could move a band, or be checked against the wrong scale's freeze.
+  if (id) {
+    const band = await prisma.gradeBand.findFirst({
+      where: { id, gradingScaleId },
+      select: { id: true },
+    });
+    if (!band) {
+      return { error: "That band was not found on this scale." };
+    }
   }
 
   const frozen = await assertEditable(gradingScaleId);
@@ -263,6 +307,17 @@ export async function deleteBand(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const gradingScaleId = String(formData.get("gradingScaleId") ?? "");
   if (!id || !gradingScaleId) {
+    return;
+  }
+
+  if (!(await ownsScale(gradingScaleId))) {
+    return;
+  }
+  const band = await prisma.gradeBand.findFirst({
+    where: { id, gradingScaleId },
+    select: { id: true },
+  });
+  if (!band) {
     return;
   }
 
