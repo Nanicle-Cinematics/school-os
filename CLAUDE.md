@@ -232,10 +232,16 @@ been subverted, and "enforcement is LIVE" should not be read as one:
   for the run. `saveSubjectLevels` checks its subject (`ownsSubjects`), and `sendCampaign`
   its template (`ownsMessageTemplates`, checked before the SMS switch so the answer
   does not depend on how the school is set up). The compose form's actions hang off
-  its buttons, not the form, so `verify:actions` drives it with `postButton`. **Still
-  unfixed**, to be struck off as each lands: the default grading scale in Settings. A failure that is only a server error (an update by a
-  posted id that row security hides, so Prisma throws P2025) writes nothing and
-  is a lower priority.
+  its buttons, not the form, so `verify:actions` drives it with `postButton`. `saveAcademicPolicy` checks the default grading scale
+  (`ownsGradingScales`): that column is a plain string with no foreign key, so
+  nothing at the database would ever object to another school's scale or a
+  made-up one, and this read is the only guard. **Every action the audit
+  listed is now covered.** The audit found them by reading, so another is
+  possible: any new action that writes an id from a form into another row must read
+  it back first (a `owns…` helper in `ownership.ts`, a message that names what was
+  not found, and a `verify:actions` case with a positive control). A failure that
+  is only a server error (an update by a posted id that row security hides, so
+  Prisma throws P2025) writes nothing and is a lower priority.
 
 **`connection_limit`**: with RLS on, every model op becomes a transaction, which
 `connection_limit=1` cannot serve (P2024). The app role's URL uses **4**.

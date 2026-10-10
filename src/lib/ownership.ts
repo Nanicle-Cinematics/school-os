@@ -87,3 +87,6 @@ export const ownsExpenseCategories = (ids: ReadonlyArray<string | null | undefin
 
 export const ownsMessageTemplates = (ids: ReadonlyArray<string | null | undefined>) =>
   ownsAll(ids, (wanted) => prisma.messageTemplate.count({ where: { id: { in: wanted } } }));
+
+export const ownsGradingScales = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.gradingScale.count({ where: { id: { in: wanted } } }));
