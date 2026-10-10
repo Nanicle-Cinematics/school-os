@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { ROLE_ATTRIBUTES_SQL, roleProblem, type RoleAttributes } from "@/lib/db-role";
 import { getTenantContext, runWithTenantContext } from "@/lib/tenant-context";
 
 // Transient errors typical of pooled/serverless Postgres (Supabase's pgBouncer,
@@ -107,6 +108,44 @@ function assertTenantContext(model: string) {
   }
 }
 
+let roleVerified: Promise<void> | undefined;
+
+/**
+ * Ask Postgres, once per process, whether the role we connected as can skip
+ * row security.
+ *
+ * ⚠️ The boot guard below proves APP_DATABASE_URL is SET. It cannot prove the
+ * role behind it is the restricted one: the owner's connection string satisfies
+ * it equally well, and with the owner every policy is skipped while the site
+ * boots and every page renders. See db-role.ts for the whole story.
+ *
+ * In production a bypassing role is a refusal to serve, for the reason the boot
+ * guard is: a school that cannot be told apart from its neighbour is worse than
+ * an outage. Elsewhere it is a loud warning, because scripts run with
+ * DB_RLS=on and the owner's URL on purpose (the admin-side verify scripts), and
+ * ALLOW_UNSCOPED_DB=1 remains the deliberate way to run without isolation.
+ *
+ * The result is remembered only when it is an answer. A dropped connection must
+ * not be remembered as "fine", and must not be remembered as "broken" either.
+ */
+function verifyRestrictedRole(client: Pick<PrismaClient, "$queryRawUnsafe">): Promise<void> {
+  roleVerified ??= (async () => {
+    const [row] = await client.$queryRawUnsafe<RoleAttributes[]>(ROLE_ATTRIBUTES_SQL);
+    const problem = roleProblem(row);
+    if (!problem) {
+      return;
+    }
+    if (process.env.NODE_ENV === "production" && process.env.ALLOW_UNSCOPED_DB !== "1") {
+      throw new Error(`Tenant isolation is not in force. ${problem}`);
+    }
+    console.error(`⚠ ${problem}`);
+  })().catch((error: unknown) => {
+    roleVerified = undefined;
+    throw error;
+  });
+  return roleVerified;
+}
+
 /**
  * The Supabase project a connection string actually points at, from its
  * pooler username (`school_os_app.<ref>` / `postgres.<ref>`).
@@ -212,13 +251,14 @@ function createPrismaClient() {
           throw new SchoolReadOnlyError(model, operation);
         }
 
-        const exec = () => {
+        const exec = async () => {
           // Raw ops (no model) and interactive-tx ops (GUC already set) run
           // as-is. Everything else is wrapped so the tenant GUC and the query
           // share one transaction/connection — pooler-safe.
           if (!RLS_ON || !model || getTenantContext()?.inTx) {
             return query(args);
           }
+          await verifyRestrictedRole(base);
           assertTenantContext(model);
 
           const [sid, bypass] = gucArgs();
@@ -299,6 +339,12 @@ export async function tenantTransaction<T>(
   opts?: { timeout?: number; maxWait?: number },
 ): Promise<T> {
   const ctx = getTenantContext() ?? {};
+  if (RLS_ON) {
+    // The first query of a request is often a transaction, which skips the
+    // per-operation path above. Raw statements carry no model, so asking on
+    // `prisma` here cannot recurse into this check.
+    await verifyRestrictedRole(prisma);
+  }
   return prisma.$transaction(async (tx) => {
     if (RLS_ON) {
       await tx.$executeRawUnsafe(SET_GUC_SQL, schoolId, ctx.bypass ? "on" : "off");

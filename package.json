@@ -32,6 +32,7 @@
     "verify:mocks": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-mocks.mts",
     "verify:sms": "tsx scripts/verify-sms.mts",
     "verify:audience": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-audience.mts",
+    "verify:raw-sql": "tsx scripts/verify-raw-sql.mts",
     "verify:isolation": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-isolation.mts",
     "verify:onboarding": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-onboarding.mts",
     "verify:teacher": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-teacher.mts",

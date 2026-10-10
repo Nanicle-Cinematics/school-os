@@ -20,11 +20,17 @@
  *   npm run verify:isolation
  */
 
-import { prisma, TenantContextMissingError } from "@/lib/prisma";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { ROLE_ATTRIBUTES_SQL, roleProblem, type RoleAttributes } from "@/lib/db-role";
+import { prisma, tenantTransaction, TenantContextMissingError } from "@/lib/prisma";
 import { runWithTenantContext, withBypass } from "@/lib/tenant-context";
+import { demoSchool } from "./fixture.mjs";
 
 let passed = 0;
 let failed = 0;
+
+/** The owner's connection, when there is one: exempt from policies by design. */
+let owner = null as PrismaClient | null;
 
 function check(label: string, ok: boolean, detail = "") {
   if (ok) {
@@ -66,6 +72,36 @@ async function main() {
     );
     process.exitCode = 1;
     return;
+  }
+
+  // The role itself, before any policy. Every check below is meaningless if the
+  // connection is one Postgres exempts from policies: `APP_DATABASE_URL is set`
+  // is satisfied by the owner's string just as well as by the restricted role's.
+  const appRows = await retry(() =>
+    withBypass(() => prisma.$queryRawUnsafe<RoleAttributes[]>(ROLE_ATTRIBUTES_SQL)),
+  );
+  const appProblem = roleProblem(appRows[0]);
+  check(
+    "the app connects as a role that obeys row security",
+    appProblem === null,
+    appProblem ?? `${appRows[0].name}: no superuser, no BYPASSRLS`,
+  );
+
+  // And the same test must FLAG the owner, or "no problem found" proves nothing:
+  // a verdict that cannot say no passes whatever it is shown. The owner connection
+  // is also the sweep's source of truth below, so it stays open until the end.
+  // Skipped, and said so, when there is no separate owner connection to try.
+  const ownerUrl = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+  if (!ownerUrl || ownerUrl === process.env.APP_DATABASE_URL) {
+    console.log("  --   no separate owner connection, so the verdict is not tried against one");
+  } else {
+    owner = new PrismaClient({ datasources: { db: { url: ownerUrl } } });
+    const ownerRows = await retry(() => owner!.$queryRawUnsafe<RoleAttributes[]>(ROLE_ATTRIBUTES_SQL));
+    check(
+      "the same test flags the OWNER role",
+      roleProblem(ownerRows[0]) !== null,
+      `${ownerRows[0]?.name}: superuser=${ownerRows[0]?.rolsuper}, bypassrls=${ownerRows[0]?.rolbypassrls}`,
+    );
   }
 
   // Coverage first. Every check below proves isolation for the tables it names,
@@ -115,7 +151,10 @@ async function main() {
     return;
   }
 
-  const [school] = schools;
+  // ⚠️ Never `schools[0]`: the list is unordered, and a development database
+  // collects empty qa-* schools, so the first row is a coin flip between the
+  // seeded school and an empty shell. See scripts/fixture.mts.
+  const school = await demoSchool();
   const foreign = "no-such-school-id";
 
   const mine = await retry(() =>
@@ -173,6 +212,127 @@ async function main() {
     withBypass(() => prisma.house.count({ where: { name: { startsWith: "isolation probe" } } })),
   );
   check("no probe row was written", leaked === 0, `${leaked} rows`);
+
+  await sweepEveryTable(school.id);
+}
+
+/**
+ * Every tenant table, not the three above.
+ *
+ * The checks before this prove the policy TEMPLATE behaves on Student, Guardian
+ * and Invoice. Every table's policy is generated from that one template, so that
+ * is strong evidence — and still only evidence: coverage (the first check) says a
+ * policy EXISTS on the other 55, not that it does anything. This asks each one
+ * the two questions that matter, as the restricted role:
+ *
+ *   - school A sees exactly the rows whose owner is A, however many rows other
+ *     schools hold in the same table;
+ *   - a school that does not exist sees none.
+ *
+ * Counts are taken inside ONE transaction per school, so the GUC is set once and
+ * the sweep costs 3 round trips of setup plus one cheap query per table, rather
+ * than a transaction per table.
+ */
+async function sweepEveryTable(schoolId: string) {
+  // The same exclusions as apply-rls.mjs: sign-in happens before a tenant is
+  // known, so User and Session cannot be scoped (see CLAUDE.md, Tenancy).
+  const tables = Prisma.dmmf.datamodel.models
+    .filter((m) => m.name === "School" || m.fields.some((f) => f.name === "schoolId"))
+    .filter((m) => m.name !== "User" && m.name !== "Session")
+    .map((m) => ({ table: m.dbName ?? m.name, column: m.name === "School" ? "id" : "schoolId" }));
+
+  const sweep = { timeout: 180_000, maxWait: 30_000 };
+
+  const visibleTo = (id: string) =>
+    retry(() =>
+      tenantTransaction(
+        id,
+        async (tx) => {
+          const counts = new Map<string, number>();
+          for (const { table } of tables) {
+            const rows = await tx.$queryRawUnsafe<{ n: number }[]>(
+              `select count(*)::int as n from "${table}"`,
+            );
+            counts.set(table, rows[0].n);
+          }
+          return counts;
+        },
+        sweep,
+      ),
+    );
+
+  /**
+   * What exists, by owner of the row.
+   *
+   * ⚠️ Read through the OWNER connection, which Postgres exempts from policies, and
+   * not through the app role with the bypass lifted. The first version did the
+   * latter, and forcing it red showed the flaw: a policy rewritten to drop its
+   * bypass clause hid the rows from the "what exists" count as well, so "sees 0,
+   * owns 0" agreed with itself and the broken table passed. The source of truth
+   * must not depend on the policies under test.
+   */
+  const countOwners = async (table: string, column: string) => {
+    const sql = `select count(*) filter (where "${column}" = $1)::int as mine,
+                        count(*) filter (where "${column}" <> $1)::int as others
+                   from "${table}"`;
+    const rows = owner
+      ? await owner.$queryRawUnsafe<{ mine: number; others: number }[]>(sql, schoolId)
+      : await withBypass(() =>
+          tenantTransaction(
+            schoolId,
+            (tx) => tx.$queryRawUnsafe<{ mine: number; others: number }[]>(sql, schoolId),
+            sweep,
+          ),
+        );
+    return rows[0];
+  };
+  if (!owner) {
+    console.log(
+      "  --   no owner connection: the expected counts come through the bypass, which depends on the policies under test",
+    );
+  }
+  const truth = new Map<string, { mine: number; others: number }>();
+  for (const { table, column } of tables) {
+    truth.set(table, await retry(() => countOwners(table, column)));
+  }
+
+  const seenByMe = await visibleTo(schoolId);
+  const seenByStranger = await visibleTo("no-such-school-id");
+
+  const leaks = tables
+    .filter(({ table }) => seenByMe.get(table) !== truth.get(table)?.mine)
+    .map(({ table }) => `${table} (sees ${seenByMe.get(table)}, owns ${truth.get(table)?.mine})`);
+  const strangers = tables
+    .filter(({ table }) => seenByStranger.get(table) !== 0)
+    .map(({ table }) => `${table} (${seenByStranger.get(table)} rows)`);
+
+  check(
+    "every tenant table: a school sees exactly its own rows",
+    leaks.length === 0,
+    leaks.length === 0 ? `${tables.length} tables` : leaks.join(", "),
+  );
+  check(
+    "every tenant table: a school that does not exist sees none",
+    strangers.length === 0,
+    strangers.length === 0 ? `${tables.length} tables` : strangers.join(", "),
+  );
+
+  // Not vacuous: a sweep over empty tables passes whatever the policies say.
+  const populated = tables.filter(({ table }) => (truth.get(table)?.mine ?? 0) > 0).length;
+  check(
+    "the sweep had rows to protect",
+    populated >= 10,
+    `${populated} of ${tables.length} tables hold rows for this school`,
+  );
+
+  // Said, not hidden: with one school in the database the first check above
+  // cannot tell a policy from "there is nobody else here". Not a failure.
+  const crossed = tables.filter(({ table }) => (truth.get(table)?.others ?? 0) > 0).length;
+  console.log(
+    crossed > 0
+      ? `  --   ${crossed} of ${tables.length} tables also hold another school's rows, so separation was tested there`
+      : "  --   only one school holds data here, so separation from other schools rests on the second check alone",
+  );
 }
 
 try {
@@ -180,5 +340,6 @@ try {
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exitCode = 1;
 } finally {
+  await owner?.$disconnect();
   await prisma.$disconnect();
 }
