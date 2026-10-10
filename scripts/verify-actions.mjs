@@ -236,7 +236,7 @@ async function openSession() {
       expiresAt: new Date(Date.now() + 30 * 60 * 1000),
     },
   }));
-  return { token, userId: user.id };
+  return { token, userId: user.id, schoolId: user.memberships[0]?.schoolId ?? null };
 }
 
 /** Sign in the way a person does, so no database access is needed. */
@@ -318,7 +318,7 @@ async function deploymentChecks(cookie) {
 
 // ── The checks ──────────────────────────────────────────────────────────────
 
-async function gradingGuards(cookie, userId) {
+async function gradingGuards(cookie, schoolId) {
   console.log("\nGrading scales");
   if (!hasDb) {
     console.log("  --   no database access from here; these need fixtures to assert against");
@@ -329,14 +329,12 @@ async function gradingGuards(cookie, userId) {
   // ⚠️ Scope every fixture to the school the session is in. This connection is
   // the owner's, so it sees every school, and an unscoped pick once returned
   // another school's scale: the probe band was then written onto it.
-  const membership = userId
-    ? await db(() => prisma.membership.findFirst({ where: { userId } }))
-    : null;
-  if (!membership) {
+  // The id comes from openSession, the same value the session was minted with,
+  // so it cannot differ from the school the app authorises against.
+  if (!schoolId) {
     console.log("  --   cannot tell which school the session is in, skipping");
     return;
   }
-  const schoolId = membership.schoolId;
 
   const frozen = await db(() => prisma.gradingScale.findFirst({
     where: { schoolId, subjectResults: { some: {} } },
@@ -349,10 +347,11 @@ async function gradingGuards(cookie, userId) {
     where: { schoolId: { not: schoolId } },
     select: { id: true },
   }));
-  if (foreign) {
+  const addBandForm = forms(html).find((form) => form.text.includes("Add band"));
+  if (foreign && addBandForm) {
     const foreignBand = await postForm(
       "/settings/grading",
-      formWith(html, "Add band"),
+      addBandForm,
       {
         gradingScaleId: foreign.id,
         grade: "ZZ",
@@ -369,7 +368,7 @@ async function gradingGuards(cookie, userId) {
       alerts(foreignBand.html)[0],
     );
   } else {
-    console.log("  --   only one school in this database, skipping the foreign-scale check");
+    console.log("  --   no second school, or no band form on this page, skipping the foreign-scale check");
   }
 
   if (!frozen) {
@@ -1070,11 +1069,11 @@ async function main() {
       return;
     }
 
-    const { token, userId } = await openSession();
+    const { token, userId, schoolId } = await openSession();
     try {
       console.log(`Driving ${BASE}${usingForm ? ` as ${EMAIL}` : " as the demo proprietor"}.`);
       await deploymentChecks(token);
-      await gradingGuards(token, userId);
+      await gradingGuards(token, schoolId);
       await accountGuards(token, userId);
       await studentGuards(token);
       await deleteGuards(token);
