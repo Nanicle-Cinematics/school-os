@@ -31,7 +31,7 @@
  * having after a deploy.
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, scryptSync } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
@@ -1426,6 +1426,87 @@ async function campaignGuards(cookie, schoolId, foreign) {
 }
 
 /**
+ * A platform admin on a TEMPORARY password is made to choose their own before the
+ * console, the enrolment pages or any console action will serve them.
+ *
+ * `/account/password` cannot do this for them (it needs a school, and a platform
+ * admin belongs to none), so the console has a page of its own. The admin and its
+ * sessions are made here and removed again; the password is hashed in the same
+ * `scrypt$salt$hash` form src/lib/password.ts writes, so a format change fails this
+ * loudly instead of passing. Needs the database.
+ */
+async function platformPasswordGuards() {
+  console.log("\nA platform admin on a temporary password");
+  if (!hasDb) {
+    console.log("  --   no database access from here, skipping");
+    return;
+  }
+  const tag = `zzplat${randomBytes(3).toString("hex")}`;
+  const temporary = "Probe-temp-1!";
+  const chosen = "Probe-chosen-2!";
+  const salt = randomBytes(16);
+  const passwordHash = `scrypt$${salt.toString("hex")}$${scryptSync(temporary, salt, 64).toString("hex")}`;
+
+  const admin = await db(() =>
+    prisma.user.create({
+      data: { email: `${tag}@verify.invalid`, name: "ZZ verify:actions platform admin", passwordHash, isPlatformAdmin: true, mustChangePassword: true, passwordIssuedAt: new Date() },
+    }),
+  );
+  const mint = async () => {
+    const token = randomBytes(24).toString("hex");
+    await db(() =>
+      prisma.session.create({
+        data: { userId: admin.id, tokenHash: createHash("sha256").update(token).digest("hex"), expiresAt: new Date(Date.now() + 3600e3) },
+      }),
+    );
+    return token;
+  };
+  const go = async (path, token) => {
+    const response = await fetch(BASE + path, { headers: { Cookie: `${COOKIE_NAME}=${token}` }, redirect: "manual" });
+    return { status: response.status, to: response.headers.get("location") ?? "", html: await response.text() };
+  };
+
+  try {
+    const here = await mint();
+    const other = await mint();
+
+    for (const path of ["/admin", "/admin/security", "/admin/verify"]) {
+      const r = await go(path, here);
+      check(`${path} sends a temporary password to the password page`, r.status === 307 && r.to.endsWith("/admin/password"), `${r.status} -> ${r.to || "no redirect"}`);
+    }
+    const page = await go("/admin/password", here);
+    check("the password page itself opens", page.status === 200, `${page.status}`);
+
+    const form = forms(page.html).find((f) => f.fields.some((x) => x.name === "current"));
+    if (!form) {
+      console.log("  --   no password form on the page, skipping the rest");
+      return;
+    }
+    const wrong = await postForm("/admin/password", form, { current: "not-the-password", next: chosen, confirm: chosen }, here, 1).catch(() => ({ html: "" }));
+    check("a wrong current password is refused", says(wrong.html, "not your current password"), alerts(wrong.html)[0]);
+    const mismatch = await postForm("/admin/password", form, { current: temporary, next: chosen, confirm: `${chosen}x` }, here, 1).catch(() => ({ html: "" }));
+    check("two different new passwords are refused", says(mismatch.html, "do not match"), alerts(mismatch.html)[0]);
+    const short = await postForm("/admin/password", form, { current: temporary, next: "short", confirm: "short" }, here, 1).catch(() => ({ html: "" }));
+    check("a short password is refused", says(short.html, "at least 8"), alerts(short.html)[0]);
+    const stillFlagged = await db(() => prisma.user.findUnique({ where: { id: admin.id }, select: { mustChangePassword: true } }));
+    check("and nothing changed", stillFlagged?.mustChangePassword === true);
+
+    const done = await postForm("/admin/password", form, { current: temporary, next: chosen, confirm: chosen }, here, 1).catch(() => ({ status: 0, html: "" }));
+    const after = await db(() => prisma.user.findUnique({ where: { id: admin.id }, select: { mustChangePassword: true, passwordHash: true } }));
+    check("choosing a password clears the flag", after?.mustChangePassword === false && after?.passwordHash !== passwordHash, `status ${done.status}`);
+    const kept = await db(() => prisma.session.count({ where: { userId: admin.id, tokenHash: createHash("sha256").update(here).digest("hex") } }));
+    const ended = await db(() => prisma.session.count({ where: { userId: admin.id, tokenHash: createHash("sha256").update(other).digest("hex") } }));
+    check("this session stays and the other is signed out", kept === 1 && ended === 0);
+
+    const released = await go("/admin", here);
+    check("the divert is released, and the next step is enrolment", released.status === 307 && released.to.endsWith("/admin/security"), `${released.status} -> ${released.to || "no redirect"}`);
+  } finally {
+    await db(() => prisma.loginAttempt.deleteMany({ where: { identifier: `pw:${admin.id}` } }));
+    await db(() => prisma.user.deleteMany({ where: { id: admin.id } }));
+  }
+}
+
+/**
  * Logins and sessions under their row-security policies.
  *
  * `User` and `Session` show a school only its own people, so every tenant action
@@ -1483,6 +1564,24 @@ async function loginGuards(cookie, schoolId, foreign) {
     const after = await db(() => prisma.user.findUnique({ where: { id: a.id }, select: { passwordHash: true, mustChangePassword: true } }));
     check("resetting a password changes it and forces a new one", after?.passwordHash !== "x" && after?.mustChangePassword === true, alerts(reset.html)[0]);
     check("and ends every one of the login's sessions", (await sessionsOf(a.id)) === 0, `${await sessionsOf(a.id)} left`);
+
+    // ---- A platform admin with a seat here is not reset from a school -------
+    // The seat satisfies the "has access to this school" check, so without a refusal
+    // of its own the school's owner could set the password of the account that opens
+    // the Nanicle console.
+    const pa = await makeLogin();
+    await db(() => prisma.user.update({ where: { id: pa.id }, data: { isPlatformAdmin: true } }));
+    await giveSessions(pa.id);
+    const paPage = await fetchPage(`/users/${pa.id}`, cookie);
+    const paForm = formNamed(paPage.html, "Reset password");
+    if (!paForm) {
+      console.log("  --   no reset form for the platform admin, skipping");
+    } else {
+      const refused = await postForm(`/users/${pa.id}`, paForm, {}, cookie, 1).catch(() => ({ html: "" }));
+      const paAfter = await db(() => prisma.user.findUnique({ where: { id: pa.id }, select: { passwordHash: true } }));
+      check("a school cannot reset a platform admin's password", says(refused.html, "Nanicle platform team"), alerts(refused.html)[0]);
+      check("and the password and sessions are untouched", paAfter?.passwordHash === "x" && (await sessionsOf(pa.id)) === 2);
+    }
 
     // ---- Suspending ends the sessions working in this school ---------------
     const b = await makeLogin();
@@ -1866,6 +1965,7 @@ async function main() {
       await componentChecks(token);
       await importChecks(token);
       await foreignIdGuards(token);
+      await platformPasswordGuards();
     } finally {
       await closeSession(token);
     }

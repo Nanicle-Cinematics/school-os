@@ -379,6 +379,18 @@ export async function resetUserPassword(
   if (memberships.length === 0) {
     return { error: "That account has no access to this school." };
   }
+  // ⚠️ A platform admin can hold a seat at a school (a member of the Nanicle team
+  // added for support), and the check above is satisfied by that seat. Without this
+  // the school's owner could set the password of the account that opens the console
+  // — and, before that account has an authenticator, sign in to it. Account creation
+  // already refuses these accounts; so does this.
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { isPlatformAdmin: true } });
+  if (target?.isPlatformAdmin) {
+    return {
+      error:
+        "That account belongs to the Nanicle platform team, so its password is not reset from a school. Ask Nanicle.",
+    };
+  }
   if (
     memberships.some((m) => PRIVILEGED_ROLES.includes(m.role)) &&
     !canAccess(auth.roles, LEADERSHIP)
