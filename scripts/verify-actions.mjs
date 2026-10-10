@@ -1306,7 +1306,113 @@ async function foreignIdGuards(cookie) {
     }
 
     await peopleGuards(cookie, schoolId, foreign, myClass, offered);
+    await financeGuards(cookie, schoolId, foreign);
   });
+}
+
+/**
+ * Money: the heading and term an expense, a vendor bill or a budget names must
+ * be this school's own. The expense and bill forms open on a click, so they are
+ * absent from the server HTML and skip unless `useState(false)` in
+ * expense-form.tsx and bill-form.tsx is flipped to `true` for the run; the
+ * budget panel renders on the page and always runs.
+ */
+async function financeGuards(cookie, schoolId, foreign) {
+  console.log("\nMoney naming another school");
+  const refusal = refusalOf(cookie);
+  const tag = `ZZ verify:actions ${randomBytes(3).toString("hex")}`;
+
+  // ---- Budgets ---------------------------------------------------------------
+  const expensesPage = await fetchPage("/expenses", cookie);
+  const budgetForm = forms(expensesPage.html).find(
+    (f) => f.fields.some((x) => x.name === "categoryId" && x.type === "hidden") && f.fields.some((x) => x.name === "amount"),
+  );
+  if (!budgetForm) {
+    console.log("  --   no budget row on /expenses (no current term or no headings), skipping the budget checks");
+  } else {
+    const termId = budgetForm.fields.find((x) => x.name === "termId").value;
+    const categoryId = budgetForm.fields.find((x) => x.name === "categoryId").value;
+    const key = { termId_categoryId: { termId, categoryId } };
+    const before = await db(() => prisma.budget.findUnique({ where: key }));
+    try {
+      const ok = await postForm("/expenses", budgetForm, { amount: "123.45" }, cookie);
+      // The panel prints its result in a plain paragraph, not an alert, so match the page text.
+      check("control: a budget for this school's own term and heading is saved", ok.html.includes("Budget saved"));
+      const badTerm = await refusal("/expenses", budgetForm, { termId: foreign.term.id, amount: "123.45" });
+      check("a budget on another school's term is refused", badTerm.html.includes("term or heading was not found"));
+      const badHeading = await refusal("/expenses", budgetForm, { categoryId: foreign.expenseCategory.id, amount: "123.45" });
+      check("a budget on another school's heading is refused", badHeading.html.includes("term or heading was not found"));
+      check(
+        "and no budget row points at the other school",
+        (await db(() => prisma.budget.count({ where: { OR: [{ termId: foreign.term.id }, { categoryId: foreign.expenseCategory.id }] } }))) === 0,
+      );
+    } finally {
+      if (before) {
+        await db(() => prisma.budget.update({ where: key, data: { amount: before.amount } }));
+      } else {
+        await db(() => prisma.budget.deleteMany({ where: { termId, categoryId } }));
+      }
+    }
+  }
+
+  // ---- Recording an expense -------------------------------------------------
+  const expenseForm = forms(expensesPage.html).find(
+    (f) => f.fields.some((x) => x.name === "description") && f.fields.some((x) => x.name === "categoryId" && x.type === "select"),
+  );
+  if (!expenseForm) {
+    console.log("  --   the expense form is behind a click, so it is not on the page; skipping");
+  } else {
+    const description = `${tag} expense`;
+    const mine = () => db(() => prisma.expense.findMany({ where: { schoolId, description }, select: { id: true } }));
+    try {
+      const ok = await postForm("/expenses", expenseForm, { description, amount: "1.00" }, cookie);
+      check("control: an expense with this school's own heading and term is recorded", (await mine()).length === 1, alerts(ok.html)[0]);
+      const badHeading = await refusal("/expenses", expenseForm, { description: `${description} h`, amount: "1.00", categoryId: foreign.expenseCategory.id });
+      check("an expense under another school's heading is refused", says(badHeading.html, "heading was not found"), alerts(badHeading.html)[0]);
+      const badTerm = await refusal("/expenses", expenseForm, { description: `${description} t`, amount: "1.00", termId: foreign.term.id });
+      check("an expense in another school's term is refused", says(badTerm.html, "term was not found"), alerts(badTerm.html)[0]);
+      check(
+        "and no expense points at the other school",
+        (await db(() => prisma.expense.count({ where: { OR: [{ categoryId: foreign.expenseCategory.id }, { termId: foreign.term.id }] } }))) === 0,
+      );
+    } finally {
+      const rows = await db(() => prisma.expense.findMany({ where: { schoolId, description: { startsWith: tag } }, select: { id: true } }));
+      const ids = rows.map((r) => r.id);
+      await db(() => prisma.journalEntry.deleteMany({ where: { schoolId, sourceType: "EXPENSE", sourceId: { in: ids } } }));
+      await db(() => prisma.auditLog.deleteMany({ where: { schoolId, entityId: { in: ids } } }));
+      await db(() => prisma.expense.deleteMany({ where: { id: { in: ids } } }));
+    }
+  }
+
+  // ---- Recording a vendor bill ----------------------------------------------
+  const billPage = await fetchPage("/creditors", cookie);
+  const billForm = forms(billPage.html).find(
+    (f) => f.fields.some((x) => x.name === "vendorId") && f.fields.some((x) => x.name === "categoryId" && x.type === "select"),
+  );
+  if (!billForm) {
+    console.log("  --   the vendor bill form is behind a click, or the school has no vendor, so skipping");
+  } else {
+    let vendor = await db(() => prisma.vendor.findFirst({ where: { schoolId, isActive: true } }));
+    const madeVendor = !vendor;
+    if (!vendor) {
+      vendor = await db(() => prisma.vendor.create({ data: { schoolId, name: `${tag} vendor` } }));
+    }
+    const description = `${tag} bill`;
+    const mine = () => db(() => prisma.vendorBill.findMany({ where: { schoolId, description }, select: { id: true } }));
+    try {
+      const ok = await postForm("/creditors", billForm, { vendorId: vendor.id, description, amount: "1.00" }, cookie);
+      check("control: a bill under this school's own heading is recorded", (await mine()).length === 1, alerts(ok.html)[0]);
+      const bad = await refusal("/creditors", billForm, { vendorId: vendor.id, description: `${description} x`, amount: "1.00", categoryId: foreign.expenseCategory.id });
+      check("a bill under another school's heading is refused", says(bad.html, "heading was not found"), alerts(bad.html)[0]);
+      check("and no bill points at the other school", (await db(() => prisma.vendorBill.count({ where: { categoryId: foreign.expenseCategory.id } }))) === 0);
+    } finally {
+      const rows = await db(() => prisma.vendorBill.findMany({ where: { schoolId, description: { startsWith: tag } }, select: { id: true } }));
+      const ids = rows.map((r) => r.id);
+      await db(() => prisma.auditLog.deleteMany({ where: { schoolId, entityId: { in: ids } } }));
+      await db(() => prisma.vendorBill.deleteMany({ where: { id: { in: ids } } }));
+      if (madeVendor) await db(() => prisma.vendor.deleteMany({ where: { id: vendor.id } }));
+    }
+  }
 }
 
 /**

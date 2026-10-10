@@ -19,6 +19,7 @@ import {
 } from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
 import { lockOn } from "@/lib/locks";
+import { ownsExpenseCategories } from "@/lib/ownership";
 
 const MAX_AMOUNT = new Prisma.Decimal("9999999999.99");
 const METHODS = ["CASH", "BANK_TRANSFER", "BANK_DEPOSIT", "MOBILE_MONEY", "CARD", "CHEQUE"];
@@ -106,6 +107,9 @@ export async function recordVendorBill(
   const vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, select: { isActive: true } });
   if (!vendor?.isActive) {
     return { error: "Choose an active vendor." };
+  }
+  if (!(await ownsExpenseCategories([categoryId]))) {
+    return { error: "That expense heading was not found in this school. Reload the page and try again." };
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {

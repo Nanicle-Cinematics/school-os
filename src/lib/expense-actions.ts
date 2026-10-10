@@ -16,6 +16,7 @@ import {
   reverseJournalEntry,
 } from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
+import { ownsExpenseCategories, ownsTerms } from "@/lib/ownership";
 import { lockOn } from "@/lib/locks";
 import { readAttachment, storeAttachment } from "@/lib/attachments";
 import type { TenantTx } from "@/lib/prisma";
@@ -104,6 +105,15 @@ export async function recordExpense(
     if (spentAt.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
       return { error: "An expense cannot be dated in the future." };
     }
+  }
+
+  // Both ids came from the form and are written into referencing columns. The
+  // heading also decides which ledger account the spend is posted to.
+  if (!(await ownsExpenseCategories([categoryId]))) {
+    return { error: "That expense heading was not found in this school. Reload the page and try again." };
+  }
+  if (!(await ownsTerms([termId]))) {
+    return { error: "That term was not found in this school. Reload the page and try again." };
   }
 
   /**

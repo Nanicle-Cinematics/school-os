@@ -7,6 +7,7 @@ import { LEADERSHIP } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { writeAudit } from "@/lib/audit";
+import { ownsExpenseCategories, ownsTerms } from "@/lib/ownership";
 
 export type BudgetState = { error?: string; ok?: string };
 
@@ -29,6 +30,14 @@ export async function setBudget(_prev: BudgetState, formData: FormData): Promise
   const categoryId = String(formData.get("categoryId") ?? "");
   if (!termId || !categoryId) {
     return { error: "Pick a term and a heading." };
+  }
+
+  // The term has no read of its own below, and a budget row pointing at another
+  // school's term claims the (term, heading) key in a unique index that has no
+  // school in it. The heading is read in the transaction, but as a thrown
+  // error that reaches the page as a 500, so both are refused here by name.
+  if (!(await ownsTerms([termId])) || !(await ownsExpenseCategories([categoryId]))) {
+    return { error: "That term or heading was not found in this school. Reload the page and try again." };
   }
 
   const raw = String(formData.get("amount") ?? "").trim();
