@@ -1033,14 +1033,25 @@ async function importChecks(cookie) {
 // school with just the rows an id can point at, deleted again in `finally`. It is
 // the only thing in this file that writes, and it writes to a school nobody uses.
 
-const FOREIGN_SLUG = "zzz-verify-foreign-ids";
+// ⚠️ This script may be pointed at a database that holds real schools, so it
+// deletes only what it made. The slug is random per run and the school is removed
+// BY ID. A run killed half way leaves its school behind, so leftovers are swept
+// at the start — recognised by the prefix AND the exact name together, which no
+// school anyone registered will have. A fixed slug deleted by slug, as the first
+// version did, would remove a real school that happened to be called that.
+const PROBE_NAME = "ZZZ verify:actions foreign-id probe (safe to delete)";
+const PROBE_SLUG_PREFIX = "zzz-verify-foreign-ids-";
 
 async function withForeignSchool(run) {
-  const remove = () => db(() => prisma.school.deleteMany({ where: { slug: FOREIGN_SLUG } }));
-  await remove(); // a run killed half way leaves its school behind
-  const school = await db(() =>
-    prisma.school.create({ data: { name: "Foreign Ids Probe Academy", slug: FOREIGN_SLUG } }),
+  await db(() =>
+    prisma.school.deleteMany({ where: { slug: { startsWith: PROBE_SLUG_PREFIX }, name: PROBE_NAME } }),
   );
+  const school = await db(() =>
+    prisma.school.create({
+      data: { name: PROBE_NAME, slug: `${PROBE_SLUG_PREFIX}${randomBytes(4).toString("hex")}` },
+    }),
+  );
+  const remove = () => db(() => prisma.school.deleteMany({ where: { id: school.id } }));
   try {
     const schoolId = school.id;
     const year = await db(() =>
