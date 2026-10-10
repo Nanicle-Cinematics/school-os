@@ -1698,6 +1698,38 @@ layout already had to learn.
 shows its empty state on a freshly seeded database. That is correct, not broken.
 To see it populated, insert rows and delete them again.
 
+## Open items (as of 2026-10-10)
+
+Two decisions are outstanding after the audit. Neither blocks a release.
+
+1. **Production has not been confirmed to carry the `User` and `Session` policies.**
+   Merging #158 changed the code and `apply-rls.mjs`; policies exist only where
+   `npm run db:rls` has been run. Until it is run against production, every school's
+   context can read all logins and session token hashes, and the "Production checks —
+   RLS coverage and schema drift" job on `main` stays red (the intended order, not a
+   fault). To apply, from a checkout of `main` with dependencies installed:
+
+   ```
+   node --env-file=.env.prod scripts/apply-rls.mjs    # DIRECT_URL = production, port 5432
+   node --env-file=.env.prod scripts/audit-rls.mjs    # expect a pass
+   ```
+
+   It is a Node script, not SQL: it does not run in the Supabase SQL editor. The
+   application behaves the same before and after. If it prints a new `APP_DATABASE_URL`
+   password, production's role was missing; do not paste that into Vercel without
+   checking. Afterwards, try removing a user's access, removing a staff member and
+   re-admitting a login that has no membership.
+
+2. **One-time enrolment code for platform admins: deferred.** Production had one platform
+   admin on 2026-10-10, enrolled, off its temporary password, with no school memberships,
+   so the first-enrolment window (see "The platform admin has a second factor") is not
+   exploitable today. Until built, **enrol any new or reset platform admin in the same
+   sitting, from a trusted machine.** If built: two nullable `User` columns (hash and
+   expiry of the code), issued by `make:admin`, its production SQL helper and
+   `reset-platform-2fa.mjs`, and required by `confirmSetup` together with the app code.
+   Proposed lifetime 48 hours; `replaceAuthenticator` waives it, as that session has just
+   proved the old factor. Adding columns, so migrate production BEFORE merging.
+
 ## Before you push
 
 ```
