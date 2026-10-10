@@ -1356,6 +1356,7 @@ async function foreignIdGuards(cookie) {
     await financeGuards(cookie, schoolId, foreign);
     await subjectGuards(cookie, schoolId, foreign);
     await campaignGuards(cookie, schoolId, foreign);
+    await policyGuards(cookie, schoolId, foreign);
   });
 }
 
@@ -1420,6 +1421,43 @@ async function campaignGuards(cookie, schoolId, foreign) {
   } finally {
     await db(() => prisma.messageTemplate.deleteMany({ where: { id: foreignTemplate.id } }));
     if (made) await db(() => prisma.messageTemplate.deleteMany({ where: { id: template.id } }));
+  }
+}
+
+/**
+ * The default grading scale in Settings → Academic is a plain id column, so no
+ * foreign key would ever object to another school's scale: this read is the only
+ * guard. The control posts the form unchanged, which re-saves the same values.
+ */
+async function policyGuards(cookie, schoolId, foreign) {
+  console.log("\nDefault grading scale");
+  const page = await fetchPage("/settings", cookie);
+  const form = forms(page.html).find((f) => f.fields.some((x) => x.name === "defaultGradingScaleId") && f.fields.some((x) => x.name === "promotionPassPercent"));
+  if (!form) {
+    console.log("  --   no academic policy form on /settings, skipping");
+    return;
+  }
+  const started = new Date();
+  const before = await db(() => prisma.schoolSettings.findUnique({ where: { schoolId }, select: { defaultGradingScaleId: true } }));
+  const theirs = await db(() => prisma.gradingScale.create({ data: { schoolId: foreign.school.id, name: "ZZ foreign scale" } }));
+  try {
+    const ok = await postForm("/settings", form, {}, cookie, 4);
+    check("control: saving the policy with this school's own scale is accepted", ok.html.includes("takes effect the next time results are computed"), alerts(ok.html)[0]);
+    const forged = await postButtonless(cookie, form, { defaultGradingScaleId: theirs.id });
+    check("another school's grading scale is refused", forged.html.includes("grading scale was not found"), alerts(forged.html)[0]);
+    const after = await db(() => prisma.schoolSettings.findUnique({ where: { schoolId }, select: { defaultGradingScaleId: true } }));
+    check("and the default scale is unchanged", (after?.defaultGradingScaleId ?? null) === (before?.defaultGradingScaleId ?? null));
+  } finally {
+    // Unfixed, the forged post WRITES the foreign id into a column with no foreign key.
+    if (before) {
+      await db(() => prisma.schoolSettings.update({ where: { schoolId }, data: { defaultGradingScaleId: before.defaultGradingScaleId } }));
+    }
+    await db(() => prisma.gradingScale.deleteMany({ where: { id: theirs.id } }));
+    await db(() => prisma.auditLog.deleteMany({ where: { schoolId, action: "settings.academic", createdAt: { gte: started } } }));
+  }
+
+  async function postButtonless(cookieValue, theForm, overrides) {
+    return postForm("/settings", theForm, overrides, cookieValue, 1).catch(() => ({ html: "" }));
   }
 }
 

@@ -8,6 +8,7 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE, LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
+import { ownsGradingScales } from "@/lib/ownership";
 import { Prisma } from "@prisma/client";
 import { sendSms, normalisePhone, countSegments, RATE_PER_SEGMENT } from "@/lib/sms";
 import { localPhone } from "@/lib/portal-invite-data";
@@ -100,6 +101,14 @@ export async function saveAcademicPolicy(
   }
   if (!Number.isFinite(promotionPassPercent) || promotionPassPercent < 0 || promotionPassPercent > 100) {
     return { error: "The pass mark is a percentage between 0 and 100." };
+  }
+
+  // `defaultGradingScaleId` is a plain string, not a relation, so nothing at the
+  // database would object to another school's scale or to a made-up one. Every
+  // grade, mock and paper record is cut on this scale, and a school pointing at
+  // one it cannot read falls back silently, so only this read catches it.
+  if (!(await ownsGradingScales([defaultGradingScaleId]))) {
+    return { error: "That grading scale was not found in this school. Reload the page and try again." };
   }
 
   const data = {
