@@ -11,6 +11,7 @@ import { resolveAudience, type AudienceFilter } from "@/lib/message-data";
 import { renderTemplate, countSegments, estimateCost, sendSms, pupilFieldsUsed, RATE_PER_SEGMENT } from "@/lib/sms";
 import { writeAudit } from "@/lib/audit";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
+import { ownsMessageTemplates } from "@/lib/ownership";
 
 export type PreviewState = {
   error?: string;
@@ -158,6 +159,13 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
   }
   if (!confirmed) {
     return { error: "Tick the confirmation box before sending." };
+  }
+  // The template id is stored on the campaign and nothing else reads it back, so
+  // another school's id would be accepted by the foreign key without a trace.
+  // Refused before the SMS switch and the audience, so the answer does not
+  // depend on how this school happens to be set up.
+  if (!(await ownsMessageTemplates([templateId]))) {
+    return { error: "That template was not found in this school. Reload the page and try again." };
   }
 
   const filter = readFilter(formData);

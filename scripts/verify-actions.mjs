@@ -206,6 +206,53 @@ function formWith(html, needle) {
   return found;
 }
 
+/**
+ * Post a form whose actions hang off its BUTTONS (`<SubmitButton formAction>`),
+ * as the compose screen's Preview and Send do. React renders each button's action
+ * as `name="$ACTION_REF_n"` with the hidden `$ACTION_n:*` inputs inside the
+ * button, and the form itself carries none, so `postForm` would send both buttons'
+ * metadata at once. This keeps the form's ordinary fields and exactly one button.
+ */
+async function postButton(path, form, buttonText, overrides, cookie, tries = 1) {
+  const buttons = [...form.inner.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
+  const wanted = buttons.find((b) => /name="\$ACTION_REF_\d+"/.test(b[1]) && b[2].replace(/<[^>]+>/g, "").includes(buttonText));
+  if (!wanted) throw new Error(`no "${buttonText}" button with an action`);
+  const buttonName = wanted[1].match(/name="([^"]*)"/)[1];
+  const hidden = [...wanted[2].matchAll(/<input\b[^>]*>/g)].map((m) => ({
+    name: m[0].match(/name="([^"]*)"/)?.[1],
+    value: decodeEntities(m[0].match(/value="([^"]*)"/)?.[1] ?? ""),
+  }));
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    const body = new FormData();
+    const seen = new Set();
+    for (const field of form.fields) {
+      if (field.name.startsWith("$ACTION")) continue;
+      if (field.type === "checkbox" && !field.checked && !(field.name in overrides)) continue;
+      if (field.name in overrides) {
+        if (seen.has(field.name)) continue;
+        body.append(field.name, String(overrides[field.name]));
+        seen.add(field.name);
+      } else {
+        body.append(field.name, field.value);
+      }
+    }
+    for (const [name, value] of Object.entries(overrides)) if (!seen.has(name)) body.append(name, String(value));
+    body.append(buttonName, "");
+    for (const h of hidden) if (h.name) body.append(h.name, h.value);
+    try {
+      const response = await fetch(BASE + path, { method: "POST", headers: { Cookie: `${COOKIE_NAME}=${cookie}` }, body, redirect: "manual" });
+      if (response.status === 500) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+      return { status: response.status, html: await response.text() };
+    } catch {
+      await sleep(400 * (attempt + 1));
+    }
+  }
+  return { status: 500, html: "" };
+}
+
 /** The <Alert> banners an action rendered back. */
 function alerts(html) {
   return [...html.matchAll(/role="alert"[^>]*>([\s\S]*?)<\/p>/g)]
@@ -1146,7 +1193,7 @@ async function withForeignSchool(run) {
       prisma.staff.create({ data: { schoolId, staffNo: "ZZ-S-0001", firstName: "Probe", lastName: "Teacher", gender: "FEMALE" } }),
     );
     return await run({
-      term, classGroup, subject, asset, income, expense, feeCategory, expenseCategory,
+      school, term, classGroup, subject, asset, income, expense, feeCategory, expenseCategory,
       house, programme, student, guardian, staff,
     });
   } finally {
@@ -1308,6 +1355,7 @@ async function foreignIdGuards(cookie) {
     await peopleGuards(cookie, schoolId, foreign, myClass, offered);
     await financeGuards(cookie, schoolId, foreign);
     await subjectGuards(cookie, schoolId, foreign);
+    await campaignGuards(cookie, schoolId, foreign);
   });
 }
 
@@ -1335,6 +1383,44 @@ async function subjectGuards(cookie, schoolId, foreign) {
     "and no level offers it",
     (await db(() => prisma.levelSubject.count({ where: { subjectId: foreign.subject.id } }))) === 0,
   );
+}
+
+/**
+ * The compose form's template id is stored on the campaign. Every post here uses
+ * a hand-typed audience with no numbers in it, which reaches the template check
+ * and stops at "no recipients" or "SMS is switched off" before anything is
+ * written or sent, so the check is exercised without texting anyone.
+ */
+async function campaignGuards(cookie, schoolId, foreign) {
+  console.log("\nCampaign templates");
+  const page = await fetchPage("/messages", cookie);
+  const form = forms(page.html).find((f) => f.fields.some((x) => x.name === "templateId") && f.fields.some((x) => x.name === "confirm"));
+  if (!form) {
+    console.log("  --   no compose form on /messages, skipping");
+    return;
+  }
+  let template = await db(() => prisma.messageTemplate.findFirst({ where: { schoolId } }));
+  const made = !template;
+  if (!template) {
+    template = await db(() => prisma.messageTemplate.create({ data: { schoolId, name: "ZZ verify:actions template", body: "ZZ" } }));
+  }
+  const foreignTemplate = await db(() =>
+    prisma.messageTemplate.create({ data: { schoolId: foreign.school.id, name: "ZZ foreign template", body: "ZZ" } }),
+  );
+  const draft = { body: "ZZ verify:actions probe", audienceType: "CUSTOM", phones: "", confirm: "on" };
+  try {
+    const own = await postButton("/messages", form, "Send now", { ...draft, templateId: template.id }, cookie, 4);
+    check("control: this school's own template passes the check", !says(own.html, "template was not found") && alerts(own.html).length > 0, alerts(own.html)[0]);
+    const forged = await postButton("/messages", form, "Send now", { ...draft, templateId: foreignTemplate.id }, cookie);
+    check("another school's template is refused", says(forged.html, "template was not found"), alerts(forged.html)[0]);
+    check(
+      "and no campaign points at it",
+      (await db(() => prisma.messageCampaign.count({ where: { templateId: foreignTemplate.id } }))) === 0,
+    );
+  } finally {
+    await db(() => prisma.messageTemplate.deleteMany({ where: { id: foreignTemplate.id } }));
+    if (made) await db(() => prisma.messageTemplate.deleteMany({ where: { id: template.id } }));
+  }
 }
 
 /**
