@@ -58,14 +58,25 @@ payroll. Single-campus by design — there is no `Branch` model.
   The extended client's tx type is not assignable to the plain one — any helper
   taking a `tx` must import `TenantTx` from `@/lib/prisma` or the build fails
   with a wall of unreadable variance errors.
-- **Don't fan a page's queries out with `Promise.all`.** `DATABASE_URL` pins
-  `connection_limit=1` (pgBouncer transaction mode), so parallel queries do not
-  run in parallel — they queue for the single connection, and on this link the
-  tail of a 4–5 query fan-out blows past Prisma's 10s pool timeout and the page
-  500s with P2024 ("Timed out fetching a new connection from the connection
-  pool"). Await them in sequence: same wall time, no queue to time out. This
-  bites detail pages hardest, and it looks like a flaky network until you notice
-  the list pages always succeed while the detail page never does.
+- **Don't fan a page's queries out past the pool, and count the nesting.**
+  `DATABASE_URL` pins `connection_limit=1` (pgBouncer transaction mode) and the
+  app role's `APP_DATABASE_URL` uses 4. Under RLS every query is a transaction
+  that holds its connection for several round trips, which is seconds apiece on
+  this link, so parallel queries beyond the pool do not run in parallel — they
+  queue for a connection, and the tail of the fan-out blows past Prisma's 10s
+  pool timeout and the page 500s with P2024 ("Timed out fetching a new
+  connection from the connection pool"). It looks like a flaky network until you
+  notice the list pages always succeed while the detail page never does.
+
+  What kills a page is fan-out WIDER than the pool, and it hides in nesting.
+  `/chart-of-accounts` ran three loaders in one `Promise.all`, each running three
+  queries in its own: nine against a pool of four. Fixed 2026-10-11 by awaiting
+  the loaders one after another, so three are in flight. Measured on the dev
+  server: original ≈9s, everything sequential ≈16–17s, loaders in sequence
+  ≈9–12s. So "await them in sequence: same wall time" is true only for a pool of
+  ONE (`DATABASE_URL`, scripts). At 4, count what is in flight, nesting
+  included, and keep it at 3 or fewer. About 54 `Promise.all` calls across 45
+  files have not been audited against this.
 - **Number sequences can fall behind their data.** `nextNumber()` takes an
   optional `isTaken` probe (see `takenProbes`) and walks forward past
   collisions. Needed because seeded/imported rows are numbered without touching
@@ -73,6 +84,11 @@ payroll. Single-campus by design — there is no `Branch` model.
 - **Disk is tight** (~12 GB free). A corrupted `node_modules` from a full disk
   shows up as esbuild `EBADMACHO` / errno 88; fix with
   `rm -rf node_modules package-lock.json && npm cache clean --force && npm install`.
+- **Stale generated files look like code bugs.** Prisma's `Unknown argument
+  'source'` after a pull means the generated client predates the schema: run
+  `node_modules/.bin/prisma generate`. A dozen `AppRoutes` errors from `tsc` on
+  pages that exist were stale `.next/types`, and `next dev` regenerated them
+  (0 errors afterwards, 2026-10-11).
 - ⚠️ **React RESETS a form's fields once its action completes, and making an
   input CONTROLLED does not stop it.** The re-render carries the same `value`
   prop as before, React sees no change, and the reset DOM node is left alone —
@@ -442,6 +458,23 @@ Running `apply-rls.mjs` against prod after a deploy that carries a new tenant
 table is still the fix. The daily audit bounds how long forgetting it goes
 unnoticed; it does not remove the step.
 
+⚠️ **A change to the policies needs a production `rls` dispatch after it merges,
+and nothing does it for you.** #158 (policies on `User` and `Session`) merged
+2026-10-10 17:48 UTC. This job went red on that push and stayed red across five
+pushes to main, for about six hours, until
+`gh workflow run migrate.yml --ref main -f action=rls` ran (audit: 60 tables,
+0 gaps). Nobody was told, because a red check on main sits in a list nobody is
+watching. Two things made it worse:
+
+- While the audit fails, the schema-drift step below is SKIPPED, so a red job
+  hides what that step would have said.
+- The schema was never the problem. `action=status` showed production fully
+  migrated.
+
+For any PR that adds or changes policies, the order is: merge, run `action=rls`,
+re-run the failed job, check it goes green. A red "Production checks" on main
+means this.
+
 **The same job also checks for SCHEMA drift**, and it is still worth having now
 that migrations exist: `prisma migrate diff --exit-code` compares production to
 `prisma/schema.prisma` and fails if they disagree, whatever the cause.
@@ -518,8 +551,26 @@ and still leave a column behind.
 with no record of how they got them. `0_init` is the whole schema as it stood on
 2026-09-12, marked applied rather than run (`action=baseline`, once per database).
 Running `deploy` against such a database without baselining it first would try to
-CREATE TABLE over live data and fail. **Both databases are baselined** — dev and
+CREATE TABLE over live data and fail. **Both databases were baselined** — dev and
 production, 2026-09-12; `action=baseline` is done and should never be run again.
+
+⚠️ **Dev lost its history anyway.** On 2026-10-11 `db:status` listed all 25
+migrations, `0_init` included, as pending. Dev had no `_prisma_migrations` table
+at all, though it held 60 tables and a school. Something had reset or restored
+it, and nothing here records what. Running `deploy` in that state would have
+failed at `0_init`. What worked:
+
+1. `prisma migrate diff --from-url "$DIRECT_URL" --to-schema-datamodel prisma/schema.prisma --script`
+   showed dev differed from the schema only by the last two migrations.
+2. `prisma migrate resolve --applied <name>` for the other 23.
+3. `npm run db:deploy` for the two.
+4. `npm run db:rls`, then `prisma generate`.
+
+Five of the 23 carry one-off data backfills (stale OVERDUE invoices, the plan
+rename, login-phone normalisation, `passwordIssuedAt`, withdrawing deleted
+pupils' enrolments). Marking them applied skipped them. That is harmless on a
+one-school dev database and would not be on one holding real rows. Production
+was checked the same day with `action=status`: all 25 applied, schema up to date.
 
 A red `status` run is an ANSWER, not a breakage: `migrate status` exits 1 when
 production has something pending, and that exit code is deliberately not
@@ -1815,7 +1866,30 @@ controls change. It skips without a database. The new-assessment form renders on
 after a click, so that check skips too unless `useState(false)` in
 `new-assessment.tsx` is flipped to `true` for the run.
 
-It also runs against a deployment, signing in through the real login form so it
+⚠️ **Its session is minted for 3 hours (`SESSION_TTL_MS`), because the run takes
+about 33 minutes on this link.** At the original 30 minutes the session lapsed
+between the grading-scale guard's GET and its POST. The action answered
+`303 → /login`, `postForm` (which does not follow redirects) read an empty body,
+and two assertions failed as though the action had refused, while the page was
+fine. If a guard fails with no alert text, suspect the session first. Every
+request also carries a 120s deadline (`VERIFY_REQUEST_TIMEOUT_S`). Without one, a
+dropped database connection left a POST waiting 115 minutes and the run took 139.
+A timeout now fails loudly and says where to look: `Server has closed the
+connection` or P2024 in the dev log, or the database itself.
+
+⚠️ **`AuditLog`, `JournalEntry` and `JournalLine` are append-only for the app
+role.** `db:rls` revokes UPDATE, DELETE and TRUNCATE on them from `school_os_app`
+(`APPEND_ONLY` in `apply-rls.mjs`). A verify script that writes a fixture through
+`prisma` cannot take it back through `prisma`. Against a database that has had
+`db:rls` run, it dies with 42501 at the end, after writing. It leaves its rows
+behind, and the next run's "no rows left" check fails on work that was never
+wrong. CI never saw it, because it runs `verify:activity` and `verify:ledger`
+before `db:rls`. Clean up with `withOwner()` from `scripts/fixture.mts`, which
+uses the owner connection and closes it on return. A dev database that ran the
+old scripts may hold `entityId: "verify"` audit rows and `verify-ledger-*`
+journal entries. Only the owner can remove them.
+
+`verify:actions` also runs against a deployment, signing in through the real login form so it
 needs no database at all:
 
 ```bash
