@@ -1130,9 +1130,30 @@ are still on a temporary password, which tells an attacker which logins are wort
 guessing at. Strength has to come from the password, not from how it is refused.
 
 Passwords issued before the change keep the old strength until they are used or
-reach the 14-day expiry. Still open from the same review: the temporary password
-is also stored in plaintext in `Message.body` for guardian invites, and scrypt
-runs at Node's default cost (N=16384), below current OWASP guidance.
+reach the 14-day expiry. Still open from the same review: scrypt runs at Node's
+default cost (N=16384), below current OWASP guidance, and the stored hash format
+carries no parameters, so raising it needs a versioned prefix and a rehash at
+login.
+
+⚠️ **The message log must never hold a password.** Guardian invites text the
+temporary password, and until 2026-10-11 they also STORED that text — password
+included — in `Message.body`, which staff can read and which sits in every
+backup. (The reset flow always logged "code not stored".) `inviteMessages` in
+`portal-invite-data.ts` now returns the text to SEND and a copy to STORE with
+`(not stored)` in the password's place; the action sends one and stores the
+other, and segments and cost come from what is sent. `verify:password` checks all
+of it, including that the action stores `storedBody` — read from source with
+comments stripped, since this file explains its mistakes at length.
+Migration `20261011230000_redact_invite_passwords` scrubs the rows already
+written: the invite has had a single wording since 2026-09-09, so one pattern
+finds them, and it is idempotent. **Apply it to production** with `migrate.yml`
+`action=deploy` (data only, order does not matter). Dev held none; production
+is unchecked.
+
+The cost estimate on the invite screen prices the whole run from ONE sample
+message, and that sample now uses the longest password a run can produce
+(`TEMP_PASSWORD_MAX_LENGTH`). It was an 8-character stand-in, which understated
+the text once passwords grew past 10 characters.
 
 `changePassword` requires the CURRENT password (a session left open on a shared
 phone must not be enough to take the account over) and deletes every OTHER

@@ -6,17 +6,22 @@
  * address and one account, but an attacker who tries the same guess against many accounts
  * trips neither, so the only thing standing between the internet and a parent's portal is how
  * many passwords there are to guess. It was 72,000 (one word, one number); it is now about
- * 8 × 10^10. No database.
+ * 8 × 10^10. And once issued it must not be KEPT: the guardian-invite text carries the password,
+ * and the message log is read by staff and sits in backups, so the log gets a masked copy. No
+ * database.
  *
  * Run: npm run verify:password
  */
+import { readFileSync } from "node:fs";
 import {
   hashPassword,
   verifyPassword,
   temporaryPassword,
   TEMP_PASSWORD_WORDS,
   TEMP_PASSWORD_SPACE,
+  TEMP_PASSWORD_MAX_LENGTH,
 } from "@/lib/password";
+import { inviteMessage, inviteMessages, STORED_PASSWORD_MASK } from "@/lib/portal-invite-data";
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = "") {
@@ -75,6 +80,58 @@ for (const m of parsed) counts.set(m![3], (counts.get(m![3]) ?? 0) + 1);
 const expected = samples.length / words.length;
 const worst = Math.max(...[...counts.values()].map((c) => Math.abs(c - expected) / expected));
 check("the second word is evenly spread (no favoured word)", worst < 0.2, `worst deviation ${(worst * 100).toFixed(1)}% from even`);
+
+console.log("\nThe longest a password can be");
+const longestWords = [...words].sort((a, b) => b.length - a.length);
+check(
+  "TEMP_PASSWORD_MAX_LENGTH is the two longest words, two groups and the '!'",
+  TEMP_PASSWORD_MAX_LENGTH === longestWords[0].length + longestWords[1].length + 9,
+  String(TEMP_PASSWORD_MAX_LENGTH),
+);
+check("no password ever runs past it", samples.every((p) => p.length <= TEMP_PASSWORD_MAX_LENGTH), `longest seen ${Math.max(...samples.map((p) => p.length))}`);
+
+console.log("\nThe invite text, sent and kept");
+const invite = { schoolName: "Hope Education Complex", guardianFirstName: "Ama", identifier: "233244123456", url: "https://www.schoolosafrica.com/login" };
+const sampleAtMax = inviteMessage({ ...invite, password: "x".repeat(TEMP_PASSWORD_MAX_LENGTH) });
+let neverLow = true;
+let sentWithoutIt = 0;
+let storedWithIt = 0;
+let otherwiseSame = true;
+const inviteSamples = samples.slice(0, 2000);
+for (const password of inviteSamples) {
+  const { send, store } = inviteMessages({ ...invite, password });
+  if (!send.includes(password)) sentWithoutIt += 1; // the parent must actually receive it
+  if (store.includes(password)) storedWithIt += 1; // the log must not keep it
+  if (send.replace(password, STORED_PASSWORD_MASK) !== store) otherwiseSame = false;
+  if (send.length > sampleAtMax.length) neverLow = false;
+}
+check("the text SENT carries the password, or the parent cannot sign in", sentWithoutIt === 0, `${sentWithoutIt} of ${inviteSamples.length} without it`);
+check("the text STORED never does", storedWithIt === 0, `${storedWithIt} of ${inviteSamples.length} stored it`);
+check("the two differ only in the password", otherwiseSame);
+check("the stored copy says it was deliberate", inviteMessages({ ...invite, password: "Kente4829Odum7316!" }).store.includes(`password ${STORED_PASSWORD_MASK}.`));
+check("the cost estimate (the longest possible password) is never lower than a real message", neverLow);
+
+// The helper is only half the guarantee: the action has to STORE `store` and SEND `send`. Read
+// the source, comments out, because this codebase explains its mistakes at length and the
+// sentence about "never store body" would otherwise satisfy any search for it.
+const source = readFileSync("src/lib/portal-invite-actions.ts", "utf8")
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/^\s*\/\/.*$/gm, "");
+const create = source.slice(source.indexOf("message.create("), source.indexOf("message.create(") + 400);
+check("the invite action stores the masked copy (body: storedBody)", /\bbody:\s*storedBody\b/.test(create));
+check("and never the raw text, however it is spelt", !/\bbody\s*,/.test(create) && !/\bbody:\s*body\b/.test(create));
+check("it sends the real one", /sendSms\(\s*c\.phone,\s*body\b/.test(source));
+check("and counts segments and cost from what is sent, not the masked copy", /countSegments\(\s*body\s*\)/.test(source));
+
+// getInvitePlan prices the whole run from ONE sample message. It must be the longest a real one
+// can be, or the estimate on the invite screen comes in under what the school is charged.
+const planSource = readFileSync("src/lib/portal-invite-data.ts", "utf8")
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/^\s*\/\/.*$/gm, "");
+check(
+  "the invite screen's cost sample uses the longest possible password",
+  /password:\s*"x"\.repeat\(\s*TEMP_PASSWORD_MAX_LENGTH\s*\)/.test(planSource),
+);
 
 console.log(`\n${failures === 0 ? "All checks passed" : `${failures} FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);
