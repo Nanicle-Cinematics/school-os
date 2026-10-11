@@ -36,6 +36,7 @@ import { PrismaClient } from "@prisma/client";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const COOKIE_NAME = "school_os_session";
+const SESSION_TTL_MS = 3 * 60 * 60 * 1000;
 const EMAIL = process.env.VERIFY_EMAIL;
 const PASSWORD = process.env.VERIFY_PASSWORD;
 
@@ -282,7 +283,13 @@ async function openSession() {
       userId: user.id,
       tokenHash: createHash("sha256").update(token).digest("hex"),
       activeSchoolId: user.memberships[0]?.schoolId,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      // ⚠️ This has to outlast the WHOLE run, and on this link the run is over half an hour
+      // (33 minutes against the Frankfurt database). At 30 minutes the session lapsed between
+      // the grading-scale guard's GET and its POST: the action answered 303 → /login, the guard
+      // read an empty body, and both assertions failed as though the action had refused —
+      // while the page was fine. Nothing says "session expired" in that failure, so make it
+      // impossible rather than diagnosable. `closeSession` still deletes the row at the end.
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS),
     },
   }));
   return { token, userId: user.id, schoolId: user.memberships[0]?.schoolId ?? null };
@@ -328,7 +335,7 @@ async function closeSession(token) {
       }),
     );
   } catch {
-    console.log("  --   could not delete the verification session; it expires in 30 minutes");
+    console.log("  --   could not delete the verification session; it expires in 3 hours");
   }
 }
 
