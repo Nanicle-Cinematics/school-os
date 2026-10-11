@@ -1132,9 +1132,153 @@ async function withForeignSchool(run) {
     const expenseCategory = await db(() =>
       prisma.expenseCategory.create({ data: { schoolId, name: "Probe spend", code: "ZZSPEND" } }),
     );
-    return await run({ term, classGroup, subject, asset, income, expense, feeCategory, expenseCategory });
+    const student = await db(() =>
+      prisma.student.create({
+        data: { schoolId, admissionNo: "ZZ-PROBE-1", firstName: "Probe", lastName: "Pupil", gender: "MALE" },
+      }),
+    );
+    const guardian = await db(() =>
+      prisma.guardian.create({ data: { schoolId, firstName: "Probe", lastName: "Parent", phone: "0200000000" } }),
+    );
+    const staff = await db(() =>
+      prisma.staff.create({
+        data: { schoolId, staffNo: "ZZ-PROBE-1", firstName: "Probe", lastName: "Teacher", gender: "MALE" },
+      }),
+    );
+    const gradingScale = await db(() => prisma.gradingScale.create({ data: { schoolId, name: "Probe scale" } }));
+    return await run({
+      term, classGroup, subject, asset, income, expense, feeCategory, expenseCategory,
+      student, guardian, staff, gradingScale,
+    });
   } finally {
     await remove();
+  }
+}
+
+
+/**
+ * People, teaching and money screens: every action that writes an id from the form
+ * must refuse another school's. Each check asserts the action's own "was not
+ * found" message, which proves the post reached the action AND was refused; the
+ * unfixed code answers something else or writes. Forms behind a click (the
+ * expense and vendor-bill forms, the campaign composer) are absent from the server
+ * HTML and are skipped, as the assessment form below is.
+ *
+ * Unfixed, some of these WRITE (an enrolment, a settings column). Those take a
+ * snapshot first and put it back in `finally`.
+ */
+async function placementGuards(cookie, schoolId, foreign) {
+  console.log("\nPlacements, teaching and budgets");
+  const ownClass = await db(() => prisma.classGroup.findFirst({ where: { schoolId }, orderBy: { createdAt: "asc" } }));
+  const ownSubject = await db(() => prisma.subject.findFirst({ where: { schoolId }, orderBy: { createdAt: "asc" } }));
+  const ownStaff = await db(() => prisma.staff.findFirst({ where: { schoolId }, orderBy: { createdAt: "asc" } }));
+  const ownGuardian = await db(() => prisma.guardian.findFirst({ where: { schoolId, deletedAt: null } }));
+  const year = await db(() => prisma.academicYear.findFirst({ where: { schoolId, isCurrent: true } }));
+  const ownStudent = year
+    ? await db(() =>
+        prisma.student.findFirst({
+          where: { schoolId, deletedAt: null, enrollments: { some: { academicYearId: year.id } } },
+          include: { enrollments: { where: { academicYearId: year.id } } },
+        }),
+      )
+    : null;
+
+  const refuse = async (label, path, pick, overrides) => {
+    const page = await fetchPage(path, cookie);
+    const form = forms(page.html).find(pick);
+    if (!form) {
+      console.log(`  --   no matching form on ${path}, skipping: ${label}`);
+      return;
+    }
+    const result = await postForm(path, form, overrides, cookie);
+    check(label, says(result.html, "was not found"), alerts(result.html)[0] ?? "no banner");
+  };
+  const has = (...names) => (form) => names.every((name) => form.fields.some((x) => x.name === name));
+
+  if (ownStudent && ownClass) {
+    const path = `/students/${ownStudent.id}`;
+    const enrolment = ownStudent.enrollments[0];
+    const before = { current: ownStudent.currentClassGroupId, classGroupId: enrolment?.classGroupId };
+    try {
+      await refuse("enrolling a pupil in another school's class is refused", path, (f) => has("studentId", "classGroupId")(f) && !has("guardianId")(f), {
+        classGroupId: foreign.classGroup.id,
+      });
+      await refuse("enrolling another school's pupil is refused", path, (f) => has("studentId", "classGroupId")(f) && !has("guardianId")(f), {
+        studentId: foreign.student.id,
+        classGroupId: ownClass.id,
+      });
+    } finally {
+      await db(() => prisma.student.update({ where: { id: ownStudent.id }, data: { currentClassGroupId: before.current } }));
+      if (enrolment) {
+        await db(() => prisma.enrollment.update({ where: { id: enrolment.id }, data: { classGroupId: before.classGroupId } }));
+      }
+    }
+
+    await refuse("linking a pupil to another school's guardian is refused", path, has("guardianId", "studentId"), {
+      guardianId: foreign.guardian.id,
+    });
+    if (ownGuardian) {
+      await refuse("linking another school's pupil to a guardian is refused", path, has("guardianId", "studentId"), {
+        guardianId: ownGuardian.id,
+        studentId: foreign.student.id,
+      });
+    }
+    await refuse("adding a guardian to another school's pupil is refused", path, has("guardianName", "studentId"), {
+      studentId: foreign.student.id,
+      guardianName: "Probe Parent",
+      guardianPhone: "0244123456",
+    });
+  } else {
+    console.log("  --   no enrolled pupil in this school, skipping the pupil checks");
+  }
+
+  if (ownStaff && ownSubject && ownClass) {
+    const path = `/staff/${ownStaff.id}`;
+    const pick = has("staffId", "subjectId", "classGroupId");
+    await refuse("a teaching assignment on another school's subject is refused", path, pick, {
+      subjectId: foreign.subject.id,
+      classGroupId: ownClass.id,
+    });
+    await refuse("a teaching assignment on another school's class is refused", path, pick, {
+      subjectId: ownSubject.id,
+      classGroupId: foreign.classGroup.id,
+    });
+    await refuse("a teaching assignment for another school's teacher is refused", path, pick, {
+      staffId: foreign.staff.id,
+      subjectId: ownSubject.id,
+      classGroupId: ownClass.id,
+    });
+  } else {
+    console.log("  --   no teacher, subject and class in this school, skipping the assignment checks");
+  }
+
+  if (ownSubject) {
+    await refuse("setting another school's subject's levels is refused", `/subjects/${ownSubject.id}`, has("subjectId"), {
+      subjectId: foreign.subject.id,
+    });
+  }
+
+  await refuse("a budget for another school's term is refused", "/expenses", has("termId", "categoryId"), {
+    termId: foreign.term.id,
+  });
+  await refuse("a budget for another school's heading is refused", "/expenses", has("termId", "categoryId"), {
+    categoryId: foreign.expenseCategory.id,
+  });
+
+  const settingsBefore = await db(() => prisma.schoolSettings.findUnique({ where: { schoolId } }));
+  try {
+    await refuse("another school's grading scale cannot be the default", "/settings", has("defaultGradingScaleId"), {
+      defaultGradingScaleId: foreign.gradingScale.id,
+    });
+  } finally {
+    if (settingsBefore) {
+      await db(() =>
+        prisma.schoolSettings.update({
+          where: { schoolId },
+          data: { defaultGradingScaleId: settingsBefore.defaultGradingScaleId },
+        }),
+      );
+    }
   }
 }
 
@@ -1158,6 +1302,8 @@ async function foreignIdGuards(cookie) {
   }
 
   await withForeignSchool(async (foreign) => {
+    await placementGuards(cookie, schoolId, foreign);
+
     // ---- The ledger mapping: where every later posting lands ---------------
     const chart = await fetchPage("/chart-of-accounts", cookie);
     const KEYS = ["cashAccountId", "bankAccountId", "momoAccountId", "receivableAccountId", "payableAccountId"];

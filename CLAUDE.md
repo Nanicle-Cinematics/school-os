@@ -226,8 +226,12 @@ been subverted, and "enforcement is LIVE" should not be read as one:
   linking a guardian, `addTeachingAssignment`, `recordExpense`, `recordVendorBill`,
   `setBudget`, `saveSubjectLevels`, a campaign's `templateId` and the default grading
   scale in Settings, all through the one-line readers at the foot of `ownership.ts`.
-  **Not yet driven by `verify:actions`** — those checks still have to be written, and
-  the reads are untested until they are. Audited and left alone because they read the
+  `placementGuards` in `verify:actions` posts another school's ids to the ones whose forms
+  render on the page (enrolling, linking and adding a guardian, teaching assignments,
+  subject levels, budgets, the default grading scale); **`recordExpense`,
+  `recordVendorBill`, `sendCampaign` and the house/programme on a pupil sit behind a
+  click or an edit page and are not driven yet**, and none of it has been run against a
+  database. Audited and left alone because they read the
   row before writing: `saveFeeStructure`, `createPlan`, `recordPayment`,
   `saveMockSheet`, `saveRecordedMarks`, `saveEarlierClasses`, the register, `saveRemarks`
   and the promotion actions. A failure that is only a server error (an update by a
