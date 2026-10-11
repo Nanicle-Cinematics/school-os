@@ -54,6 +54,7 @@
     "shots:portal": "node --env-file=.env scripts/portal-shots.mjs",
     "verify:actions": "node --env-file=.env scripts/verify-actions.mjs",
     "verify:totp": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-totp.mts",
+    "verify:password": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-password.mts",
     "make:admin:reset-2fa": "node --env-file=.env scripts/reset-platform-2fa.mjs",
     "verify:carry-forward": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-carry-forward.mts",
     "verify:invoicing": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-invoicing.mts",
