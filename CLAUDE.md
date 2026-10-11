@@ -91,6 +91,15 @@ payroll. Single-campus by design — there is no `Branch` model.
   `/messages` and `/debtors` ran clean on the dev server before the change. Production runs
   in `fra1` beside the database, where a query takes milliseconds, so I expect
   this to be mostly a dev-link problem; that has not been measured there.
+
+  When the work is mostly slow I/O that CAN overlap, with one step that cannot —
+  a campaign send, where the gateway calls are HTTP but each outcome is a
+  database write — cap just that step with `createLimiter(n)` from
+  `src/lib/concurrency.ts` rather than shrinking the whole batch.
+  `dispatchQueued` keeps the gateway at ten and the writes at three, leaving a
+  connection spare. It is a plain module with no Prisma, tested in `verify:sms`.
+  The batch itself was not run end to end: the dev school has SMS off, and
+  turning it on writes audit rows only the owner can remove.
 - **Number sequences can fall behind their data.** `nextNumber()` takes an
   optional `isTaken` probe (see `takenProbes`) and walks forward past
   collisions. Needed because seeded/imported rows are numbered without touching
