@@ -5,6 +5,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { normalisePhone, countSegments, renderTemplate, estimateCost, pupilFieldsUsed } from "@/lib/sms-shared";
+import { createLimiter } from "@/lib/concurrency";
 import {
   DEFAULT_MESSAGE_TEMPLATES,
   TRANSACTIONAL,
@@ -135,6 +136,60 @@ const receipt = renderTemplate(defaultTemplateBody(TRANSACTIONAL.paymentReceived
 });
 check("the packaged receipt renders", receipt.includes("GHS 250.00") && receipt.includes("RCPT/0001"), receipt);
 check("and leaves no unfilled merge field", !receipt.includes("{{"), receipt);
+
+// A campaign records each message's outcome as its own write, and under RLS every write holds
+// one of the app role's four connections. dispatchQueued caps those writes with this limiter
+// (three at a time) so ten of them do not fill the pool; the cap is only as good as the limiter.
+console.log("\nThe write limiter a campaign send is capped by");
+{
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const run = createLimiter(3);
+  let active = 0;
+  let peak = 0;
+  const started: number[] = [];
+  const results = await Promise.all(
+    Array.from({ length: 20 }, (_, n) =>
+      run(async () => {
+        started.push(n);
+        active += 1;
+        peak = Math.max(peak, active);
+        await sleep(5 + (n % 4) * 3);
+        active -= 1;
+        return n * 2;
+      }),
+    ),
+  );
+  check("never more than three run at once", peak <= 3, `peak ${peak}`);
+  check("and does use all three, so it is not just running one at a time", peak === 3, `peak ${peak}`);
+  check("every task completes and gets its own result", results.every((value, n) => value === n * 2));
+  check("tasks start in the order they asked", started.every((value, n) => value === n), started.join(","));
+
+  const single = createLimiter(1);
+  const ran: string[] = [];
+  const failing = single(async () => {
+    ran.push("first");
+    throw new Error("the write failed");
+  }).catch(() => "rejected");
+  const after = single(async () => {
+    ran.push("second");
+    return "ran";
+  });
+  check("a failed task is passed to its caller", (await failing) === "rejected");
+  // Raced against a timer: a slot that leaked would leave `after` waiting for ever, and the
+  // script would end on Node's "unsettled top-level await" instead of saying what broke.
+  const afterOutcome = await Promise.race([after, sleep(500).then(() => "never ran")]);
+  check("and gives its slot back, so the next one still runs", afterOutcome === "ran" && ran.join() === "first,second", `${afterOutcome} (${ran.join()})`);
+
+  let refused = 0;
+  for (const bad of [0, -1, 1.5, Number.NaN]) {
+    try {
+      createLimiter(bad);
+    } catch {
+      refused += 1;
+    }
+  }
+  check("a limit that is not a whole number of at least one is refused", refused === 4, `${refused} of 4`);
+}
 
 console.log(`\n${failures === 0 ? "All checks passed" : `${failures} FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

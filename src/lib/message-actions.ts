@@ -12,6 +12,7 @@ import { renderTemplate, countSegments, estimateCost, sendSms, pupilFieldsUsed, 
 import { writeAudit } from "@/lib/audit";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 import { ownsMessageTemplates } from "@/lib/ownership";
+import { createLimiter } from "@/lib/concurrency";
 
 export type PreviewState = {
   error?: string;
@@ -296,6 +297,14 @@ async function dispatchQueued(campaignId: string, schoolId: string, senderId: st
   // A few at a time, not one by one: a class of 600 at ~1s each would outlive the
   // function. Bounded, so the gateway is not hit with the whole list at once.
   const BATCH = 10;
+  // The gateway calls overlap ten at a time, but each outcome is a database write, and
+  // under RLS every write is a transaction holding one of the app role's FOUR connections
+  // for several round trips. Ten at once filled the whole pool, so everything else on the
+  // instance queued behind a campaign and, on a slow link, the tail outlasted the pool's 10s
+  // checkout timeout (P2024). Three writes at a time leaves a connection spare. Each message
+  // still gets its own update, because providerRef is the gateway's own reference for it
+  // and no single updateMany can set a different one per row.
+  const recordOutcome = createLimiter(3);
   for (let i = 0; i < queued.length; i += BATCH) {
     await Promise.all(
       queued.slice(i, i + BATCH).map(async (message) => {
@@ -309,15 +318,17 @@ async function dispatchQueued(campaignId: string, schoolId: string, senderId: st
         });
         dryRun = dryRun || result.dryRun;
 
-        await prisma.message.update({
-          where: { id: message.id },
-          data: {
-            status: result.ok ? "SENT" : "FAILED",
-            providerRef: result.providerRef ?? null,
-            error: result.error ?? (result.dryRun ? "Dry run — no gateway configured" : null),
-            sentAt: result.ok ? new Date() : null,
-          },
-        });
+        await recordOutcome(() =>
+          prisma.message.update({
+            where: { id: message.id },
+            data: {
+              status: result.ok ? "SENT" : "FAILED",
+              providerRef: result.providerRef ?? null,
+              error: result.error ?? (result.dryRun ? "Dry run — no gateway configured" : null),
+              sentAt: result.ok ? new Date() : null,
+            },
+          }),
+        );
 
         if (result.ok) {
           sent += 1;
