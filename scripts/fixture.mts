@@ -1,5 +1,33 @@
+import { PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
+
+/**
+ * Run `fn` on the OWNER connection, and close it before returning.
+ *
+ * For a verify script's cleanup of rows the app role may add but never remove.
+ * `db:rls` revokes UPDATE, DELETE and TRUNCATE on AuditLog, JournalEntry and
+ * JournalLine from `school_os_app` on purpose — a ledger that the app can edit
+ * is not a ledger — so a fixture written through `prisma` cannot be taken back
+ * through it. Against a database that has had `db:rls` run that is a 42501 at
+ * the very end of the script, AFTER the rows are written: the run fails and
+ * leaves its debris behind, and the next run's "no rows left" check fails on
+ * work that was never wrong. CI never saw it, because these guards run there
+ * BEFORE `db:rls`, on a database with no revoke yet.
+ *
+ * Same URL choice as verify-isolation. Closed on the way out because
+ * `connection_limit` is small and a second client held open for the rest of a
+ * script is how the dev database got starved.
+ */
+export async function withOwner<T>(fn: (owner: PrismaClient) => Promise<T>): Promise<T> {
+  const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+  const owner = new PrismaClient(url ? { datasources: { db: { url } } } : undefined);
+  try {
+    return await fn(owner);
+  } finally {
+    await owner.$disconnect();
+  }
+}
 
 /**
  * The school a verify script means when it says "the school".
