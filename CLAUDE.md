@@ -1130,10 +1130,28 @@ are still on a temporary password, which tells an attacker which logins are wort
 guessing at. Strength has to come from the password, not from how it is refused.
 
 Passwords issued before the change keep the old strength until they are used or
-reach the 14-day expiry. Still open from the same review: scrypt runs at Node's
-default cost (N=16384), below current OWASP guidance, and the stored hash format
-carries no parameters, so raising it needs a versioned prefix and a rehash at
-login.
+reach the 14-day expiry.
+
+⚠️ **The scrypt cost is being raised in two steps, and the order is the point.**
+Every hash written until now used Node's defaults (N=2^14, r=8, p=1), below
+current OWASP guidance. The target is OWASP's N=2^16, r=8, p=2 (`CURRENT_PARAMS`,
+about 64 MiB; an equal-strength trade for N=2^17 that suits serverless). Two
+things were needed that the old format could not give: Node REFUSES more than
+32 MiB unless `maxmem` is passed, and the stored hash carried no parameters.
+There are now two formats, told apart by field count — `scrypt$<salt>$<hash>`
+(legacy, parameters implied) and `scrypt$ln=16,r=8,p=2$<salt>$<hash>` (parameters
+travel with the hash, so the next upgrade is a rehash and not another format).
+
+**Step 1 (2026-10-12)** teaches `verifyPassword` to READ both, and still WRITES the
+legacy one (`WRITE_PARAMS`). **Step 2** flips the writer and upgrades hashes at
+sign-in. They cannot ship together: a hash in the new format is unreadable to code
+that predates step 1, so writing one before every instance can read it — a deploy
+overlap, or a rollback — locks out every user already upgraded. Merge step 2 only
+once step 1's deployment is live. A stored hash is also bounded on read (`ln` 14–18,
+`r`=8, `p` 1–8, and `N × p` ≤ 2^18): without that product cap one planted row cost
+9 seconds of CPU per sign-in. `verify:password` pins the primitive to the RFC 7914
+vectors, a legacy hash written by the pre-change code, and an independently
+assembled new-format hash, and fails if the writer is flipped early.
 
 ⚠️ **The message log must never hold a password.** Guardian invites text the
 temporary password, and until 2026-10-11 they also STORED that text — password
@@ -1146,9 +1164,9 @@ of it, including that the action stores `storedBody` — read from source with
 comments stripped, since this file explains its mistakes at length.
 Migration `20261011230000_redact_invite_passwords` scrubs the rows already
 written: the invite has had a single wording since 2026-09-09, so one pattern
-finds them, and it is idempotent. **Apply it to production** with `migrate.yml`
-`action=deploy` (data only, order does not matter). Dev held none; production
-is unchecked.
+finds them, and it is idempotent. Applied to production on 2026-10-11 with
+`migrate.yml` `action=deploy`; dev held none, and how many production rows it
+changed is unknown, because the workflow does not report row counts.
 
 The cost estimate on the invite screen prices the whole run from ONE sample
 message, and that sample now uses the longest password a run can produce
