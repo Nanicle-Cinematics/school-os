@@ -15,7 +15,7 @@ import { prisma, tenantTransaction } from "../src/lib/prisma";
 import { withBypass, setTenantContext } from "../src/lib/tenant-context";
 import { postJournalEntry, reverseJournalEntry, findJournalEntryForSource } from "../src/lib/ledger-engine";
 import { applyDefaultChartOfAccounts } from "../src/lib/ledger-defaults";
-import { demoSchool } from "./fixture.mjs";
+import { demoSchool, withOwner } from "./fixture.mjs";
 
 let passed = 0;
 const failures: string[] = [];
@@ -121,9 +121,11 @@ if (!entry) {
   }
 
   // Clean up — this fixture's two entries are the only rows a fresh
-  // sourceId could have produced.
-  await withBypass(() =>
-    prisma.journalEntry.deleteMany({ where: { schoolId: school.id, sourceId } }),
+  // sourceId could have produced. On the owner connection, because the app
+  // role cannot delete from the ledger (see withOwner); the lines go with
+  // their entries through the cascade.
+  await withOwner((owner) =>
+    owner.journalEntry.deleteMany({ where: { schoolId: school.id, sourceId } }),
   );
   console.log("  (fixture entries removed)");
 }

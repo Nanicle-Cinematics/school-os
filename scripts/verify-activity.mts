@@ -18,7 +18,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
 import { setTenantContext } from "@/lib/tenant-context";
-import { demoSchool } from "./fixture.mjs";
+import { demoSchool, withOwner } from "./fixture.mjs";
 import { getActivity, ACTIVITY_ACTIONS } from "@/lib/dashboard-data";
 
 let passed = 0;
@@ -115,9 +115,12 @@ check("a malformed payload still yields a readable line",
 check("timestamps are relative", items.every((i) => /just now|min|hr|d$|\w/.test(i.when)),
   items[0]?.when ?? "—");
 
-await prisma.auditLog.deleteMany({ where: { id: { in: created } } });
+// The app role may append to AuditLog but not delete from it (see withOwner),
+// so the fixture is taken back, and counted, on the owner connection. Counting
+// there also covers every school, which is the stricter reading of "removed".
+await withOwner((owner) => owner.auditLog.deleteMany({ where: { id: { in: created } } }));
 check("test rows removed",
-  (await prisma.auditLog.count({ where: { entityId: "verify" } })) === 0);
+  (await withOwner((owner) => owner.auditLog.count({ where: { entityId: "verify" } }))) === 0);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 await prisma.$disconnect();
