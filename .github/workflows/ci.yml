@@ -245,6 +245,9 @@ jobs:
       - name: Platform-admin two-factor — RFC 6238 vectors, replay, encryption at rest
         run: npm run verify:totp
 
+      - name: Passwords — hashing, and a temporary password with too many possibilities to spray
+        run: npm run verify:password
+
       # Ageing boundaries, the amount in words on a receipt, and the hold that
       # keeps unapproved spending out of the cash book. The approval check
       # WRITES a DRAFT expense and removes it — its first version asserted the

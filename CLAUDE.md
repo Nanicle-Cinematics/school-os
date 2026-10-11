@@ -1110,6 +1110,30 @@ loudly.
 very first proprietor. Add the flag to any new one, or that account keeps a
 read-aloud password forever.
 
+⚠️ **A temporary password is the weakest credential the app issues, and the login
+lockout cannot protect it.** The lockout limits one address (40 attempts per 15
+minutes) and one account (25), but an attacker who tries the SAME guess against
+every account still on a temporary password makes one attempt per account, so the
+account limit never trips. A hit on SOME account then takes about as many
+attempts as there are passwords, however many accounts there are. It was one word
+and one number — 72,000, 16 bits — which one address could exhaust in about three
+weeks and ten in two days, against the hundreds of unused accounts a bulk parent
+invite leaves for up to 14 days. Found in the 2026-10-11 security review.
+
+It is now two different words from a list of 32 and two four-digit groups
+(`Kente4829Odum7316!`): about 8 × 10^10, 36 bits, tens of thousands of years from
+one address, and still dictatable. `npm run verify:password` (source-only, in CI)
+fails if the list or the format shrinks, and if the second-word draw loses a
+word. **Do not "fix" this with a stricter lockout for temporary-password
+accounts.** It would answer "too many attempts" only for accounts that exist and
+are still on a temporary password, which tells an attacker which logins are worth
+guessing at. Strength has to come from the password, not from how it is refused.
+
+Passwords issued before the change keep the old strength until they are used or
+reach the 14-day expiry. Still open from the same review: the temporary password
+is also stored in plaintext in `Message.body` for guardian invites, and scrypt
+runs at Node's default cost (N=16384), below current OWASP guidance.
+
 `changePassword` requires the CURRENT password (a session left open on a shared
 phone must not be enough to take the account over) and deletes every OTHER
 session on success, so a password changed *because* it leaked actually ends the
