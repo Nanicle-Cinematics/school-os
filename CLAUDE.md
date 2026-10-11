@@ -75,8 +75,22 @@ payroll. Single-campus by design — there is no `Branch` model.
   server: original ≈9s, everything sequential ≈16–17s, loaders in sequence
   ≈9–12s. So "await them in sequence: same wall time" is true only for a pool of
   ONE (`DATABASE_URL`, scripts). At 4, count what is in flight, nesting
-  included, and keep it at 3 or fewer. About 54 `Promise.all` calls across 45
-  files have not been audited against this.
+  included, and keep it at 4 or fewer. A single fan-out of five costs one extra
+  round and is tolerable; the failures come from nesting.
+
+  Audited 2026-10-11: **32 real `Promise.all` sites in 24 files** (the other ~22
+  matches in `src` are comments saying not to — an earlier note here said "about
+  54 across 45 files", which counted those). Two pages nested past the pool like
+  chart-of-accounts did, `/messages` (nine in flight) and `/debtors` (about six).
+  `/messages` now awaits its two loaders in sequence, at no cost (8.1s against
+  7.8s). `/debtors` runs the list and the ageing together (four in flight) and
+  the filter options after: ≈18s against ≈15s before, and ≈21s fully sequential,
+  so that one is a real if small trade. Single fan-outs of five remain in
+  `message-data`, `class-actions`, `dashboard-data`, `expense-data` and
+  `results-data`. Only chart-of-accounts has actually been seen to throw P2024;
+  `/messages` and `/debtors` ran clean on the dev server before the change. Production runs
+  in `fra1` beside the database, where a query takes milliseconds, so I expect
+  this to be mostly a dev-link problem; that has not been measured there.
 - **Number sequences can fall behind their data.** `nextNumber()` takes an
   optional `isTaken` probe (see `takenProbes`) and walks forward past
   collisions. Needed because seeded/imported rows are numbered without touching
