@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { TEMP_PASSWORD_MAX_LENGTH } from "@/lib/password";
 import { normalisePhone, countSegments, RATE_PER_SEGMENT } from "@/lib/sms-shared";
 
 /**
@@ -69,6 +70,33 @@ export function inviteMessage(args: {
   );
 }
 
+/**
+ * What stands in for the password in the copy of the message that is KEPT.
+ *
+ * Reads like the password-reset log's "(code not stored)" on purpose: the two flows should
+ * look the same to whoever reads the log, and "not stored" says it is deliberate rather
+ * than a bug.
+ */
+export const STORED_PASSWORD_MASK = "(not stored)";
+
+/**
+ * The invite twice: the text that goes to the gateway, and the text that goes in the log.
+ *
+ * ⚠️ They are different on purpose. The message log is read by staff, shows up in backups and
+ * outlives the password — which the parent is made to replace at first sign-in — so a
+ * temporary password sitting in it is a login anyone with read access can use until that
+ * happens (and for 14 days if it never does). The password-reset flow has always logged
+ * "(code not stored)"; guardian invites logged the whole text, password and all, from the day
+ * they shipped until 2026-10-11 (found in that day's security review). Send `send`, STORE
+ * `store`, and never the other way round — verify:password checks that the invite action does.
+ */
+export function inviteMessages(args: Parameters<typeof inviteMessage>[0]) {
+  return {
+    send: inviteMessage(args),
+    store: inviteMessage({ ...args, password: STORED_PASSWORD_MASK }),
+  };
+}
+
 export async function getInvitePlan(
   schoolId: string,
   schoolName: string,
@@ -129,13 +157,14 @@ export async function getInvitePlan(
     candidates.push({ guardianId: g.id, name, phone, childCount: g._count.students });
   }
 
-  // Cost is estimated from a representative message. A temporary password is a
-  // fixed length, so every message is the same size to within a name.
+  // Cost is estimated from the LONGEST message a temporary password can make, so the
+  // estimate never comes in under what is sent. (It was an 8-character stand-in, which was
+  // fine while a password was 10 characters and is not now that one runs to 26.)
   const sample = inviteMessage({
     schoolName,
     guardianFirstName: candidates[0]?.name.split(" ")[0] ?? "Ama",
     identifier: candidates[0]?.phone ?? "0244000000",
-    password: "Xxxxxxxx",
+    password: "x".repeat(TEMP_PASSWORD_MAX_LENGTH),
     url: portalUrl,
   });
   const { segments } = countSegments(sample);

@@ -50,6 +50,14 @@ export const TEMP_PASSWORD_SPACE =
   TEMP_PASSWORD_WORDS.length * (TEMP_PASSWORD_WORDS.length - 1) * GROUP_VALUES * GROUP_VALUES;
 
 /**
+ * The longest `temporaryPassword` can be: the two longest words, two four-digit groups and the
+ * "!". For anything that has to budget for the worst case — an SMS cost estimate must never
+ * come in under what is actually sent.
+ */
+const WORD_LENGTHS = TEMP_PASSWORD_WORDS.map((word) => word.length).sort((a, b) => b - a);
+export const TEMP_PASSWORD_MAX_LENGTH = WORD_LENGTHS[0] + WORD_LENGTHS[1] + 4 + 4 + 1;
+
+/**
  * A temporary password the office can read aloud over the phone: "Kente four-eight-two-nine,
  * Odum seven-three-one-six, exclamation mark".
  *

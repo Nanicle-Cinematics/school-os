@@ -10,7 +10,7 @@ import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
 import { sendSms } from "@/lib/sms";
 import { countSegments, RATE_PER_SEGMENT } from "@/lib/sms-shared";
-import { getInvitePlan, inviteMessage, localPhone, type InviteSkip } from "@/lib/portal-invite-data";
+import { getInvitePlan, inviteMessages, localPhone, type InviteSkip } from "@/lib/portal-invite-data";
 
 /**
  * One run creates at most this many logins.
@@ -153,7 +153,9 @@ export async function sendInvites(_prev: InviteState, formData: FormData): Promi
   for (const c of batch) {
     const password = temporaryPassword();
     const passwordHash = await hashPassword(password);
-    const body = inviteMessage({
+    // `body` goes to the gateway; `storedBody` is what the message log keeps, with the
+    // password masked. Never store `body` — see inviteMessages.
+    const { send: body, store: storedBody } = inviteMessages({
       schoolName: auth.schoolName,
       guardianFirstName: c.name.split(" ")[0],
       identifier: c.phone,
@@ -213,13 +215,14 @@ export async function sendInvites(_prev: InviteState, formData: FormData): Promi
       continue;
     }
 
+    // Segments and cost come from what is actually SENT, not the masked copy.
     const { segments } = countSegments(body);
     const message = await prisma.message.create({
       data: {
         schoolId: auth.schoolId,
         channel: "SMS",
         toPhone: c.phone,
-        body,
+        body: storedBody,
         guardianId: c.guardianId,
         provider: settings?.smsProvider ?? null,
         status: "QUEUED",
