@@ -89,10 +89,34 @@ async function db(operation, tries = 8) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// ⚠️ Every request has a deadline. `fetch` has none, and a dropped database connection leaves
+// the app waiting on a dead socket: one POST here sat for 115 MINUTES before the server
+// gave up, and the run took 139 minutes against the usual 33. Nothing failed — it just
+// waited — so the first sign was a clock, not a message. A slow answer is normal on this
+// link (15–20 s is routine); two minutes is not an answer, it is a hang.
+const REQUEST_TIMEOUT_MS = Number(process.env.VERIFY_REQUEST_TIMEOUT_S ?? 120) * 1000;
+
+const http = (url, init = {}) => fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+
+/**
+ * The retry loops below swallow every exception, because a dropped connection is noise —
+ * and a hang is not. Let a timeout out of them at once: retrying a request that just
+ * waited two minutes for nothing would spend the next twenty on the same wait.
+ */
+function throwIfHung(error, what) {
+  if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+    throw new Error(
+      `${what} got no answer in ${REQUEST_TIMEOUT_MS / 1000}s — the app or its database connection ` +
+        "is hung, which is not a verdict on the guard. Check the dev server's log for " +
+        "`Server has closed the connection` or P2024, and the database's health.",
+    );
+  }
+}
+
 async function fetchPage(path, cookie, tries = 10) {
   for (let attempt = 0; attempt < tries; attempt += 1) {
     try {
-      const response = await fetch(BASE + path, {
+      const response = await http(BASE + path, {
         headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
         redirect: "manual",
       });
@@ -101,7 +125,8 @@ async function fetchPage(path, cookie, tries = 10) {
         continue;
       }
       return { status: response.status, html: await response.text() };
-    } catch {
+    } catch (error) {
+      throwIfHung(error, `GET ${path}`);
       await sleep(400 * (attempt + 1));
     }
   }
@@ -127,7 +152,7 @@ async function postForm(path, form, overrides, cookie, tries = 8) {
     }
 
     try {
-      const response = await fetch(BASE + path, {
+      const response = await http(BASE + path, {
         method: "POST",
         headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
         body,
@@ -142,7 +167,8 @@ async function postForm(path, form, overrides, cookie, tries = 8) {
         location: response.headers.get("x-action-redirect") ?? response.headers.get("location"),
         html: await response.text(),
       };
-    } catch {
+    } catch (error) {
+      throwIfHung(error, `POST ${path}`);
       await sleep(400 * (attempt + 1));
     }
   }
@@ -241,13 +267,14 @@ async function postButton(path, form, buttonText, overrides, cookie, tries = 1) 
     body.append(buttonName, "");
     for (const h of hidden) if (h.name) body.append(h.name, h.value);
     try {
-      const response = await fetch(BASE + path, { method: "POST", headers: { Cookie: `${COOKIE_NAME}=${cookie}` }, body, redirect: "manual" });
+      const response = await http(BASE + path, { method: "POST", headers: { Cookie: `${COOKIE_NAME}=${cookie}` }, body, redirect: "manual" });
       if (response.status === 500) {
         await sleep(400 * (attempt + 1));
         continue;
       }
       return { status: response.status, html: await response.text() };
-    } catch {
+    } catch (error) {
+      throwIfHung(error, `POST ${path}`);
       await sleep(400 * (attempt + 1));
     }
   }
@@ -307,7 +334,7 @@ async function signIn() {
     body.append("identifier", EMAIL);
     body.append("password", PASSWORD);
 
-    const response = await fetch(BASE + "/login", { method: "POST", body, redirect: "manual" });
+    const response = await http(BASE + "/login", { method: "POST", body, redirect: "manual" });
     const html = await response.text();
     const raw = response.headers.getSetCookie?.().find((c) => c.includes(COOKIE_NAME));
     const token = raw?.match(new RegExp(`${COOKIE_NAME}=([^;]+)`))?.[1];
@@ -325,7 +352,7 @@ async function signIn() {
 async function closeSession(token) {
   if (usingForm) {
     // The session belongs to a real account; sign out rather than deleting rows.
-    await fetch(BASE + "/login", { headers: { Cookie: `${COOKIE_NAME}=${token}` } }).catch(() => {});
+    await http(BASE + "/login", { headers: { Cookie: `${COOKIE_NAME}=${token}` } }).catch(() => {});
     return;
   }
   try {
@@ -888,7 +915,7 @@ async function readOnlyGuards(cookie) {
       if (field.name !== "name") body.append(field.name, field.value);
     }
     body.append("name", probe);
-    const response = await fetch(BASE + "/fees", {
+    const response = await http(BASE + "/fees", {
       method: "POST",
       headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
       body,
@@ -904,7 +931,7 @@ async function readOnlyGuards(cookie) {
     check("and does not report success", !says(html, "added"), alerts(html)[0] ?? "no banner");
 
     // Leaving is a read: a school that stopped paying can still take its data.
-    const exported = await fetch(BASE + "/api/export/students", {
+    const exported = await http(BASE + "/api/export/students", {
       headers: { Cookie: `${COOKIE_NAME}=${cookie}` },
       redirect: "manual",
     });
@@ -1469,7 +1496,7 @@ async function platformPasswordGuards() {
     return token;
   };
   const go = async (path, token) => {
-    const response = await fetch(BASE + path, { headers: { Cookie: `${COOKIE_NAME}=${token}` }, redirect: "manual" });
+    const response = await http(BASE + path, { headers: { Cookie: `${COOKIE_NAME}=${token}` }, redirect: "manual" });
     return { status: response.status, to: response.headers.get("location") ?? "", html: await response.text() };
   };
 
@@ -1948,7 +1975,7 @@ async function peopleGuards(cookie, schoolId, foreign, myClass, offered) {
 
 async function main() {
   try {
-    const probe = await fetch(BASE, { redirect: "manual" }).catch(() => null);
+    const probe = await http(BASE, { redirect: "manual" }).catch(() => null);
     if (!probe) {
       console.error(
         `Cannot reach ${BASE} — ${BASE.includes("localhost") ? "start the app with `npm run dev` first." : "is the deployment up?"}`,
