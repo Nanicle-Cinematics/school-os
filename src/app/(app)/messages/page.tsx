@@ -46,8 +46,11 @@ const AUDIENCE_LABEL: Record<string, string> = {
 
 export default async function MessagesPage() {
   await requireRole(OFFICE);
-  const [{ templates, campaigns, classGroups, levels, settings }, stats] =
-    await Promise.all([getMessagingSetup(), getMessageStats()]);
+  // One loader at a time, NOT a Promise.all: getMessagingSetup fans out five queries and
+  // getMessageStats four, so together they put nine in flight against an app-role pool of
+  // four. See "Don't fan a page's queries out past the pool" in CLAUDE.md.
+  const { templates, campaigns, classGroups, levels, settings } = await getMessagingSetup();
+  const stats = await getMessageStats();
 
   const gatewayConfigured = Boolean(
     process.env.SMS_API_KEY && process.env.SMS_PROVIDER,

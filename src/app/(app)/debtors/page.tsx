@@ -41,11 +41,17 @@ export default async function DebtorsPage({
       ? (params.age as AgeBucket)
       : undefined;
 
-  const [{ terms, classGroups }, { debtors, totalOwed }, ageing] = await Promise.all([
-    getInvoiceFilterOptions(),
+  // The filter options run two queries, the debtor list three (it fans out its own) and the
+  // ageing walks its buckets one after another, so all three in one Promise.all put about six
+  // in flight against an app-role pool of four. The list and the ageing together make four, which
+  // fits and keeps the long ageing chain overlapping the list; the filter options follow.
+  // Measured on the dev server: all three parallel ~15s, this ~18s, fully sequential ~21s.
+  // See "Don't fan a page's queries out past the pool" in CLAUDE.md.
+  const [{ debtors, totalOwed }, ageing] = await Promise.all([
     getDebtorsByStudent({ termId, classGroupId, age, q }),
     getDebtorAgeing(termId),
   ]);
+  const { terms, classGroups } = await getInvoiceFilterOptions();
 
   const oldestBucketTotal = ageing.find((row) => row.bucket === "D90_PLUS")?.total ?? 0;
 
