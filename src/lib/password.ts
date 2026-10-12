@@ -1,30 +1,130 @@
 import { randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
+export type ScryptParams = { N: number; r: number; p: number };
+
 const scrypt = promisify(scryptCb) as (
   password: string,
   salt: Buffer,
   keylen: number,
+  options: ScryptParams & { maxmem: number },
 ) => Promise<Buffer>;
 
 const KEYLEN = 64;
 
+/**
+ * Node refuses any scrypt that needs more than 32 MiB unless told otherwise, and the cost we are
+ * moving to needs 64. Passed on every call, which also caps what a stored hash can ask for: a
+ * row claiming absurd parameters is refused, not allowed to allocate its way to a crash.
+ */
+const MAXMEM = 256 * 1024 * 1024;
+
+/**
+ * What every hash written before 2026-10-12 used: Node's own defaults, which are below current
+ * OWASP guidance (N=2^17, or an equivalent trade such as N=2^16 with p=2).
+ */
+export const LEGACY_PARAMS: ScryptParams = { N: 2 ** 14, r: 8, p: 1 };
+
+/**
+ * The cost new hashes are meant to carry: OWASP's N=2^16, r=8, p=2, about 64 MiB. Chosen over
+ * N=2^17 (128 MiB) because this runs on serverless instances that hold several sign-ins at once,
+ * and the three equal-strength options OWASP lists trade memory for CPU, not strength for speed.
+ *
+ * ⚠️ NOT WRITTEN YET. `hashPassword` still produces LEGACY_PARAMS. This change only teaches
+ * `verifyPassword` to READ the new format, so that code reading it is live everywhere before any
+ * hash in it exists: a deploy overlap, or a rollback, would otherwise lock out every user whose
+ * hash had already been upgraded. The next change flips `WRITE_PARAMS` and upgrades hashes at
+ * sign-in.
+ */
+export const CURRENT_PARAMS: ScryptParams = { N: 2 ** 16, r: 8, p: 2 };
+
+/** What `hashPassword` writes. See CURRENT_PARAMS for why this is still the legacy cost. */
+const WRITE_PARAMS: ScryptParams = LEGACY_PARAMS;
+
+/** The one place that calls scrypt, exported so a test can check it against the RFC 7914 vectors. */
+export function deriveKey(password: string, salt: Buffer, params: ScryptParams): Promise<Buffer> {
+  return scrypt(password, salt, KEYLEN, { ...params, maxmem: MAXMEM });
+}
+
+/**
+ * Two formats, told apart by how many `$`-separated fields they have:
+ *
+ *   legacy   scrypt$<salt hex>$<hash hex>                    (LEGACY_PARAMS, implied)
+ *   current  scrypt$ln=16,r=8,p=2$<salt hex>$<hash hex>      (parameters travel with the hash)
+ *
+ * Carrying the parameters is what makes the next upgrade a rehash at sign-in instead of another
+ * format change. `ln` is log2(N), as in PHC strings.
+ */
+function formatHash(params: ScryptParams, salt: Buffer, hash: Buffer) {
+  const same = params.N === LEGACY_PARAMS.N && params.r === LEGACY_PARAMS.r && params.p === LEGACY_PARAMS.p;
+  return same
+    ? `scrypt$${salt.toString("hex")}$${hash.toString("hex")}`
+    : `scrypt$ln=${Math.log2(params.N)},r=${params.r},p=${params.p}$${salt.toString("hex")}$${hash.toString("hex")}`;
+}
+
+/**
+ * The parameters a stored hash declares, or null if they are not ones we would run. Bounded on
+ * purpose: the value comes from the database, and "refuse" is a better answer to a corrupt row
+ * than allocating whatever it asks for.
+ */
+function parseParams(field: string): ScryptParams | null {
+  const match = /^ln=(\d{1,2}),r=(\d{1,2}),p=(\d{1,2})$/.exec(field);
+  if (!match) {
+    return null;
+  }
+  const [ln, r, p] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  if (ln < 14 || ln > 18 || r !== 8 || p < 1 || p > 8) {
+    return null;
+  }
+  // Each bound alone still lets through a combination that is several seconds of CPU per sign-in
+  // (ln=17 with p=8 is eight times the intended work). Cap the product too: 2^18 allows every
+  // OWASP-listed equivalent — 2^17×1, 2^16×2, 2^15×3, 2^14×5 — and nothing heavier.
+  if (2 ** ln * p > 2 ** 18) {
+    return null;
+  }
+  return { N: 2 ** ln, r, p };
+}
+
+function parseStored(stored: string): { params: ScryptParams; salt: Buffer; hash: Buffer } | null {
+  const parts = stored.split("$");
+  if (parts[0] !== "scrypt" || (parts.length !== 3 && parts.length !== 4)) {
+    return null;
+  }
+  const params = parts.length === 3 ? LEGACY_PARAMS : parseParams(parts[1]);
+  const saltHex = parts[parts.length - 2];
+  const hashHex = parts[parts.length - 1];
+  if (!params || !saltHex || !hashHex) {
+    return null;
+  }
+  return { params, salt: Buffer.from(saltHex, "hex"), hash: Buffer.from(hashHex, "hex") };
+}
+
+/** Hash at an explicit cost. `hashPassword` is this at WRITE_PARAMS; tests use it for either. */
+export async function hashPasswordWith(password: string, params: ScryptParams): Promise<string> {
+  const salt = randomBytes(16);
+  return formatHash(params, salt, await deriveKey(password, salt, params));
+}
+
 // scrypt from node:crypto rather than bcrypt/argon2 — no native module to build,
 // which matters on a machine without Xcode command line tools.
 export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16);
-  const derived = await scrypt(password, salt, KEYLEN);
-  return `scrypt$${salt.toString("hex")}$${derived.toString("hex")}`;
+  return hashPasswordWith(password, WRITE_PARAMS);
 }
 
+/** Verifies a hash in either format, at the cost it declares. */
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [algorithm, saltHex, hashHex] = stored.split("$");
-  if (algorithm !== "scrypt" || !saltHex || !hashHex) {
+  const parsed = parseStored(stored);
+  if (!parsed) {
     return false;
   }
-  const expected = Buffer.from(hashHex, "hex");
-  const derived = await scrypt(password, Buffer.from(saltHex, "hex"), KEYLEN);
-  return derived.length === expected.length && timingSafeEqual(derived, expected);
+  let derived: Buffer;
+  try {
+    derived = await deriveKey(password, parsed.salt, parsed.params);
+  } catch {
+    // Parameters Node will not run (memory over the cap). A corrupt row is a failed sign-in.
+    return false;
+  }
+  return derived.length === parsed.hash.length && timingSafeEqual(derived, parsed.hash);
 }
 
 /**

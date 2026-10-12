@@ -15,7 +15,11 @@
 import { readFileSync } from "node:fs";
 import {
   hashPassword,
+  hashPasswordWith,
   verifyPassword,
+  deriveKey,
+  LEGACY_PARAMS,
+  CURRENT_PARAMS,
   temporaryPassword,
   TEMP_PASSWORD_WORDS,
   TEMP_PASSWORD_SPACE,
@@ -37,6 +41,101 @@ check("a different case does not", !(await verifyPassword("correct-horse-9", sto
 check("two hashes of one password differ (a fresh salt each time)", stored !== (await hashPassword("Correct-Horse-9")));
 check("a malformed stored value is refused, not thrown on", !(await verifyPassword("x", "nonsense")) && !(await verifyPassword("x", "scrypt$$")));
 check("an unknown algorithm is refused", !(await verifyPassword("x", `bcrypt$${"00".repeat(16)}$${"00".repeat(64)}`)));
+
+console.log("\nscrypt itself (RFC 7914 §12 test vectors)");
+// The primitive is checked against the published vectors, not just against itself: if these
+// match, a hash this app writes is one any scrypt implementation would compute. (A fourth vector
+// needs a gigabyte; these three are enough to pin the parameter handling, N, r and p.)
+const rfcVectors: [string, string, string, { N: number; r: number; p: number }, string][] = [
+  ["empty password and salt", "", "", { N: 16, r: 1, p: 1 }, "77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442fcd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906"],
+  ["'password' / 'NaCl'", "password", "NaCl", { N: 1024, r: 8, p: 16 }, "fdbabe1c9d3472007856e7190d01e9fe7c6ad7cbc8237830e77376634b3731622eaf30d92e22a3886ff109279d9830dac727afb94a83ee6d8360cbdfa2cc0640"],
+  ["'pleaseletmein' / 'SodiumChloride'", "pleaseletmein", "SodiumChloride", { N: 16384, r: 8, p: 1 }, "7023bdcb3afd7348461c06cd81fd38ebfda8fbba904f8e3ea9b543f6545da1f2d5432955613f0fcf62d49705242a9af9e61e85dc0d651e40dfcf017b45575887"],
+];
+for (const [label, password, salt, params, expected] of rfcVectors) {
+  check(`${label}, N=${params.N} r=${params.r} p=${params.p}`, (await deriveKey(password, Buffer.from(salt), params)).toString("hex") === expected);
+}
+
+console.log("\nThe two stored formats");
+check("the legacy cost is Node's defaults, N=2^14 r=8 p=1", LEGACY_PARAMS.N === 2 ** 14 && LEGACY_PARAMS.r === 8 && LEGACY_PARAMS.p === 1);
+check("the new cost is OWASP's N=2^16 r=8 p=2", CURRENT_PARAMS.N === 2 ** 16 && CURRENT_PARAMS.r === 8 && CURRENT_PARAMS.p === 2);
+
+// Written by the code that was on main BEFORE this change. If these stop verifying, every
+// existing user is locked out, and no round-trip test through today's code would notice.
+const LEGACY_GOLDEN =
+  "scrypt$a6433270c5409ed5edb92191c56f0e29$7a9af6ae3372bbef41f16a052d26e8896b12e544b9e88b5cd4695fd930d6660f809512ba7a4bae5f8c114621c035ad8474c63f2112b22cc4d35e66d7c7a89c32";
+check("a hash written before this change still verifies", await verifyPassword("legacy-golden-Password-1!", LEGACY_GOLDEN));
+check("and only for its own password", !(await verifyPassword("legacy-golden-Password-2!", LEGACY_GOLDEN)));
+
+// Assembled with a fixed salt and Node's scryptSync directly, not through the code under test, so a
+// change to the format or the derivation shows up here. It pins today's behaviour; the RFC vectors
+// above are what vouch for the primitive.
+const CURRENT_GOLDEN =
+  "scrypt$ln=16,r=8,p=2$000102030405060708090a0b0c0d0e0f$8b56277d7a2c2091574bf448f52229a74be2a1f72d4977495a5e177eddf57cfb16f1886c84f2ab21be300e9c696a7d48f26cdfd8cdb28ab07357c74b60cf65c7";
+check("a hash in the new format verifies", await verifyPassword("current-golden-Password-1!", CURRENT_GOLDEN));
+check("and only for its own password", !(await verifyPassword("current-golden-Password-2!", CURRENT_GOLDEN)));
+check("with one digit of the hash changed, it does not", !(await verifyPassword("current-golden-Password-1!", CURRENT_GOLDEN.replace(/.$/, "6"))));
+check("with the declared cost changed, it does not (the cost is part of the answer)", !(await verifyPassword("current-golden-Password-1!", CURRENT_GOLDEN.replace("p=2", "p=3"))));
+
+const atLegacy = await hashPasswordWith("Round-Trip-1", LEGACY_PARAMS);
+const atCurrent = await hashPasswordWith("Round-Trip-1", CURRENT_PARAMS);
+check("a legacy-cost hash is written in the legacy format (three fields)", atLegacy.split("$").length === 3 && atLegacy.startsWith("scrypt$"), atLegacy.slice(0, 22));
+check("a current-cost hash carries its parameters (four fields)", atCurrent.startsWith("scrypt$ln=16,r=8,p=2$") && atCurrent.split("$").length === 4, atCurrent.slice(0, 22));
+check("each verifies, for the right password only",
+  (await verifyPassword("Round-Trip-1", atLegacy)) && (await verifyPassword("Round-Trip-1", atCurrent)) &&
+  !(await verifyPassword("Round-Trip-2", atLegacy)) && !(await verifyPassword("Round-Trip-2", atCurrent)));
+
+// ⚠️ This is the state of THIS change, and the next one inverts it. Reading the new format has to be
+// live everywhere before anything writes it, or a rollback strands every user already upgraded.
+check("hashPassword still WRITES the legacy format (the new one is read-only until the next change)", stored.split("$").length === 3);
+
+console.log("\nA stored hash cannot ask for something we would not run");
+const salt32 = "00".repeat(16), hash128 = "00".repeat(64);
+const hostile: [string, string][] = [
+  ["a cost far above the cap (ln=30)", `scrypt$ln=30,r=8,p=2$${salt32}$${hash128}`],
+  ["a cost below the floor (ln=13)", `scrypt$ln=13,r=8,p=2$${salt32}$${hash128}`],
+  ["above the ceiling (ln=19)", `scrypt$ln=19,r=8,p=2$${salt32}$${hash128}`],
+  ["a different block size (r=1)", `scrypt$ln=16,r=1,p=2$${salt32}$${hash128}`],
+  ["a huge block size (r=99)", `scrypt$ln=16,r=99,p=2$${salt32}$${hash128}`],
+  ["no parallelism (p=0)", `scrypt$ln=16,r=8,p=0$${salt32}$${hash128}`],
+  ["too much parallelism (p=9)", `scrypt$ln=16,r=8,p=9$${salt32}$${hash128}`],
+  ["a missing parameter", `scrypt$ln=16,r=8$${salt32}$${hash128}`],
+  ["the parameters spelt another way", `scrypt$N=65536,r=8,p=2$${salt32}$${hash128}`],
+  ["upper case", `scrypt$LN=16,R=8,P=2$${salt32}$${hash128}`],
+  ["trailing junk", `scrypt$ln=16,r=8,p=2,x=1$${salt32}$${hash128}`],
+  ["five fields", `scrypt$ln=16,r=8,p=2$extra$${salt32}$${hash128}`],
+  ["no salt", `scrypt$ln=16,r=8,p=2$$${hash128}`],
+  ["no hash", `scrypt$ln=16,r=8,p=2$${salt32}$`],
+  ["the maximum allowed cost with the maximum parallelism (needs over 256 MiB, which Node refuses)", `scrypt$ln=18,r=8,p=8$${salt32}$${hash128}`],
+  // Inside every single bound, and still eight times the intended work: refused by the cap on
+  // N × p, or one wrong guess would cost several seconds of CPU.
+  ["each parameter in range but eight times the work (ln=17, p=8)", `scrypt$ln=17,r=8,p=8$${salt32}$${hash128}`],
+  ["and four times the work (ln=17, p=4)", `scrypt$ln=17,r=8,p=4$${salt32}$${hash128}`],
+];
+const allowedNeighbours = [
+  `scrypt$ln=17,r=8,p=1$${salt32}$${hash128}`, // OWASP A
+  `scrypt$ln=16,r=8,p=2$${salt32}$${hash128}`, // OWASP B, the one in use
+  `scrypt$ln=15,r=8,p=3$${salt32}$${hash128}`, // OWASP C
+  `scrypt$ln=14,r=8,p=5$${salt32}$${hash128}`, // OWASP D
+];
+const hostileStart = performance.now();
+const hostileResults: string[] = [];
+for (const [label, value] of hostile) {
+  if (await verifyPassword("anything", value)) hostileResults.push(label);
+}
+const hostileMs = performance.now() - hostileStart;
+check("every one is refused, none throws", hostileResults.length === 0, hostileResults.join("; "));
+// Refusing means not running scrypt at all: ln=18 would take seconds and 256 MiB if it were tried.
+check("and quickly — refused up front, not computed and then rejected", hostileMs < 2000, `${hostileMs.toFixed(0)} ms for ${hostile.length}`);
+// The cap must not refuse the settings it is meant to allow. These are real derivations (a
+// second or so each on a slow machine) with a salt and hash that cannot match, so each is run
+// and answers false: reaching false by computing is the proof it was not refused up front.
+const ran: string[] = [];
+for (const value of allowedNeighbours) {
+  const t = performance.now();
+  const answer = await verifyPassword("anything", value);
+  if (answer === false && performance.now() - t > 20) ran.push(value.split("$")[1]);
+}
+check("while every OWASP-listed equivalent is still accepted and computed", ran.length === allowedNeighbours.length, ran.join(" | "));
 
 console.log("\nThe word list");
 const words = [...TEMP_PASSWORD_WORDS];
