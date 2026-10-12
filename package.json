@@ -40,6 +40,7 @@
     "verify:reset": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-reset.mts",
     "verify:export": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-export.mts",
     "verify:export:route": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-export-route.mts",
+    "verify:login-upgrade": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-login-upgrade.mts",
     "verify:contrast": "tsx scripts/verify-contrast.mts",
     "verify:design": "tsx scripts/verify-design.mts",
     "verify:theme": "tsx scripts/verify-theme.mts",

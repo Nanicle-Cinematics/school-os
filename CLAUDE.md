@@ -1132,9 +1132,9 @@ guessing at. Strength has to come from the password, not from how it is refused.
 Passwords issued before the change keep the old strength until they are used or
 reach the 14-day expiry.
 
-⚠️ **The scrypt cost is being raised in two steps, and the order is the point.**
-Every hash written until now used Node's defaults (N=2^14, r=8, p=1), below
-current OWASP guidance. The target is OWASP's N=2^16, r=8, p=2 (`CURRENT_PARAMS`,
+⚠️ **The scrypt cost was raised in two steps, and the order is the point.**
+Every hash written before 2026-10-12 used Node's defaults (N=2^14, r=8, p=1), below
+current OWASP guidance. The cost is now OWASP's N=2^16, r=8, p=2 (`CURRENT_PARAMS`,
 about 64 MiB; an equal-strength trade for N=2^17 that suits serverless). Two
 things were needed that the old format could not give: Node REFUSES more than
 32 MiB unless `maxmem` is passed, and the stored hash carried no parameters.
@@ -1142,16 +1142,47 @@ There are now two formats, told apart by field count — `scrypt$<salt>$<hash>`
 (legacy, parameters implied) and `scrypt$ln=16,r=8,p=2$<salt>$<hash>` (parameters
 travel with the hash, so the next upgrade is a rehash and not another format).
 
-**Step 1 (2026-10-12)** teaches `verifyPassword` to READ both, and still WRITES the
-legacy one (`WRITE_PARAMS`). **Step 2** flips the writer and upgrades hashes at
-sign-in. They cannot ship together: a hash in the new format is unreadable to code
-that predates step 1, so writing one before every instance can read it — a deploy
-overlap, or a rollback — locks out every user already upgraded. Merge step 2 only
-once step 1's deployment is live. A stored hash is also bounded on read (`ln` 14–18,
-`r`=8, `p` 1–8, and `N × p` ≤ 2^18): without that product cap one planted row cost
-9 seconds of CPU per sign-in. `verify:password` pins the primitive to the RFC 7914
-vectors, a legacy hash written by the pre-change code, and an independently
-assembled new-format hash, and fails if the writer is flipped early.
+**Step 1 (#169)** taught `verifyPassword` to READ both and kept WRITING the legacy
+one. **Step 2** flipped `WRITE_PARAMS` and added the upgrade at sign-in. They could
+not ship together: a hash in the new format is unreadable to code that predates
+step 1, so writing one before every instance can read it — a deploy overlap, or a
+rollback — locks out every user already upgraded. Step 2 went in only after step
+1's production deployment was confirmed live. **Rolling `WRITE_PARAMS` back is
+safe; rolling the CODE back past #169 is not**, once hashes in the new format
+exist. A stored hash is also bounded on read (`ln` 14–18, `r`=8, `p` 1–8, and
+`N × p` ≤ 2^18): without that product cap one planted row cost 9 seconds of CPU
+per sign-in. If the cost is ever raised again, do it the same way: widen
+`parseParams`, ship, THEN change the constant.
+
+**An account gets the stronger hash the next time it signs in, and not before.**
+A hash is one-way, so there is no batch upgrade: an account that never signs in
+keeps its legacy hash. `checkPassword` returns the new hash when the password was
+right and the stored one was made at another cost, and the login action stores it.
+That write is a **compare-and-swap** (`updateMany` where the hash is still the one
+that was verified), never an update by id: between the read and the write the person
+may have changed their password, and an update by id would put the OLD password's
+hash back over the new one.
+
+⚠️ **Every failed sign-in costs the same, whoever it is for** — one derivation at
+the legacy cost and one at the current cost. Login always verified against a dummy
+hash for an unknown account so that the time taken would not say which accounts
+exist. With two costs in the table that stopped being enough: a legacy hash is
+about eight times quicker to check, so a bare check would let anyone time a wrong
+guess and pick out the accounts that have not signed in since the upgrade. So a
+failure is topped up to the same pair, whatever kind it is (no account, unreadable
+row, legacy, current). It is checked by what RAN, through the `engine.derive` seam,
+and not by a stopwatch, which a loaded CI machine turns into a coin flip. Once no
+legacy hashes remain this can be simplified, but nothing says when that is.
+
+`verify:password` pins the primitive to the RFC 7914 vectors, a legacy hash
+written by the pre-change code, an independently assembled new-format hash, the
+equal cost of every failure and the shape of the login action.
+`verify:login-upgrade` (HTTP, in CI) signs in through the real form as an account
+stored at the old cost and reads the row afterwards.
+
+Cost: about 0.65 s per hash on this slow laptop (2013 i5), about 0.08 s before; a
+modern server should be 2–3× faster. Every place that hashes pays it — the bulk
+parent invite hashes 60 passwords per click, so it takes noticeably longer.
 
 ⚠️ **The message log must never hold a password.** Guardian invites text the
 temporary password, and until 2026-10-11 they also STORED that text — password
