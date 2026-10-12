@@ -6,7 +6,7 @@ import { landingFor } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { normalisePhone } from "@/lib/sms-shared";
-import { hashPassword, verifyPassword } from "@/lib/password";
+import { checkPassword } from "@/lib/password";
 import { clearAttempts, clientIp, takeAttempt } from "@/lib/rate-limit";
 import { createSession, destroySession } from "@/lib/session";
 
@@ -20,11 +20,26 @@ const TEMP_PASSWORD_DAYS = 14;
 const LOCKOUT_MINUTES = 15;
 
 /**
- * A real scrypt hash to verify against when the identifier matches nobody, so an
- * unknown account costs the same time as a wrong password and the response time
- * does not say which accounts exist.
+ * Store the stronger hash a successful sign-in just computed.
+ *
+ * ⚠️ A compare-and-swap, not an update by id: it only writes if the row still holds the hash this
+ * sign-in verified against. Between the read and this write the person may have changed their
+ * password (here, or from another device), and an update by id would put the OLD password's hash
+ * back over the new one, silently undoing the change. If the hash has moved on there is nothing to
+ * upgrade — it was rewritten at the current cost by whatever moved it — so zero rows is correct.
+ *
+ * Never allowed to fail a sign-in: the password was right, and an upgrade that does not stick is
+ * retried the next time.
  */
-const DUMMY_HASH = hashPassword("not-a-real-password");
+async function upgradeHash(userId: string, was: string, to: string) {
+  try {
+    await withBypass(() =>
+      prisma.user.updateMany({ where: { id: userId, passwordHash: was }, data: { passwordHash: to } }),
+    );
+  } catch {
+    // See above.
+  }
+}
 
 /**
  * Three buckets, all claimed BEFORE the password is looked at, each atomically.
@@ -102,11 +117,11 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   // form cannot be used to enumerate who has an account.
   const invalid = { error: "Incorrect email/phone or password." };
 
-  if (!user?.passwordHash) {
-    await verifyPassword(password, await DUMMY_HASH);
-    return invalid;
-  }
-  if (!(await verifyPassword(password, user.passwordHash))) {
+  // One call for every case — no such account, a wrong password, a right one — because they have
+  // to cost the same: see checkPassword. It also hands back a stronger hash when the password was
+  // right and the stored one was made at the old cost.
+  const check = await checkPassword(password, user?.passwordHash);
+  if (!user?.passwordHash || !check.ok) {
     return invalid;
   }
   /**
@@ -140,6 +155,11 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   // account that can provision the first school out of the product entirely.
   if (user.memberships.length === 0 && !user.isPlatformAdmin) {
     return { error: "This account is not linked to any school. Contact your administrator." };
+  }
+
+  // Signed in for real, so raise the stored hash to the current cost if it was made at an older one.
+  if (check.rehash) {
+    await upgradeHash(user.id, user.passwordHash, check.rehash);
   }
 
   const headerList = await headers();

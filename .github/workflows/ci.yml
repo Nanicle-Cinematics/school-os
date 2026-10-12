@@ -411,6 +411,13 @@ jobs:
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:export:route
 
+      - name: Sign-in upgrades a password hash to the current cost, through the real form
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:login-upgrade
+
       # if: always() so a failing guard still stops the app and shows its log —
       # a server left running would hang the job, and the log is usually where
       # the actual reason is.

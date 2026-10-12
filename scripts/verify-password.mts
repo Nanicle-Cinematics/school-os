@@ -17,6 +17,9 @@ import {
   hashPassword,
   hashPasswordWith,
   verifyPassword,
+  checkPassword,
+  needsRehash,
+  engine,
   deriveKey,
   LEGACY_PARAMS,
   CURRENT_PARAMS,
@@ -84,9 +87,11 @@ check("each verifies, for the right password only",
   (await verifyPassword("Round-Trip-1", atLegacy)) && (await verifyPassword("Round-Trip-1", atCurrent)) &&
   !(await verifyPassword("Round-Trip-2", atLegacy)) && !(await verifyPassword("Round-Trip-2", atCurrent)));
 
-// ⚠️ This is the state of THIS change, and the next one inverts it. Reading the new format has to be
-// live everywhere before anything writes it, or a rollback strands every user already upgraded.
-check("hashPassword still WRITES the legacy format (the new one is read-only until the next change)", stored.split("$").length === 3);
+// Inverted from the change that taught the code to READ this format (#169), which asserted the
+// opposite until every instance could. Writing it is safe now; checked here so the writer cannot
+// quietly slip back to the weak cost.
+check("hashPassword now WRITES the current cost, with its parameters", stored.startsWith("scrypt$ln=16,r=8,p=2$") && stored.split("$").length === 4, stored.slice(0, 22));
+check("and a password it wrote verifies", await verifyPassword("Correct-Horse-9", stored));
 
 console.log("\nA stored hash cannot ask for something we would not run");
 const salt32 = "00".repeat(16), hash128 = "00".repeat(64);
@@ -136,6 +141,78 @@ for (const value of allowedNeighbours) {
   if (answer === false && performance.now() - t > 20) ran.push(value.split("$")[1]);
 }
 check("while every OWASP-listed equivalent is still accepted and computed", ran.length === allowedNeighbours.length, ran.join(" | "));
+
+console.log("\nWhich hashes want rewriting");
+check("a legacy hash does", needsRehash(LEGACY_GOLDEN));
+check("a current one does not", !needsRehash(CURRENT_GOLDEN));
+check("an OWASP-equivalent at another cost does (it is not the cost in use)", needsRehash(`scrypt$ln=15,r=8,p=3$${salt32}$${hash128}`));
+check("a hash nobody can read is left alone, not 'upgraded' into something else", !needsRehash("nonsense") && !needsRehash(`scrypt$ln=30,r=8,p=2$${salt32}$${hash128}`));
+
+console.log("\nEvery failed sign-in costs the same");
+// checkPassword stands one derivation counter in place of the real thing and reports what each
+// attempt computed. Costs are compared by what RAN, not by how long it took: a loaded CI machine
+// makes a stopwatch a coin flip, and "one legacy derivation and one current derivation" is the
+// whole property.
+const kind = (p: { N: number; r: number; p: number }) =>
+  p.N === LEGACY_PARAMS.N && p.p === LEGACY_PARAMS.p ? "legacy" : p.N === CURRENT_PARAMS.N && p.p === CURRENT_PARAMS.p ? "current" : `other(${p.N}/${p.p})`;
+async function attempt(password: string, storedHash: string | null | undefined) {
+  const computed: string[] = [];
+  const real = engine.derive;
+  engine.derive = (pw, salt, params) => {
+    computed.push(kind(params));
+    return real(pw, salt, params);
+  };
+  try {
+    const result = await checkPassword(password, storedHash);
+    return { ...result, computed: computed.sort().join("+") };
+  } finally {
+    engine.derive = real;
+  }
+}
+const LEGACY_PW = "legacy-golden-Password-1!";
+const CURRENT_PW = "current-golden-Password-1!";
+const failedAttempts: [string, Awaited<ReturnType<typeof attempt>>][] = [
+  ["no such account (no hash)", await attempt("guess", null)],
+  ["an account with no password set", await attempt("guess", "")],
+  ["a row that cannot be read", await attempt("guess", "nonsense")],
+  ["a row asking for a cost we would not run", await attempt("guess", `scrypt$ln=30,r=8,p=2$${salt32}$${hash128}`)],
+  ["a legacy hash, wrong password", await attempt("guess", LEGACY_GOLDEN)],
+  ["a current hash, wrong password", await attempt("guess", CURRENT_GOLDEN)],
+];
+for (const [label, result] of failedAttempts) {
+  check(`${label}: refused after one legacy-cost and one current-cost derivation`, result.computed === "current+legacy" && !result.ok && result.rehash === null, result.computed);
+}
+check("so no failure can be told from another by the work it did", new Set(failedAttempts.map(([, r]) => r.computed)).size === 1);
+
+console.log("\nA correct sign-in");
+const rightLegacy = await attempt(LEGACY_PW, LEGACY_GOLDEN);
+check("on a legacy hash is accepted", rightLegacy.ok);
+check("and hands back a stronger hash, in the current format", rightLegacy.rehash !== null && rightLegacy.rehash.startsWith("scrypt$ln=16,r=8,p=2$"), String(rightLegacy.rehash).slice(0, 22));
+check("that verifies with the same password, and is not itself due for rewriting", rightLegacy.rehash !== null && (await verifyPassword(LEGACY_PW, rightLegacy.rehash)) && !needsRehash(rightLegacy.rehash));
+check("computed once, not twice: the check and the new hash, nothing more", rightLegacy.computed === "current+legacy", rightLegacy.computed);
+const again = await attempt(LEGACY_PW, LEGACY_GOLDEN);
+check("two upgrades of one password differ (a fresh salt each time)", again.rehash !== null && again.rehash !== rightLegacy.rehash);
+const rightCurrent = await attempt(CURRENT_PW, CURRENT_GOLDEN);
+check("on a current hash is accepted", rightCurrent.ok);
+check("and needs no upgrade, so does only the one derivation", rightCurrent.rehash === null && rightCurrent.computed === "current", rightCurrent.computed);
+const wrongPasswordOnLegacy = await attempt("not the password", LEGACY_GOLDEN);
+check("a wrong password never produces an upgrade, so a guess cannot rewrite anyone's hash", !wrongPasswordOnLegacy.ok && wrongPasswordOnLegacy.rehash === null);
+
+console.log("\nThe sign-in action");
+// Read from source, comments out, because the action is a server action and cannot be called
+// from here. What is asserted is the shape that makes the two properties above hold in practice.
+const loginSource = readFileSync("src/lib/auth-actions.ts", "utf8")
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/^\s*\/\/.*$/gm, "");
+check("it checks the password with checkPassword, for an account that exists or not", /checkPassword\(\s*password,\s*user\?\.passwordHash\s*\)/.test(loginSource));
+check("and no longer verifies against a separate dummy hash (which cost the wrong amount)", !/\bverifyPassword\b/.test(loginSource) && !/DUMMY_HASH/.test(loginSource));
+check("the upgraded hash is stored with a compare-and-swap on the hash it verified",
+  /updateMany\(\s*\{\s*where:\s*\{\s*id:\s*userId,\s*passwordHash:\s*was\s*\}/.test(loginSource));
+check("never with an update by id, which would put an OLD password's hash back over a new one", !/user\.update\(\s*\{\s*where:\s*\{\s*id:\s*userId\s*\}[^)]*passwordHash/.test(loginSource));
+const upgradeAt = loginSource.indexOf("upgradeHash(user.id");
+check("it runs only after the password is proven and the temporary-password expiry is checked",
+  upgradeAt > loginSource.indexOf("check.ok") && upgradeAt > loginSource.indexOf("TEMP_PASSWORD_DAYS *"), "");
+check("and its failure cannot fail a correct sign-in", /async function upgradeHash[\s\S]*?try\s*\{[\s\S]*?\}\s*catch/.test(loginSource));
 
 console.log("\nThe word list");
 const words = [...TEMP_PASSWORD_WORDS];

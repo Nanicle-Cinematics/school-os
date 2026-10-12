@@ -30,21 +30,32 @@ export const LEGACY_PARAMS: ScryptParams = { N: 2 ** 14, r: 8, p: 1 };
  * N=2^17 (128 MiB) because this runs on serverless instances that hold several sign-ins at once,
  * and the three equal-strength options OWASP lists trade memory for CPU, not strength for speed.
  *
- * ⚠️ NOT WRITTEN YET. `hashPassword` still produces LEGACY_PARAMS. This change only teaches
- * `verifyPassword` to READ the new format, so that code reading it is live everywhere before any
- * hash in it exists: a deploy overlap, or a rollback, would otherwise lock out every user whose
- * hash had already been upgraded. The next change flips `WRITE_PARAMS` and upgrades hashes at
- * sign-in.
+ * ⚠️ Raised in two steps, in this order, and the order is the point. A hash in this format is
+ * unreadable to code that predates the code that reads it, so reading shipped first (2026-10-12,
+ * #169) and was live everywhere before anything wrote it: written any sooner, a deploy overlap or a
+ * rollback would lock out every user already upgraded. If you ever raise the cost again, do it the
+ * same way — teach `parseParams` the new bounds, ship it, THEN change this constant.
  */
 export const CURRENT_PARAMS: ScryptParams = { N: 2 ** 16, r: 8, p: 2 };
 
-/** What `hashPassword` writes. See CURRENT_PARAMS for why this is still the legacy cost. */
-const WRITE_PARAMS: ScryptParams = LEGACY_PARAMS;
+/**
+ * What `hashPassword` writes. Rolling this BACK is safe (the code reads either format); rolling the
+ * CODE back past #169 is not, once hashes in the new format exist.
+ */
+const WRITE_PARAMS: ScryptParams = CURRENT_PARAMS;
 
 /** The one place that calls scrypt, exported so a test can check it against the RFC 7914 vectors. */
 export function deriveKey(password: string, salt: Buffer, params: ScryptParams): Promise<Buffer> {
   return scrypt(password, salt, KEYLEN, { ...params, maxmem: MAXMEM });
 }
+
+/**
+ * Every derivation in this file goes through `engine.derive`, looked up at the moment of the call,
+ * so a test can stand a counter in its place and see exactly what a sign-in computed. Nothing else
+ * replaces it: it is how "every failed attempt costs the same" is checked by what was run, not
+ * by how long it took, which a loaded CI machine would make a coin flip.
+ */
+export const engine = { derive: deriveKey };
 
 /**
  * Two formats, told apart by how many `$`-separated fields they have:
@@ -111,6 +122,8 @@ export async function hashPassword(password: string): Promise<string> {
   return hashPasswordWith(password, WRITE_PARAMS);
 }
 
+const sameCost = (a: ScryptParams, b: ScryptParams) => a.N === b.N && a.r === b.r && a.p === b.p;
+
 /** Verifies a hash in either format, at the cost it declares. */
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const parsed = parseStored(stored);
@@ -119,12 +132,82 @@ export async function verifyPassword(password: string, stored: string): Promise<
   }
   let derived: Buffer;
   try {
-    derived = await deriveKey(password, parsed.salt, parsed.params);
+    derived = await engine.derive(password, parsed.salt, parsed.params);
   } catch {
     // Parameters Node will not run (memory over the cap). A corrupt row is a failed sign-in.
     return false;
   }
   return derived.length === parsed.hash.length && timingSafeEqual(derived, parsed.hash);
+}
+
+/** Whether a stored hash was made at a cost other than the current one, and so wants rewriting. */
+export function needsRehash(stored: string): boolean {
+  const parsed = parseStored(stored);
+  return parsed !== null && !sameCost(parsed.params, CURRENT_PARAMS);
+}
+
+/** A salt no real hash has, for the work done on behalf of an account that does not exist. */
+const DUMMY_SALT = Buffer.alloc(16);
+
+/**
+ * The sign-in check: is this the password, and if so, is there a stronger hash to store?
+ *
+ * ⚠️ EVERY FAILED ATTEMPT COSTS THE SAME, whoever it is for: one derivation at the legacy cost and
+ * one at the current cost.
+ *
+ *   an account that does not exist   current (against a dummy hash), then legacy
+ *   a legacy hash, wrong password    legacy (the check), then current
+ *   a current hash, wrong password   current (the check), then legacy
+ *
+ * Login has always verified against a dummy hash for an unknown account so that the time taken
+ * does not say which accounts exist. With two costs in the database that stopped being enough: a
+ * legacy hash is roughly eight times quicker to check than a current one, so a bare check would
+ * let anyone time a wrong guess and tell the accounts that have not signed in since the upgrade
+ * (fast, so they exist) from the rest. Topping every failure up to the same pair closes it.
+ *
+ * A CORRECT password costs what it costs: it signs the person in, so there is nothing to hide.
+ * For a legacy hash that is the check plus the new hash, which is also the upgrade — computed once,
+ * not twice. A current hash that is right needs nothing more.
+ */
+export async function checkPassword(
+  password: string,
+  stored: string | null | undefined,
+): Promise<{ ok: boolean; rehash: string | null }> {
+  const parsed = stored ? parseStored(stored) : null;
+
+  let ok = false;
+  let spent: ScryptParams;
+  if (parsed) {
+    spent = parsed.params;
+    try {
+      const derived = await engine.derive(password, parsed.salt, parsed.params);
+      ok = derived.length === parsed.hash.length && timingSafeEqual(derived, parsed.hash);
+    } catch {
+      ok = false;
+    }
+  } else {
+    // No such account, no password set, or a row we cannot read: spend the current cost on nothing.
+    spent = CURRENT_PARAMS;
+    try {
+      await engine.derive(password, DUMMY_SALT, CURRENT_PARAMS);
+    } catch {
+      // Nothing to report: the answer is already "no".
+    }
+  }
+
+  if (!sameCost(spent, CURRENT_PARAMS)) {
+    // The hash is at some other cost (the legacy one, in practice): pay the current cost now. If the
+    // password was right, this is the upgrade; if not, it is the top-up that keeps this attempt
+    // looking like every other.
+    const salt = randomBytes(16);
+    const hash = await engine.derive(password, salt, CURRENT_PARAMS);
+    return { ok, rehash: ok ? formatHash(CURRENT_PARAMS, salt, hash) : null };
+  }
+  if (!ok) {
+    // Already at the current cost and wrong (or no such account): top up with the legacy cost.
+    await engine.derive(password, DUMMY_SALT, LEGACY_PARAMS);
+  }
+  return { ok, rehash: null };
 }
 
 /**
