@@ -2,28 +2,32 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth";
-import { canAccess, LEADERSHIP } from "@/lib/permissions";
+import { canAccess, MARK_ANY_CLASS } from "@/lib/permissions";
 import { rosterWhere } from "@/lib/class-roster";
 
 /**
  * Classes and subjects the signed-in user may enter scores for.
- * Leadership sees everything; a teacher sees only their own assignments, which
- * is what stops one teacher marking another's subject.
+ * MARK_ANY_CLASS (leadership and the IT admin) sees and records for every class;
+ * a teacher sees only their own assignments, which is what stops one teacher
+ * marking another's subject.
  *
- * ⚠️ `seesWholeSchool` and `canManage` are DIFFERENT questions with the same
- * answer for leadership and different answers for everyone else. An IT Admin
- * has no Staff record, so `!auth.staffId` falls into the same branch as
- * leadership and correctly sees every class — there is nothing else to scope
- * an admin account by. But seeing everything is not permission to change it:
- * `createAssessment`, `saveScores`, `setAssessmentStatus` and `deleteAssessment`
- * all require LEADERSHIP outright, so a caller that reused the old single
- * `isLeadership` field to decide whether to SHOW a "New assessment" button
- * offered IT Admin a button that only redirected them away on click.
+ * ⚠️ `seesWholeSchool` and `canRecord` are DIFFERENT questions. `canRecord` is
+ * whether this person may create an assessment and enter its marks, and it is
+ * what decides whether to SHOW a "New assessment" button and an editable grid.
+ * Seeing every class is not permission to change one: submitting, approving,
+ * unlocking and deleting (`setAssessmentStatus`, `deleteAssessment`) still
+ * require LEADERSHIP, so a caller must not reuse `canRecord` to decide whether
+ * to show those. It was once a single `isLeadership` field doing both jobs, and
+ * offered an IT Admin a button that only redirected them away on click.
+ *
+ * It follows MARK_ANY_CLASS rather than "has no staff record", which is how an
+ * IT Admin used to land in the whole-school branch by accident: one who also
+ * holds a Staff row would have been scoped down to their own assignments.
  */
 export async function getTeachingScope(auth: AuthContext) {
-  const canManage = canAccess(auth.roles, LEADERSHIP);
+  const canRecord = canAccess(auth.roles, MARK_ANY_CLASS);
 
-  if (canManage || !auth.staffId) {
+  if (canRecord || !auth.staffId) {
     const [classGroups, subjects] = await Promise.all([
       prisma.classGroup.findMany({
         orderBy: [{ level: { order: "asc" } }, { name: "asc" }],
@@ -31,7 +35,7 @@ export async function getTeachingScope(auth: AuthContext) {
       }),
       prisma.subject.findMany({ orderBy: { order: "asc" } }),
     ]);
-    return { seesWholeSchool: true, canManage, classGroups, subjects, pairs: null };
+    return { seesWholeSchool: true, canRecord, classGroups, subjects, pairs: null };
   }
 
   const assignments = await prisma.teachingAssignment.findMany({
@@ -47,7 +51,7 @@ export async function getTeachingScope(auth: AuthContext) {
 
   return {
     seesWholeSchool: false,
-    canManage: false,
+    canRecord: false,
     classGroups,
     subjects,
     pairs: assignments.map((a) => ({ classGroupId: a.classGroupId, subjectId: a.subjectId })),

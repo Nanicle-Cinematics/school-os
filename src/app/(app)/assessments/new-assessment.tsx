@@ -15,14 +15,21 @@ export function NewAssessment({
   subjects,
   terms,
   currentTermId,
+  defaultOpen = false,
 }: {
   classGroups: ClassOption[];
   subjects: Option[];
   terms: TermOption[];
   currentTermId?: string;
+  /**
+   * Render with the form already open (`/assessments?new=1`). The form is otherwise absent from
+   * the server's HTML until a click, which left `createAssessment` out of reach of every guard
+   * that drives a form over HTTP, and an action no guard can reach is one nobody tests.
+   */
+  defaultOpen?: boolean;
 }) {
   const [state, formAction] = useActionState<AssessmentState, FormData>(createAssessment, {});
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   if (!open) {
     return (

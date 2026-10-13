@@ -1098,6 +1098,57 @@ that a register forged for another class is refused by the action.
   in all three screens' pickers; changing a component's total marks stays `LEADERSHIP`.
   `verify:it-admin` proves both pages and both actions with a probe that holds
   no staff record.
+
+  **Widened on 2026-10-13 to the Assessments screens (`/assessments`).** The IT
+  admin may CREATE an assessment (`createAssessment`) and ENTER its marks
+  (`saveScores`), both `requireRole(MARK_ANY_CLASS)`, as well as fill in the mark
+  sheet. Recording is not signing off: `setAssessmentStatus` (submit, approve, send
+  back, unlock) and `deleteAssessment` stay `LEADERSHIP`, and the page hides those
+  buttons from anyone else. `canRecord` (grid editable, New assessment shown) and
+  `isLeadership` (the status and delete buttons) are separate questions on the score
+  page, and `getTeachingScope` follows `MARK_ANY_CLASS` rather than "has no Staff
+  record": an IT admin who also held a Staff row used to be scoped down to their own
+  assignments. The one thing an IT admin does NOT get is a new total for a component
+  that already has marks (below), because that rescales them. Choosing the total of a
+  NEW assessment is part of creating it. Not done, and the obvious next question: the
+  IT admin cannot submit an assessment for review; a head does that.
+- **A mark may not exceed the total its assessment is out of, anywhere.** One rule,
+  `checkScore` in `src/lib/score-limits.ts`, pure so the server and the browser use
+  the SAME function: `saveScores` and `saveSheet` (the authority) and the two grids
+  (the convenience). A mark is refused, not trimmed (turning a typed 15 into 10 would
+  put a number in a child's record that nobody typed); 10 out of 10 is allowed and
+  10.01 is not; blank is "not marked yet", never zero; `1e1`, `0x5`, `+5`, `7,5` and
+  `Infinity` are numbers to JavaScript and not marks. A refused save is ALL or
+  NOTHING, names every offender (pupil, component, why) and writes nothing, rather
+  than naming the first and leaving the rest for the next press. The grids mark each
+  bad cell and disable Save while any is out of range. Mock exams (out of 100) and
+  paper records (`parseRecordedMark`) already enforced theirs and were left alone.
+
+  ⚠️ **What this does NOT stop, and is deliberate:** LEADERSHIP can raise a
+  component's total on the mark sheet (`max:` fields, `mayChangeTotals`) and enter a
+  mark against the NEW total in the same save, because changing what a test was out
+  of is a head's call. An IT admin or teacher cannot: their `max:` fields are ignored
+  and every mark is held to the persisted total (`verify:assessment-entry` forges one
+  and is refused). There is also no database constraint, since `Score.rawScore`
+  would have to be compared with another table's column; the guarantee lives in the
+  two actions. A read-only audit for any row that got past them:
+  `select count(*) from "Score" s join "Assessment" a on a.id = s."assessmentId" where s."rawScore" > a."maxScore"`
+  (0 on the development database on 2026-10-13; production not checked).
+
+  ⚠️ **A publish lock is checked BEFORE the total** in both actions, so a test
+  against a published class passes on the wrong refusal. `verify:assessment-entry`
+  picks a class with no results at all for that reason. And creating an assessment
+  whose title already exists for the class, subject and term used to be an unhandled
+  unique-index error (a server error on a filled-in form); it now says so.
+
+  `verify:score-limits` (pure, in CI) pins the rule and the shape of the code.
+  `verify:assessment-entry` (HTTP, in CI) signs in as a head, an IT admin and a
+  teacher and posts the real forms: the IT admin creates an assessment, a 15 out of 10
+  is refused (and the good mark beside it is not saved), the same save without it
+  is accepted, the head's submit and delete forms replayed by the IT admin change
+  nothing while the same replay by the head does, and a teacher writes nothing.
+  `/assessments?new=1` renders the New assessment form open so a guard can reach it;
+  it is otherwise absent from the HTML until a click.
 - **`isTeacherOnly`** distinguishes a teacher from a head who also teaches. A
   head keeps the whole app; only a login whose every role is `TEACHER` is
   narrowed.

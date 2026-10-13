@@ -1089,7 +1089,7 @@ async function componentChecks(cookie) {
     );
     check(
       "a mark above the component's total is refused",
-      says(refused.html, "is above it"),
+      says(refused.html, "Nothing was saved") && says(refused.html, "is above the"),
       alerts(refused.html)[0],
     );
     check(

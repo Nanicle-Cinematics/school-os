@@ -5,11 +5,12 @@ import { redirect } from "next/navigation";
 import { AssessmentType, Prisma } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
-import { LEADERSHIP, canAccess } from "@/lib/permissions";
+import { LEADERSHIP, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { writeAudit } from "@/lib/audit";
 import { rosterWhere } from "@/lib/class-roster";
 import { ownsSheet } from "@/lib/ownership";
+import { checkScore, refusalMessage } from "@/lib/score-limits";
 
 const ASSESSMENT_TYPES = Object.keys(AssessmentType);
 
@@ -17,15 +18,16 @@ export type AssessmentState = { error?: string; ok?: string };
 
 /**
  * A teacher may only touch assessments for a class/subject they are assigned.
- * Leadership bypasses this. Checked server-side on every write — the UI hiding
- * a form is a convenience, not a control.
+ * MARK_ANY_CLASS bypasses this: leadership, and the IT admin who keys in what
+ * teachers hand over on paper. Checked server-side on every write — the UI
+ * hiding a form is a convenience, not a control.
  */
 async function assertMayTeach(
   auth: { roles: Parameters<typeof canAccess>[0]; staffId: string | null },
   classGroupId: string,
   subjectId: string,
 ) {
-  if (canAccess(auth.roles, LEADERSHIP)) {
+  if (canAccess(auth.roles, MARK_ANY_CLASS)) {
     return true;
   }
   if (!auth.staffId) {
@@ -37,11 +39,18 @@ async function assertMayTeach(
   return count > 0;
 }
 
+/**
+ * Record a new assessment for any class: MARK_ANY_CLASS, so the IT admin as well as
+ * leadership (2026-10-13, on the school's request). The total it is marked out of is
+ * chosen HERE, for a component that has no marks yet, which is different from
+ * changing the total of one that has: that rescales every mark already entered and
+ * stays LEADERSHIP on the mark sheet (`mayChangeTotals` in sheet-actions.ts).
+ */
 export async function createAssessment(
   _prev: AssessmentState,
   formData: FormData,
 ): Promise<AssessmentState> {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(MARK_ANY_CLASS);
   setTenantContext(auth.tenant);
 
   const termId = String(formData.get("termId") ?? "");
@@ -88,33 +97,43 @@ export async function createAssessment(
   }
 
   let created = "";
-  await tenantTransaction(auth.schoolId, async (tx) => {
-    const assessment = await tx.assessment.create({
-      data: {
-        schoolId: auth.schoolId,
-        termId,
-        classGroupId,
-        subjectId,
-        type: type as "CLASS_TEST",
-        title,
-        maxScore: new Prisma.Decimal(maxScore),
-        weight: new Prisma.Decimal(weight || 0),
-        dueDate,
-        status: "OPEN",
-        createdByStaffId: auth.staffId,
-      },
-    });
-    created = assessment.id;
+  try {
+    await tenantTransaction(auth.schoolId, async (tx) => {
+      const assessment = await tx.assessment.create({
+        data: {
+          schoolId: auth.schoolId,
+          termId,
+          classGroupId,
+          subjectId,
+          type: type as "CLASS_TEST",
+          title,
+          maxScore: new Prisma.Decimal(maxScore),
+          weight: new Prisma.Decimal(weight || 0),
+          dueDate,
+          status: "OPEN",
+          createdByStaffId: auth.staffId,
+        },
+      });
+      created = assessment.id;
 
-    await writeAudit(tx, {
-      schoolId: auth.schoolId,
-      actorUserId: auth.userId,
-      action: "assessment.create",
-      entity: "Assessment",
-      entityId: assessment.id,
-      after: { title, type, maxScore, weight },
+      await writeAudit(tx, {
+        schoolId: auth.schoolId,
+        actorUserId: auth.userId,
+        action: "assessment.create",
+        entity: "Assessment",
+        entityId: assessment.id,
+        after: { title, type, maxScore, weight },
+      });
     });
-  });
+  } catch (error) {
+    // One "Class Test 1" per class, subject and term (a unique index). Answered, rather than left
+    // to surface as a server error on a form that has just been filled in. `redirect` below is
+    // OUTSIDE this try: it works by throwing, and must not be caught here.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: `There is already an assessment called “${title}” for that class, subject and term. Choose another title.` };
+    }
+    throw error;
+  }
 
   revalidatePath("/assessments");
   redirect(`/assessments/${created}`);
@@ -132,7 +151,9 @@ export async function saveScores(
   _prev: ScoreEntryState,
   formData: FormData,
 ): Promise<ScoreEntryState> {
-  const auth = await requireRole(LEADERSHIP);
+  // MARK_ANY_CLASS, like the mark sheet: entering marks is not approving them.
+  // Submitting, approving, unlocking and deleting stay LEADERSHIP below.
+  const auth = await requireRole(MARK_ANY_CLASS);
   setTenantContext(auth.tenant);
   const assessmentId = String(formData.get("assessmentId") ?? "");
 
@@ -152,9 +173,10 @@ export async function saveScores(
   });
   const roster = await prisma.enrollment.findMany({
     where: rosterWhere(term?.academicYearId ?? "", assessment.classGroupId),
-    select: { studentId: true },
+    select: { studentId: true, student: { select: { firstName: true, lastName: true } } },
   });
   const enrolled = new Set(roster.map((row) => row.studentId));
+  const names = new Map(roster.map((row) => [row.studentId, `${row.student.lastName} ${row.student.firstName}`]));
   const published = await prisma.termResult.count({
     where: { termId: assessment.termId, classGroupId: assessment.classGroupId, status: "PUBLISHED" },
   });
@@ -167,8 +189,10 @@ export async function saveScores(
     return { error: "You are not assigned to teach that subject in that class." };
   }
 
+  // The total this assessment is marked out of, as persisted. Nothing in this action can change it.
   const max = Number(assessment.maxScore);
   const updates: { studentId: string; rawScore: number | null; isAbsent: boolean }[] = [];
+  const problems: string[] = [];
 
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("score:")) {
@@ -190,14 +214,16 @@ export async function saveScores(
       continue;
     }
 
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      return { error: `“${raw}” is not a valid score.` };
+    const verdict = checkScore(raw, max);
+    if (!verdict.ok || verdict.value === null) {
+      problems.push(`${names.get(studentId) ?? "A pupil"}: ${verdict.ok ? "not a mark" : verdict.reason}`);
+      continue;
     }
-    if (parsed > max) {
-      return { error: `Scores cannot exceed the maximum of ${max}.` };
-    }
-    updates.push({ studentId, rawScore: parsed, isAbsent: false });
+    updates.push({ studentId, rawScore: verdict.value, isAbsent: false });
+  }
+  // Refused as a whole, before anything is written: a half-saved class is worse than an unsaved one.
+  if (problems.length > 0) {
+    return { error: refusalMessage(problems) };
   }
 
   await tenantTransaction(auth.schoolId, async (tx) => {
@@ -244,6 +270,10 @@ export async function saveScores(
   };
 }
 
+/**
+ * Submit, approve, send back and unlock: LEADERSHIP only. The IT admin may RECORD an
+ * assessment (create it, enter its marks) but approving is a head's sign-off on it.
+ */
 export async function setAssessmentStatus(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
   setTenantContext(auth.tenant);
@@ -289,6 +319,7 @@ export async function setAssessmentStatus(formData: FormData): Promise<void> {
   revalidatePath(`/assessments/${assessmentId}`);
 }
 
+// LEADERSHIP only: deleting takes every mark entered against the assessment with it.
 export async function deleteAssessment(formData: FormData): Promise<void> {
   const auth = await requireRole(LEADERSHIP);
   setTenantContext(auth.tenant);
