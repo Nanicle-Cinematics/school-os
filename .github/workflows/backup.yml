@@ -27,6 +27,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/backup.yml"
+      - ".github/actions/postgres/**"
       - "scripts/prove-restore.sh"
       - "scripts/table-counts.sql"
 
@@ -44,28 +45,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    services:
-      postgres:
-        # From AWS's public mirror, not Docker Hub, whose anonymous pull limit
-        # stopped CI on 2026-10-09 — see ci.yml.
-        image: public.ecr.aws/docker/library/postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-
     env:
       SCRATCH: postgresql://postgres:postgres@localhost:5432
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Postgres 17
+        uses: ./.github/actions/postgres
 
       # ⚠️ ubuntu-latest ships postgresql-client 16, and pg_dump REFUSES to dump
       # a server newer than itself — Supabase is 17. Without this the job fails
