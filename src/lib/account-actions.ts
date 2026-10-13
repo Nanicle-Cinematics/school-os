@@ -9,11 +9,11 @@ import { hashToken } from "@/lib/session";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
 import { landingFor } from "@/lib/permissions";
+import { SESSION_COOKIE_NAME } from "@/lib/session-cookie";
 
 export type PasswordState = { error?: string };
 
 const MIN_LENGTH = 8;
-const SESSION_COOKIE = "school_os_session";
 
 /**
  * Change your own password.
@@ -69,7 +69,7 @@ export async function changePassword(
 
   // Keep THIS session; end the others. Matching on the hash rather than an id
   // because that is what the cookie carries — see createSession.
-  const raw = (await cookies()).get(SESSION_COOKIE)?.value ?? "";
+  const raw = (await cookies()).get(SESSION_COOKIE_NAME)?.value ?? "";
   const keep = raw ? hashToken(raw) : "";
 
   await tenantTransaction(auth.schoolId, async (tx) => {

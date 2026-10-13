@@ -9,6 +9,7 @@ import { normalisePhone } from "@/lib/sms-shared";
 import { checkPassword } from "@/lib/password";
 import { clearAttempts, clientIp, takeAttempt } from "@/lib/rate-limit";
 import { createSession, destroySession } from "@/lib/session";
+import { policyFor } from "@/lib/session-policy";
 
 export type LoginState = { error?: string };
 
@@ -164,6 +165,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   const headerList = await headers();
   await createSession(user.id, {
+    // How long this session may last depends on who it is for: see session-policy.ts.
+    policy: policyFor({ isPlatformAdmin: user.isPlatformAdmin, roles: user.memberships.map((m) => m.role) }),
     activeSchoolId: user.memberships[0]?.schoolId,
     ip: headerList.get("x-forwarded-for")?.split(",")[0]?.trim(),
     userAgent: headerList.get("user-agent") ?? undefined,
