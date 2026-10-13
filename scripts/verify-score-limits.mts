@@ -96,13 +96,15 @@ const fn = (name: string) => {
 };
 check("createAssessment: leadership and the IT admin (MARK_ANY_CLASS)", /requireRole\(MARK_ANY_CLASS\)/.test(fn("createAssessment")));
 check("saveScores: the same", /requireRole\(MARK_ANY_CLASS\)/.test(fn("saveScores")));
-check("setAssessmentStatus stays LEADERSHIP: recording is not signing off", /requireRole\(LEADERSHIP\)/.test(fn("setAssessmentStatus")));
+check("setAssessmentStatus: the gate is MARK_ANY_CLASS (the IT admin may submit)", /requireRole\(MARK_ANY_CLASS\)/.test(fn("setAssessmentStatus")));
+check("but anyone who is not leadership may only move OPEN to SUBMITTED", /!isLeadership\s*&&\s*!\(before\.status === "OPEN"\s*&&\s*status === "SUBMITTED"\)/.test(fn("setAssessmentStatus")));
 check("deleteAssessment stays LEADERSHIP: it takes every mark with it", /requireRole\(LEADERSHIP\)/.test(fn("deleteAssessment")));
 check("the 'may teach this class' bypass is MARK_ANY_CLASS", /canAccess\(auth\.roles, MARK_ANY_CLASS\)/.test(files.actions));
 check("the New assessment button follows the same rule", /scope\.canRecord/.test(code("src/app/(app)/assessments/page.tsx")));
 const entry = code("src/app/(app)/assessments/[id]/page.tsx");
 check("the grid is editable for anyone who may record", /canAccess\(auth\.roles, MARK_ANY_CLASS\)/.test(entry) && /!canRecord/.test(entry));
-check("the submit, approve, unlock and delete buttons still need leadership", (entry.match(/&& isLeadership/g) ?? []).length >= 4);
+check("the Submit button shows for anyone who may record", /status === "OPEN" && canRecord/.test(entry));
+check("approve, send back, unlock and delete buttons still need leadership", (entry.match(/&& isLeadership/g) ?? []).length >= 3);
 check("an IT admin still cannot change a total on the mark sheet", /const mayChangeTotals = canAccess\(auth\.roles, LEADERSHIP\)/.test(files.sheetActions));
 
 console.log(`\n${failures === 0 ? "All checks passed" : `${failures} FAILED`}`);

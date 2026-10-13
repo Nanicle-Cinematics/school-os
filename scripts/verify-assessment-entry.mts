@@ -227,8 +227,8 @@ async function main() {
     check("marked out of 10, said on the page", /Score \/ 10/.test(itPage.html.replace(/<!-- -->/g, "")));
     const gridInner = formWith(itPage.html, `name="score:${p1.id}"`);
     check("with a grid it can type into", Boolean(gridInner) && !/name="score:[^"]*"[^>]*disabled/.test(gridInner ?? ""));
-    check("and no Submit, Approve, Unlock or Delete button, which are a head's", !/Submit for review|>Approve<|Unlock for edits|>Delete</.test(itPage.html));
-    check("with a line saying what it can and cannot do", /enter and correct marks here/i.test(itPage.html));
+    check("with a Submit for review button, and no Approve, Unlock or Delete, which are a head's", /Submit for review/.test(itPage.html) && !/>Approve<|Unlock for edits|>Delete</.test(itPage.html));
+    check("with a line saying what it can and cannot do", /enter and correct marks here and submit/i.test(itPage.html));
     if (!gridInner) return;
     const gridFields = fieldsOf(gridInner);
     const enter = (as: string, marks: Record<string, string>, absent: string[] = []) =>
@@ -276,19 +276,38 @@ async function main() {
     check("a head's 15 out of 10 is refused too", /Nothing was saved/.test(headOver.html) && /above the 10/.test(headOver.html));
     check("and the row is untouched", (await scoreOf(p1.id)) === 10);
 
-    // --- 5. recording is not signing off ----------------------------------------------------------
-    console.log("\nAn IT admin cannot submit, approve or delete, even with a forged request");
+    // --- 5. an IT admin may submit; the head signs off ---------------------------------------------
+    console.log("\nAn IT admin may submit, and nothing further, even with a forged request");
     const headPage = await get(path, tokens.HEAD);
     const submitInner = formWith(headPage.html, 'value="SUBMITTED"');
     const deleteInner = forms(headPage.html).find((inner) => /Deleting|Delete/.test(inner) && inner.includes('name="assessmentId"') && !inner.includes('name="status"'));
-    check("the head's page does offer both forms (so there is something to forge)", Boolean(submitInner) && Boolean(deleteInner));
+    check("the head's page offers Submit and Delete forms (so there is something to forge)", Boolean(submitInner) && Boolean(deleteInner));
+    const status = async () => String((await assessment())?.status);
     if (submitInner && deleteInner) {
-      await post(path, tokens.IT_ADMIN, fieldsOf(submitInner));
-      check("the head's 'Submit for review' replayed by the IT admin changes nothing", (await assessment())?.status === "OPEN", String((await assessment())?.status));
       await post(path, tokens.IT_ADMIN, fieldsOf(deleteInner));
       check("the head's 'Delete' replayed by the IT admin deletes nothing", (await assessment()) !== null && (await scores()).length >= 2);
-      await post(path, tokens.HEAD, fieldsOf(submitInner));
-      check("the same replay by the head DOES submit it (the control: the forgery is well-formed)", (await assessment())?.status === "SUBMITTED", String((await assessment())?.status));
+      await post(path, tokens.IT_ADMIN, fieldsOf(submitInner), { status: "APPROVED" });
+      check("an IT admin cannot skip review: OPEN straight to APPROVED is refused", (await status()) === "OPEN", await status());
+
+      const mine = formWith(itPage.html, 'value="SUBMITTED"');
+      check("the IT admin's own page has a Submit form", Boolean(mine));
+      if (mine) {
+        await post(path, tokens.IT_ADMIN, fieldsOf(mine));
+        check("and posting it submits the assessment", (await status()) === "SUBMITTED", await status());
+      }
+
+      const headSubmitted = await get(path, tokens.HEAD);
+      const approveInner = formWith(headSubmitted.html, 'value="APPROVED"');
+      const sendBackInner = formWith(headSubmitted.html, 'value="OPEN"');
+      check("once submitted, the head's page offers Approve and Send back", Boolean(approveInner) && Boolean(sendBackInner));
+      if (approveInner && sendBackInner) {
+        await post(path, tokens.IT_ADMIN, fieldsOf(approveInner));
+        check("the head's 'Approve' replayed by the IT admin does nothing", (await status()) === "SUBMITTED", await status());
+        await post(path, tokens.IT_ADMIN, fieldsOf(sendBackInner));
+        check("nor does 'Send back'", (await status()) === "SUBMITTED", await status());
+        await post(path, tokens.HEAD, fieldsOf(sendBackInner));
+        check("the same 'Send back' replayed by the head DOES reopen it (the control: the forgery is well-formed)", (await status()) === "OPEN", await status());
+      }
     }
 
     // --- 6. a teacher is not an IT admin ----------------------------------------------------------
@@ -305,7 +324,7 @@ async function main() {
 
     // --- 7. the mark sheet: the same total, and a total an IT admin cannot move --------------------
     console.log("\nOn the mark sheet: the same total, and an IT admin cannot raise it");
-    // The assessment is SUBMITTED now (the head's replay above), which the sheet still edits.
+    // The assessment is OPEN again (the head sent it back above).
     const sheetUrl = `/assessments/sheet?term=${term.id}&class=${classGroupId}&subject=${subject.id}`;
     const sheet = await get(sheetUrl, tokens.IT_ADMIN);
     const sheetInner = formWith(sheet.html, `name="score:${assessmentId}:${p1.id}"`);

@@ -1100,18 +1100,21 @@ that a register forged for another class is refused by the action.
   no staff record.
 
   **Widened on 2026-10-13 to the Assessments screens (`/assessments`).** The IT
-  admin may CREATE an assessment (`createAssessment`) and ENTER its marks
-  (`saveScores`), both `requireRole(MARK_ANY_CLASS)`, as well as fill in the mark
-  sheet. Recording is not signing off: `setAssessmentStatus` (submit, approve, send
-  back, unlock) and `deleteAssessment` stay `LEADERSHIP`, and the page hides those
-  buttons from anyone else. `canRecord` (grid editable, New assessment shown) and
-  `isLeadership` (the status and delete buttons) are separate questions on the score
+  admin may CREATE an assessment (`createAssessment`), ENTER its marks
+  (`saveScores`) and SUBMIT it for review, as well as fill in the mark sheet. The
+  first two are `requireRole(MARK_ANY_CLASS)`. `setAssessmentStatus` is gated the same
+  way and then NARROWED: anyone who is not leadership may only move an assessment from
+  OPEN to SUBMITTED (one check inside the transaction), so a forged approve, send back,
+  unlock, or an OPEN-straight-to-APPROVED that skips review, does nothing.
+  Approving, sending back, unlocking and `deleteAssessment` stay `LEADERSHIP`, and the
+  page hides those buttons from anyone else. `canRecord` (grid editable, New assessment
+  and Submit shown) and `isLeadership` (the rest) are separate questions on the score
   page, and `getTeachingScope` follows `MARK_ANY_CLASS` rather than "has no Staff
   record": an IT admin who also held a Staff row used to be scoped down to their own
   assignments. The one thing an IT admin does NOT get is a new total for a component
   that already has marks (below), because that rescales them. Choosing the total of a
-  NEW assessment is part of creating it. Not done, and the obvious next question: the
-  IT admin cannot submit an assessment for review; a head does that.
+  NEW assessment is part of creating it. (Submit was added the same day, after the
+  first version left it with a head.)
 - **A mark may not exceed the total its assessment is out of, anywhere.** One rule,
   `checkScore` in `src/lib/score-limits.ts`, pure so the server and the browser use
   the SAME function: `saveScores` and `saveSheet` (the authority) and the two grids
@@ -1145,8 +1148,9 @@ that a register forged for another class is refused by the action.
   `verify:assessment-entry` (HTTP, in CI) signs in as a head, an IT admin and a
   teacher and posts the real forms: the IT admin creates an assessment, a 15 out of 10
   is refused (and the good mark beside it is not saved), the same save without it
-  is accepted, the head's submit and delete forms replayed by the IT admin change
-  nothing while the same replay by the head does, and a teacher writes nothing.
+  is accepted, the IT admin submits, and its forged approve, send back, delete and
+  OPEN-to-APPROVED do nothing while the head's identical send-back replay works, and
+  a teacher writes nothing.
   `/assessments?new=1` renders the New assessment form open so a guard can reach it;
   it is otherwise absent from the HTML until a click.
 - **`isTeacherOnly`** distinguishes a teacher from a head who also teaches. A
