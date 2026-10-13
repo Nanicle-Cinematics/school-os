@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
+import { SESSION_COOKIE_NAME } from "@/lib/session-cookie";
+import { evaluateSession, policyFor } from "@/lib/session-policy";
 
 /**
  * Which school this session is in, from the cookie alone.
@@ -15,10 +17,8 @@ import { withBypass } from "@/lib/tenant-context";
  * that came after it read the session the same way rather than growing their
  * own copy.
  */
-const COOKIE_NAME = "school_os_session";
-
 export async function activeSchoolId(): Promise<string | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!token) {
     return null;
   }
@@ -28,14 +28,16 @@ export async function activeSchoolId(): Promise<string | null> {
     prisma.session.findUnique({
       where: { tokenHash: createHash("sha256").update(token).digest("hex") },
       select: {
+        createdAt: true,
         expiresAt: true,
         activeSchoolId: true,
         user: {
           select: {
             deletedAt: true,
+            isPlatformAdmin: true,
             memberships: {
               where: { status: "ACTIVE" },
-              select: { schoolId: true },
+              select: { schoolId: true, role: true },
             },
           },
         },
@@ -43,7 +45,17 @@ export async function activeSchoolId(): Promise<string | null> {
     }),
   );
 
-  if (!session || session.expiresAt < new Date() || session.user.deletedAt) {
+  if (!session || session.user.deletedAt) {
+    return null;
+  }
+  // The same verdict `getSessionUser` reaches from the same row, so the light reader cannot honour
+  // a session the main one has ended. It only READS: it neither extends nor removes the session,
+  // which stays the main reader's job and keeps this a single cheap query.
+  const policy = policyFor({
+    isPlatformAdmin: session.user.isPlatformAdmin,
+    roles: session.user.memberships.map((m) => m.role),
+  });
+  if (!evaluateSession(session, policy).live) {
     return null;
   }
 

@@ -1117,6 +1117,77 @@ rendering in full for a teacher who typed the URL, because their own
 verify:teacher` signs in as a real teacher and asks for every route by URL,
 which is what caught it — run it after touching any role list.
 
+## Sessions
+
+A session is a random 256-bit token in an `httpOnly` cookie, with only its SHA-256
+stored (`Session.tokenHash`), so a leaked row cannot be replayed. How long one lasts
+depends on who it is for, and lives in ONE file, `src/lib/session-policy.ts`:
+
+| | idle | absolute | why |
+|---|---|---|---|
+| platform admin | 2 h | 12 h | the console reads and writes every school; a cookie stolen after the second factor is the most valuable thing in the system, and there is one such person |
+| staff | 7 days | 30 days | shared office computers are common; a session left open on one should not last a month; a week covers a weekend or a break between marking sessions |
+| parent only | 30 days | 30 days | they come back now and then, and a forced sign-in means a text message to recover the password, which the school pays for |
+
+Parent only means EVERY active membership is a parent one; anyone who is also staff
+anywhere gets the staff rules, and a login with no memberships is not "all parents".
+Both numbers are a judgement about who is hurt by a forced sign-in, so they are
+pinned in `verify:session-policy` and cannot move by accident.
+
+**Two clocks.** The absolute one runs from the day the session was issued and never
+moves. The idle one IS `Session.expiresAt`: it is pushed forward as the session is
+used, at most once every 10 minutes (so a busy page does not write on every
+request), and never past the absolute end. The browser's cookie expires at the
+ABSOLUTE end; the idle deadline is the server's to enforce.
+
+**The verdict is decided from the row alone, at read time** (`evaluateSession`), so a
+session issued BEFORE a rule existed is held to it the first time it is read. That
+is how this shipped without signing anyone out: a 30-day staff row stays live and
+its deadline is brought DOWN to seven days idle; a parent's row is left exactly as
+it was, with no write at all, for the people with the most of them. The one
+exception is a platform admin session more than twelve hours old, which is refused
+outright. (`extendTo` can therefore be earlier than the stored deadline.)
+
+⚠️ **There are two readers of a session and they must agree.** `getSessionUser` (the
+full join) and `activeSchoolId` in `session-school.ts` (the light one the crest,
+icon and manifest routes use) both decide with `evaluateSession`; the light one
+once had its own `expiresAt < now` check, which could not know about idle or
+absolute and would have honoured a session the main one had ended. Only the main
+reader writes (extends, and deletes a dead row, since nothing else would). The
+cookie's name is spelt in one place too, `session-cookie.ts`; it was in three.
+
+`createSession` takes a REQUIRED `policy`: a default would quietly hand a platform
+admin the staff rules. It also deletes this person's already-ended sessions, which
+nothing else removed if nobody visited them again.
+
+**Decisions NOT taken, so nobody reopens them without the reasons:**
+
+- **No `__Host-` cookie prefix.** It would stop a sibling subdomain, or someone on
+  the network over plain HTTP, planting a cookie for the whole domain. But renaming
+  the cookie signs out EVERY user at once; the prefix requires `Secure`, which
+  breaks plain-HTTP development and CI (`next start` runs as production over
+  `http://localhost`) and about ten scripts that mint a session under the old name;
+  and the threats it answers do not exist here (there are no sibling subdomains, and
+  HSTS with a two-year max-age already keeps browsers off plain HTTP). Revisit the
+  day a subdomain is added, and then read the new name first and fall back to the
+  old one for a month.
+- **`sameSite` stays `lax`, not `strict`.** A parent opens the portal from a link in
+  a text message, a cross-site navigation, and strict would drop the cookie there so
+  they would land signed out.
+- **No cap on sessions per user.** Schools share office logins across several
+  computers, and a cap would sign the oldest of them out.
+- **`SESSION_SECRET` is gone** (from `.env.example` and the three workflows). Nothing
+  ever read it: sessions are random tokens looked up by hash, not signed cookies, so
+  there is no secret to keep. If production's Vercel environment still carries one it
+  is harmless and can be deleted.
+
+`verify:session-policy` (pure, in CI) checks the numbers, who gets which, the verdict
+for every case above including sessions issued before the rules, and that both
+readers use `evaluateSession`. `verify:session-lifetime` (HTTP, in CI) plants
+sessions of exact ages and sends real requests: a dead one goes to `/login`, a live
+one's deadline moves in the database, and signing in through the real form issues
+the cookie and deadline each kind of person should get.
+
 ## Passwords
 
 Every account is created with a **temporary** password: the office reads it out

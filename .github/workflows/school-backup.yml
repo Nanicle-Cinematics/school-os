@@ -107,7 +107,6 @@ jobs:
           DB_RLS="off"
           ALLOW_UNSCOPED_DB="1"
           APP_URL="http://localhost:3000"
-          SESSION_SECRET="backup-not-a-real-secret"
           ENV
           npm run db:deploy
           npm run db:seed
