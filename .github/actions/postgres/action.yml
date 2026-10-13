@@ -12,10 +12,12 @@ description: >-
 # exceeded", on the merge commits of #170 and #172, minutes after the same code passed on its PR).
 # A service container cannot be retried or cached, because it starts before any step.
 #
-# apt is the other half of the answer the backup workflows already rely on: they install
-# `postgresql-client-17` from the same repository on every run, because ubuntu-latest ships client 16
-# and pg_dump refuses to dump a newer server. So the dependency is not new there, and nothing here
-# touches a registry that counts bytes per IP.
+# apt is the other half of the answer the backup workflows already rely on: they add the PGDG
+# repository and install `postgresql-client-17` from it on every run, because ubuntu-latest ships
+# client 16 and pg_dump refuses to dump a newer server. So the dependency is not new there, and
+# nothing here touches a registry that counts bytes per IP. ubuntu-latest does NOT have the PGDG
+# repository configured (a first version of this action assumed it did, and `apt-get install
+# postgresql-17` answered "Unable to locate package"), so it is added here exactly as they add it.
 #
 # What this must reproduce from the official image, because tests read real rows:
 #   - the major version (17 — the one Supabase runs, and the one pg_dump/pg_restore must match);
@@ -56,6 +58,14 @@ runs:
             attempt=$((attempt + 1))
           done
         }
+
+        # The PGDG repository: the runner's own sources only carry the distribution's Postgres (16).
+        # Written the same way the backup workflows write it, so the two agree on the file.
+        retry sudo install -d /usr/share/postgresql-common/pgdg
+        retry sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+          https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
 
         retry sudo apt-get update -qq
         retry sudo apt-get install -y -qq postgresql-17
