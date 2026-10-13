@@ -746,6 +746,35 @@ leading tab keeps it text, and `parseCsv` trims every cell so it still
 round-trips through our own importer. The field is REQUIRED on every dataset, so
 a new one has to decide rather than inherit a default that loses zeros.
 
+⚠️ **A text column is not exempt from formula injection, and it was.** A cell that
+opens with `=`, `+`, `-` or `@` is EXECUTED by Excel and Sheets, and `toCsv`
+neutralises one with a leading apostrophe. But the text-column branch returned
+BEFORE that check, writing a tab in front of anything at all — and the declared
+text columns include `reference` (typed by whoever records a payment), `phone`,
+`alt_phone`, `staff_no` and `admission_no`, which staff type or import and someone
+else opens. `=HYPERLINK("http://…","click")` in a payment reference came out as a
+tab and a live formula (found in the 2026-10-11 security review). The tab is now
+kept only for what looks like a number to be dialled — digits, an optional leading
+`+`, spaces, brackets, dashes — and anything else that opens like a formula gets
+the apostrophe, with no tab. A text column has no exemption for plain numbers: it
+must stay text, so a reference of `-50` is written `'-50`, where an ordinary
+column leaves `-50` alone so a ledger still sums.
+
+**The `.trim()` at the top of `cell()` is load-bearing.** It strips a leading space,
+tab, carriage return and newline BEFORE the formula check, which is the only
+reason `"\t=1+1"` and `"\r=1+1"` are caught; a check that looks only at the first
+character is the bypass OWASP lists tab and CR for. It looks like tidying and is
+not. Remove it and six checks in `verify:export` fail.
+
+The review that found the text-column hole first called it "a leading tab or
+carriage return isn't handled". That was wrong for ordinary columns (the trim
+handles it) and missed the real hole. Until then the neutralising had NO test at
+all; `verify:export` now checks every spelling, in both kinds of column, as a
+reader that trims whitespace would see it, plus a sweep over every cell of every
+real dataset. Round trip: an importer reads the apostrophe back as part of the
+value, so a cell that was neutralised comes back with it — harmless for the
+guardian names and phone numbers these exports carry, and not undone.
+
 **The students export is an import file** — same headers, same order as
 `TEMPLATE_HEADERS`. `verify:export` feeds a real export through the real
 importer, because "same headers" is a claim that rots the first time either side

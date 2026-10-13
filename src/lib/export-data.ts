@@ -38,10 +38,17 @@ import { paymentSource } from "@/lib/payment-labels";
  * quotes.
  */
 function cell(value: string | null | undefined, asText = false): string {
+  // ⚠️ This `trim` is load-bearing for the formula check below, and it is not an accident. It strips
+  // a leading space, tab, carriage return and newline, so "\t=1+1" and "\r=1+1" are reduced to
+  // "=1+1" and caught, instead of sailing past a test that only looks at the first character —
+  // which is how a spreadsheet or importer that trims whitespace would still read them. Remove it
+  // and those cells stop being neutralised; verify:export checks every one of those spellings.
   const text = (value ?? "").trim();
   if (!text) {
     return "";
   }
+  /** What a formula opens with. Excel and Sheets execute a cell that does. */
+  const opensLikeAFormula = /^[=+\-@]/.test(text);
   /**
    * `asText` is the Ghana-specific one. `0244123456` opened in Excel becomes
    * the NUMBER 244123456, so a school that exports its contacts, tidies them in
@@ -49,9 +56,26 @@ function cell(value: string | null | undefined, asText = false): string {
    * nobody. A leading tab makes Excel and Sheets keep it as text, and our own
    * `parseCsv` trims every cell, so the tab is gone again by the time a row is
    * read back. `verify:export` proves the round trip rather than trusting it.
+   *
+   * ⚠️ The tab is for PHONE NUMBERS, and it used to be written in front of anything at all in a
+   * text column, with the formula check below never reached. Those columns include `reference`
+   * (typed by whoever records a payment), `phone` and `admission_no` (typed or imported by staff),
+   * and the file is opened by someone else, so `=HYPERLINK("http://…","click")` left as a tab and
+   * a formula was a hole in exactly the columns nobody thought of as free text. A leading tab is
+   * also one of the characters OWASP lists as a way past a check that only looks at the first
+   * character. So a text column keeps its tab only for what is plausibly a number to be dialled —
+   * digits, an optional leading +, and the spaces, brackets and dashes people put in them — and
+   * anything else that opens like a formula gets the apostrophe below instead, with no tab.
    */
   if (asText) {
-    return `"\t${text.replace(/"/g, '""')}"`;
+    const lookLikeAPhoneNumber = /^\+?\d[\d\s().-]*$/.test(text);
+    if (!opensLikeAFormula || lookLikeAPhoneNumber) {
+      return `"\t${text.replace(/"/g, '""')}"`;
+    }
+    // Not a phone number, and it opens like a formula: an apostrophe makes the spreadsheet show it
+    // as text. Unlike the ordinary path there is no number exemption, because this column must stay
+    // text — a reference of "-50" is a reference, not an amount.
+    return quoted(`'${text}`);
   }
   /**
    * ⚠️ Formula injection. A cell opening with = + - or @ is EXECUTED by Excel and
@@ -61,11 +85,12 @@ function cell(value: string | null | undefined, asText = false): string {
    * are left alone so ledgers still sum.
    */
   const isPlainNumber = /^[-+]?\d+(\.\d+)?$/.test(text);
-  const safe = /^[=+\-@]/.test(text) && !isPlainNumber ? `'${text}` : text;
-  if (/[",\n\r]/.test(safe)) {
-    return `"${safe.replace(/"/g, '""')}"`;
-  }
-  return safe;
+  return quoted(opensLikeAFormula && !isPlainNumber ? `'${text}` : text);
+}
+
+/** Wrap in quotes when the text holds anything a CSV reader would split or end a record on. */
+function quoted(text: string): string {
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 const isoDate = (value: Date | null | undefined) =>
