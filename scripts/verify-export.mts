@@ -97,6 +97,83 @@ check(
   "a phone column without the marker loses its leading zero silently",
 );
 
+/* ── A cell that opens like a formula ────────────────────────────────────── */
+
+// What a spreadsheet, or an importer, that strips whitespace sees. parseCsv trims every cell, so it
+// stands in for any consumer that does: a leading tab or carriage return does not protect a cell
+// from one, which is why OWASP lists both next to = + - @.
+const OPENS_LIKE_A_FORMULA = /^[=+\-@]/;
+const PLAIN_NUMBER = /^[-+]?\d+(\.\d+)?$/;
+const PHONE_LIKE = /^\+?\d[\d\s().-]*$/;
+const seen = (csv: string) => parseCsv(csv).rows[0]?.x ?? "";
+
+console.log("\nA cell that opens like a formula is shown as text");
+
+const HOSTILE = [
+  '=HYPERLINK("http://evil.example","click")',
+  "=1+1",
+  "@SUM(1+1)",
+  "+1+1",
+  "-2+3",
+  "=cmd|' /C calc'!A0",
+  // The same, behind whitespace a first-character check would not see past.
+  "\t=1+1",
+  "\r=1+1",
+  "\n=1+1",
+  " =1+1",
+  "\t\t @SUM(A1)",
+  "\r\n=1+1",
+  "=1+1\t",
+];
+
+for (const [kind, columns] of [
+  ["an ordinary column", [] as string[]],
+  ["a text column (phone, reference, admission_no ...)", ["x"]],
+] as const) {
+  const files = HOSTILE.map((value) => toCsv(["x"], [[value]], columns));
+  check(
+    `${kind}: nothing a trimming reader sees opens like a formula`,
+    files.every((csv) => !OPENS_LIKE_A_FORMULA.test(seen(csv))),
+    files.map(seen).filter((v) => OPENS_LIKE_A_FORMULA.test(v)).join(" | "),
+  );
+  check(
+    `${kind}: the text is kept, behind an apostrophe`,
+    HOSTILE.every((value, i) => seen(files[i]) === `'${value.trim()}`),
+  );
+  check(
+    `${kind}: and no tab sits in front of a formula character, ours or theirs`,
+    files.every((csv) => !/\t[=+\-@]/.test(csv)),
+    files.filter((csv) => /\t[=+\-@]/.test(csv)).length + " files",
+  );
+}
+
+console.log("\nWhat must NOT be changed");
+check(
+  "an ordinary column: plain signed numbers are left alone, so a ledger still sums",
+  ["-50.00", "+5", "12", "-3"].every((v) => seen(toCsv(["x"], [[v]])) === v),
+);
+check(
+  "an ordinary column: names and addresses are untouched, apostrophes and commas included",
+  ["Kofi Mensah", "O'Brien", "'tis the season", "12 Palm Rd, Accra"].every((v) => seen(toCsv(["x"], [[v]])) === v),
+);
+const PHONES = ["0244123456", "+233244123456", "+233 24 412 3456", "(024) 412-3456", "024-412-3456"];
+check(
+  "a text column: a real phone number keeps its tab, so the leading zero survives",
+  PHONES.every((v) => toCsv(["x"], [[v]], ["x"]).includes(`"\t${v}"`)),
+  PHONES.filter((v) => !toCsv(["x"], [[v]], ["x"]).includes(`"\t${v}"`)).join(" | "),
+);
+check(
+  "a text column: and each reads back as exactly the number that went in",
+  PHONES.every((v) => seen(toCsv(["x"], [[v]], ["x"])) === v),
+);
+check(
+  "a text column: an admission or receipt number that opens like nothing keeps its tab too",
+  ["ADM/2026/0042", "RCPT/0001", "0042"].every((v) => toCsv(["x"], [[v]], ["x"]).includes(`"\t${v}"`)),
+);
+// A decision, written down: in a text column "-50" is a reference or a number someone typed into a
+// free-text field, not an amount, and the column must stay text. An ordinary column keeps "-50".
+check("a text column: '-50' is text, not an amount (an ordinary column leaves it alone)", seen(toCsv(["x"], [["-50"]], ["x"])) === "'-50" && seen(toCsv(["x"], [["-50"]])) === "-50");
+
 /* ── Round trip, the claim the students file actually makes ──────────────── */
 
 console.log("\nThe students export is an import file");
@@ -226,12 +303,22 @@ await runWithTenantContext({ schoolId, readOnly: true }, async () => {
     );
 
     // Parse what the school would actually receive, not the array we built.
-    const parsed = parseCsv(toCsv(spec.headers, rows, spec.textColumns));
+    const csv = toCsv(spec.headers, rows, spec.textColumns);
+    const parsed = parseCsv(csv);
     check(
       `${datasetName}: the file parses back to the same number of rows`,
       parsed.rows.length === rows.length,
       `${parsed.rows.length} parsed`,
     );
+
+    // A net over the real data, not independent proof (the seed holds nothing hostile): if a
+    // loader ever starts emitting a value that opens like a formula, or the writer stops catching
+    // one, this is where it shows up on a real school's numbers.
+    const opening = parsed.rows
+      .flatMap((row) => Object.values(row))
+      .filter((v) => typeof v === "string" && OPENS_LIKE_A_FORMULA.test(v) && !PLAIN_NUMBER.test(v) && !PHONE_LIKE.test(v));
+    check(`${datasetName}: no cell opens like a formula`, opening.length === 0, opening.slice(0, 3).join(" | "));
+    check(`${datasetName}: and no tab sits in front of a formula character`, !/\t[=+\-@]/.test(csv));
   }
 
   /**
