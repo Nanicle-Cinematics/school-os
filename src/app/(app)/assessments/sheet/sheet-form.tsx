@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { saveSheet, type SheetState } from "@/lib/sheet-actions";
+import { checkScore } from "@/lib/score-limits";
 import { SubmitButton } from "../../submit-button";
 import { Alert, Avatar, ScoreBadge } from "../../ui";
 
@@ -124,20 +125,28 @@ export function SheetForm({
     [columns, maxima],
   );
 
-  const outOfRange = useMemo(() => {
+  // Every cell the server would refuse, by the SAME rule (`checkScore`, which `saveSheet` decides
+  // with), so this screen cannot accept a mark the save will then reject. An absent pupil's box is
+  // not sent as a mark, so it is not judged; an approved column is skipped by the server, so it is
+  // skipped here.
+  const problems = useMemo(() => {
+    const found = new Map<string, string>();
     for (const column of columns) {
+      if (column.status === "APPROVED") continue;
       const max = Number(maxima[column.id]);
       for (const student of students) {
-        const raw = values[`${column.id}:${student.id}`];
-        if (raw === undefined || raw.trim() === "") continue;
-        const parsed = Number(raw);
-        if (!Number.isFinite(parsed) || parsed < 0 || parsed > max) {
-          return `${student.lastName} — ${column.title}: ${raw} is not between 0 and ${max}`;
+        const key = `${column.id}:${student.id}`;
+        if (absent[key]) continue;
+        const verdict = checkScore(values[key] ?? "", max);
+        if (!verdict.ok) {
+          found.set(key, `${student.lastName}, ${column.title}: ${verdict.reason}`);
         }
       }
     }
-    return null;
-  }, [columns, students, values, maxima]);
+    return found;
+  }, [columns, students, values, absent, maxima]);
+  const blocked = problems.size > 0;
+  const firstProblem = problems.values().next().value as string | undefined;
 
   return (
     <form action={formAction} className="space-y-3">
@@ -235,12 +244,13 @@ export function SheetForm({
                           min={0}
                           max={Number(maxima[column.id]) || column.maxScore}
                           step="0.01"
+                          aria-invalid={problems.has(key) ? true : undefined}
                           value={isAbsent ? "" : (values[key] ?? "")}
                           disabled={locked || isAbsent}
                           onChange={(e) =>
                             setValues((prev) => ({ ...prev, [key]: e.target.value }))
                           }
-                          className="w-[3.75rem] rounded-lg border-[1.5px] border-slate-200 px-1.5 py-1.5 text-center font-semibold tabular-nums outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25 disabled:bg-slate-100 disabled:font-normal"
+                          className={`w-[3.75rem] rounded-lg border-[1.5px] px-1.5 py-1.5 text-center font-semibold tabular-nums outline-none transition focus:ring-2 ${problems.has(key) ? "border-danger-ink bg-danger-tint text-danger-ink focus:border-danger-ink focus:ring-danger-ink/25" : "border-slate-200 focus:border-brand-500 focus:ring-brand-500/25"} disabled:bg-slate-100 disabled:font-normal`}
                           aria-label={`${column.title} for ${student.firstName} ${student.lastName}`}
                         />
                         <label className="mt-0.5 flex items-center justify-center gap-1 text-[10px] text-slate-400">
@@ -276,12 +286,20 @@ export function SheetForm({
         </table>
       </div>
 
-      {outOfRange ? <Alert tone="error">{outOfRange}</Alert> : null}
+      {blocked ? (
+        <Alert tone="error">
+          {problems.size === 1 ? "1 mark is" : `${problems.size} marks are`} out of range and{" "}
+          {problems.size === 1 ? "is" : "are"} marked in red. Fix {problems.size === 1 ? "it" : "them"}{" "}
+          to save. First: {firstProblem}
+        </Alert>
+      ) : null}
       {state.error ? <Alert tone="error">{state.error}</Alert> : null}
       {state.ok ? <Alert tone="success">{state.ok}</Alert> : null}
 
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton pendingLabel="Saving…">Save the sheet</SubmitButton>
+        <SubmitButton pendingLabel="Saving…" disabled={blocked}>
+          Save the sheet
+        </SubmitButton>
         <p className="text-xs text-slate-500">
           The class components are worth {marksAvailable} marks in total, scaled to {classWeight}.
           Blank means not marked yet; <span className="font-medium">abs</span> counts as zero.

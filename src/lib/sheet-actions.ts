@@ -11,6 +11,7 @@ import { computeClassResults } from "@/lib/results-engine";
 import { writeAudit } from "@/lib/audit";
 import { rosterWhere } from "@/lib/class-roster";
 import { ownsSheet } from "@/lib/ownership";
+import { checkScore, refusalMessage } from "@/lib/score-limits";
 
 export type SheetState = { error?: string; ok?: string; savedAt?: string };
 
@@ -152,9 +153,10 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
   });
   const roster = await prisma.enrollment.findMany({
     where: rosterWhere(term?.academicYearId ?? "", classGroupId),
-    select: { studentId: true },
+    select: { studentId: true, student: { select: { firstName: true, lastName: true } } },
   });
   const enrolled = new Set(roster.map((row) => row.studentId));
+  const names = new Map(roster.map((row) => [row.studentId, `${row.student.lastName} ${row.student.firstName}`]));
 
   /**
    * ⚠️ Only LEADERSHIP may raise a component's ceiling from the sheet.
@@ -193,6 +195,7 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
   const approved = assessments.filter((a) => a.status === "APPROVED");
 
   const cells: Cell[] = [];
+  const problems: string[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("score:")) {
       continue;
@@ -221,15 +224,19 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
       continue;
     }
 
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      return { error: `“${raw}” is not a valid score in ${assessment.title}.` };
-    }
+    // The component's own total, as persisted. Only LEADERSHIP can have put a different one in
+    // `newMax` (see above), so a teacher or an IT admin is always held to what the school set.
     const max = newMax.get(assessmentId) ?? Number(assessment.maxScore);
-    if (parsed > max) {
-      return { error: `${assessment.title} is out of ${max} — “${raw}” is above it.` };
+    const verdict = checkScore(raw, max);
+    if (!verdict.ok || verdict.value === null) {
+      problems.push(`${names.get(studentId) ?? "A pupil"}, ${assessment.title}: ${verdict.ok ? "not a mark" : verdict.reason}`);
+      continue;
     }
-    cells.push({ assessmentId, studentId, rawScore: parsed, isAbsent: false });
+    cells.push({ assessmentId, studentId, rawScore: verdict.value, isAbsent: false });
+  }
+  // Refused as a whole, before anything is written: a half-saved sheet is worse than an unsaved one.
+  if (problems.length > 0) {
+    return { error: refusalMessage(problems) };
   }
 
   await tenantTransaction(

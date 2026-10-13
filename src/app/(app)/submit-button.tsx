@@ -9,6 +9,7 @@ export function SubmitButton({
   variant = "primary",
   className = "",
   formAction,
+  disabled = false,
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
@@ -16,6 +17,8 @@ export function SubmitButton({
   className?: string;
   /** Lets one form drive two actions, e.g. "preview" alongside "send". */
   formAction?: (formData: FormData) => void | Promise<void>;
+  /** For a form that knows it cannot be submitted yet, e.g. a mark above its total. */
+  disabled?: boolean;
 }) {
   // `action` says WHICH action is in flight. Without comparing it, every
   // SubmitButton in a form shows its pending label on any submit — so the
@@ -32,7 +35,7 @@ export function SubmitButton({
     <button
       type="submit"
       formAction={formAction}
-      disabled={pending}
+      disabled={pending || disabled}
       className={buttonClass(variant, "md", className)}
     >
       {pending ? (pendingLabel ?? "Working…") : children}

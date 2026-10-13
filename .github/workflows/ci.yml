@@ -239,6 +239,9 @@ jobs:
       - name: Session policy — how long each kind of session lasts, and that both readers agree
         run: npm run verify:session-policy
 
+      - name: Score limits — a mark may not exceed its total, and who may record one
+        run: npm run verify:score-limits
+
       # Ageing boundaries, the amount in words on a receipt, and the hold that
       # keeps unapproved spending out of the cash book. The approval check
       # WRITES a DRAFT expense and removes it — its first version asserted the
@@ -415,6 +418,13 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:session-lifetime
+
+      - name: Assessment entry — who records one, and no mark above its total, through the real forms
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:assessment-entry
 
       # if: always() so a failing guard still stops the app and shows its log —
       # a server left running would hang the job, and the log is usually where

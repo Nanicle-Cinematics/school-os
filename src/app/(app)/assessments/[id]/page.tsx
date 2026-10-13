@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { ACADEMIC, LEADERSHIP, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { getAssessmentForEntry } from "@/lib/assessment-data";
 import { setAssessmentStatus, deleteAssessment } from "@/lib/assessment-actions";
 import { StatusBadge } from "../../ui";
@@ -21,14 +21,16 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
   }
 
   const { assessment, rows } = data;
-  // ⚠️ Checked against LEADERSHIP, not the page's own ACADEMIC gate — an IT
-  // Admin can OPEN this page (they manage components under Settings) but
-  // every mutation here — submitting, saving a score, approving, deleting —
-  // requires LEADERSHIP server-side. Everything below keys off this one
-  // check: hide a button an IT Admin cannot use, and read-only the grid
-  // instead of leaving either to fail silently on click.
+  // ⚠️ TWO questions, answered separately. `canRecord` (MARK_ANY_CLASS) is whether the
+  // marks grid is editable: leadership and the IT admin, who keys in what teachers hand
+  // over on paper. `isLeadership` is whether the buttons that CHANGE THE ASSESSMENT show:
+  // submit, approve, send back, unlock and delete all require LEADERSHIP server-side, so
+  // an IT admin who is shown one would only be redirected away on click. Hide what a role
+  // cannot use, and read-only the grid for a role that cannot enter, rather than leaving
+  // either to fail silently.
   const isLeadership = canAccess(auth.roles, LEADERSHIP);
-  const readOnly = assessment.status === "APPROVED" || !isLeadership;
+  const canRecord = canAccess(auth.roles, MARK_ANY_CLASS);
+  const readOnly = assessment.status === "APPROVED" || !canRecord;
 
   const gridRows: Row[] = rows.map((row) => ({
     studentId: row.student.id,
@@ -117,7 +119,12 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
           <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
             {assessment.status === "APPROVED"
               ? "These scores are approved and locked. A head or proprietor can unlock them for edits."
-              : "You can view this sheet, but only a head or proprietor can enter, submit or change marks."}
+              : "You can view this sheet, but you cannot enter marks on it."}
+          </p>
+        ) : !isLeadership ? (
+          <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            You can enter and correct marks here. A head or proprietor submits, approves and
+            deletes the assessment.
           </p>
         ) : null}
       </div>

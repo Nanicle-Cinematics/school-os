@@ -63,19 +63,19 @@ export default async function AssessmentsPage({ searchParams }: PageProps<"/asse
             : `${assessments.length} for your classes`
         }
         action={
-          scope.canManage ? (
+          scope.canRecord ? (
             <NewAssessment
               classGroups={scope.classGroups}
               subjects={scope.subjects}
               terms={terms}
               currentTermId={currentTerm?.id}
+              defaultOpen={params.new === "1"}
             />
           ) : (
-            // Seeing every class's assessments is not permission to create,
-            // submit or delete one — every one of those actions requires
-            // LEADERSHIP outright. Said plainly rather than just leaving the
-            // button off, which reads as "not loaded yet" more than "not
-            // for you."
+            // Seeing every class's assessments is not permission to create
+            // one: that needs MARK_ANY_CLASS. Said plainly rather than just
+            // leaving the button off, which reads as "not loaded yet" more
+            // than "not for you."
             <span className="rounded-full border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-slate-500">
               View only
             </span>

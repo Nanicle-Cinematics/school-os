@@ -77,6 +77,12 @@ export const MARKING: Role[] = [...LEADERSHIP, "TEACHER", "IT_ADMIN"];
  * them in on paper. It covers entering them only. Changing a component's total
  * marks stays LEADERSHIP (`mayChangeTotals` in sheet-actions.ts), because that
  * rescales every mark already entered against it.
+ *
+ * Widened on 2026-10-13 to the Assessments screens as well: the IT admin may
+ * CREATE an assessment (`createAssessment`) and enter its marks (`saveScores`),
+ * not only fill in the mark sheet. Recording is still not signing off: submit,
+ * approve, send back, unlock and delete (`setAssessmentStatus`,
+ * `deleteAssessment`) stay LEADERSHIP.
  */
 export const MARK_ANY_CLASS: Role[] = [...LEADERSHIP, "IT_ADMIN"];
 
