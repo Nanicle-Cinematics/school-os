@@ -36,29 +36,18 @@ jobs:
     # real rows — money reconciliation, grading, debtor filtering — so they need
     # a database, but pointing CI at the Supabase project would have runs racing
     # each other through shared state and would put credentials in secrets for
-    # no benefit.
-    services:
-      postgres:
-        # The same official image, from AWS's public mirror of Docker Hub's
-        # library. Docker Hub rate-limits anonymous pulls per IP, and GitHub's
-        # runners share IPs: on 2026-10-09 every run died pulling the image
-        # ("toomanyrequests") before a single step ran. ECR Public throttles
-        # anonymous pulls per second rather than capping them per six hours.
-        image: public.ecr.aws/docker/library/postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: school_os
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+    # no benefit. Started by .github/actions/postgres rather than as a service
+    # container: a container image is pulled from a registry that rate-limits
+    # per IP, on runners that share IPs, before any step can retry — see the
+    # action for what that cost.
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Postgres 17
+        uses: ./.github/actions/postgres
+        with:
+          database: school_os
 
       - uses: actions/setup-node@v4
         with:

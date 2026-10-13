@@ -1,0 +1,107 @@
+name: Postgres 17
+description: >-
+  A throwaway Postgres 17 on localhost:5432, installed from the PGDG apt repository.
+  No container image, so no container registry between a push and a green run.
+
+# ⚠️ Why this exists instead of a `services: postgres:` block.
+#
+# CI used to start Postgres as a service container, which means pulling an image from a public
+# registry on every run. Anonymous pulls are rate-limited PER IP and GitHub's runners share IPs, so
+# runs died at "Initialize containers" with `toomanyrequests` BEFORE A SINGLE STEP RAN: first from
+# Docker Hub (2026-10-09), and after moving to AWS's public mirror, from that too ("Data limit
+# exceeded", on the merge commits of #170 and #172, minutes after the same code passed on its PR).
+# A service container cannot be retried or cached, because it starts before any step.
+#
+# apt is the other half of the answer the backup workflows already rely on: they add the PGDG
+# repository and install `postgresql-client-17` from it on every run, because ubuntu-latest ships
+# client 16 and pg_dump refuses to dump a newer server. So the dependency is not new there, and
+# nothing here touches a registry that counts bytes per IP. ubuntu-latest does NOT have the PGDG
+# repository configured (a first version of this action assumed it did, and `apt-get install
+# postgresql-17` answered "Unable to locate package"), so it is added here exactly as they add it.
+#
+# What this must reproduce from the official image, because tests read real rows:
+#   - the major version (17 — the one Supabase runs, and the one pg_dump/pg_restore must match);
+#   - the collation. The image's locale is en_US.utf8, and a cluster made under the runner's C.UTF-8
+#     would sort "Ama" and "ama" differently, which changes what an `orderBy` returns;
+#   - TLS OFF. A Debian cluster ships with ssl = on and a self-signed certificate, which Prisma
+#     refuses to trust; the image has ssl off.
+
+inputs:
+  database:
+    description: The database to create (the cluster's own "postgres" database always exists).
+    default: postgres
+  password:
+    description: The password for the postgres role.
+    default: postgres
+
+runs:
+  using: composite
+  steps:
+    - name: Install and start Postgres 17
+      shell: bash
+      env:
+        DB: ${{ inputs.database }}
+        PW: ${{ inputs.password }}
+      run: |
+        set -euo pipefail
+
+        # apt is a download, and a download can fail once. Four attempts, backing off, before giving up.
+        retry() {
+          local attempt=1
+          until "$@"; do
+            if [ "$attempt" -ge 4 ]; then
+              echo "::error::'$*' failed $attempt times"
+              return 1
+            fi
+            echo "attempt $attempt of '$*' failed; trying again in $((attempt * 10))s"
+            sleep $((attempt * 10))
+            attempt=$((attempt + 1))
+          done
+        }
+
+        # The PGDG repository: the runner's own sources only carry the distribution's Postgres (16).
+        # Written the same way the backup workflows write it, so the two agree on the file.
+        retry sudo install -d /usr/share/postgresql-common/pgdg
+        retry sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+          https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+
+        retry sudo apt-get update -qq
+        retry sudo apt-get install -y -qq postgresql-17
+
+        # The runner image may already carry a cluster (16), and installing the server makes 17/main on
+        # whatever port is free. Remove every one and make exactly one, on 5432, so nothing depends on
+        # which clusters happened to be there.
+        sudo pg_lsclusters --no-header | while read -r version name _; do
+          sudo pg_dropcluster --stop "$version" "$name"
+        done
+
+        # The image's collation; generate it if the runner does not have it.
+        if ! locale -a | grep -qi '^en_US\.utf-\?8$'; then
+          sudo locale-gen en_US.UTF-8
+        fi
+        sudo pg_createcluster 17 ci --port 5432 --locale en_US.UTF-8
+        sudo pg_conftool 17 ci set ssl off
+        sudo pg_ctlcluster 17 ci start
+
+        for i in $(seq 1 30); do
+          pg_isready -h localhost -p 5432 -q && break
+          sleep 1
+        done
+        pg_isready -h localhost -p 5432
+
+        sudo -u postgres psql -p 5432 -v ON_ERROR_STOP=1 -c "alter user postgres password '$PW'"
+        if [ "$DB" != "postgres" ]; then
+          sudo -u postgres createdb -p 5432 "$DB"
+        fi
+
+        # Prove what we got, over the same TCP route the tests will use, rather than assume it.
+        version=$(PGPASSWORD="$PW" psql -h localhost -p 5432 -U postgres -d "$DB" -Atc 'show server_version')
+        # Postgres 17 removed the read-only lc_collate setting (`show lc_collate` is an error there), so ask the catalog.
+        collate=$(PGPASSWORD="$PW" psql -h localhost -p 5432 -U postgres -d "$DB" -Atc "select datcollate from pg_database where datname = current_database()")
+        ssl=$(PGPASSWORD="$PW" psql -h localhost -p 5432 -U postgres -d "$DB" -Atc 'show ssl')
+        echo "Postgres $version, collate=$collate, ssl=$ssl, database=$DB"
+        case "$version" in 17*) ;; *) echo "::error::expected Postgres 17, got $version"; exit 1;; esac
+        case "$collate" in en_US.UTF-8|en_US.utf8) ;; *) echo "::error::expected an en_US collation (the image's), got $collate"; exit 1;; esac
+        [ "$ssl" = "off" ] || { echo "::error::ssl must be off; Prisma will not trust the self-signed certificate"; exit 1; }
