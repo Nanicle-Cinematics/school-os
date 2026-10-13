@@ -421,7 +421,8 @@ policy. The check is first in that suite deliberately: every other assertion
 proves isolation for the tables it names and proves nothing about a table added
 since.
 
-**CI runs it on every PR**, against the throwaway service container — `db:rls`
+**CI runs it on every PR**, against the throwaway Postgres (see "CI's database"
+below) — `db:rls`
 then `verify:isolation`, after the other suites (which deliberately exercise an
 unprotected database) and before the build.
 
@@ -2044,6 +2045,48 @@ SIGPIPEs it before its own cleanup runs, which leaves `entityId: "verify"` rows
 behind and fails the NEXT run's final assertion on work that was never wrong.
 `check.mts` captures output instead of piping it, for exactly this reason.
 Redirect to a file if you need to read one directly.
+
+### CI's database is installed, not pulled
+
+⚠️ **Do not put a `services: postgres:` container back.** CI (and the two backup
+workflows) start Postgres through `.github/actions/postgres`, which installs
+Postgres 17 from the PGDG apt repository. A service container is pulled from a
+public registry before any step runs, and anonymous pulls are rate-limited PER IP
+on runners that SHARE IPs: runs died at "Initialize containers" with
+`toomanyrequests` — from Docker Hub on 2026-10-09, then from AWS's public mirror
+("Data limit exceeded") on the merge commits of #170 and #172, minutes after the
+same code had passed on its PR. Moving to another registry only moved the problem;
+a container cannot be retried or cached because it starts before any step. Every
+time, a by-hand re-run went green, which is how it stayed a flake for so long.
+
+What the action has to reproduce from the official image, and PROVES on every run
+(the line it prints reads `Postgres 17.x, collate=en_US.UTF-8, ssl=off`) before
+anything uses the database:
+
+- **The major version, 17** — Supabase's, and the one `pg_dump`/`pg_restore` must match.
+- **The collation, `en_US.UTF-8`.** The image's locale; a cluster made under the
+  runner's `C.UTF-8` sorts `Ama` and `ama` differently and silently changes what an
+  `orderBy` returns.
+- **TLS off.** A Debian cluster ships `ssl = on` with a self-signed certificate that
+  Prisma will not trust.
+- **One cluster, on 5432.** The runner image may already carry a 16; every existing
+  cluster is dropped first.
+
+Two things it learnt the hard way. `ubuntu-latest` does NOT have the PGDG repository
+configured, so `apt-get install postgresql-17` answers "Unable to locate package"
+until it is added (the backup workflows had always added it themselves). And
+Postgres 17 REMOVED the read-only `lc_collate` setting — `show lc_collate` is an
+error there, so the collation is read from `pg_database.datcollate`. Both showed up
+only by running it on a real runner; there is no way to test a composite action
+locally. The backup workflows re-run when the action changes, since they depend on it.
+
+⚠️ **`backup.yml` and `school-backup.yml` must never run their production steps on a
+pull request**, because the production secrets must not reach code a branch can
+edit. `backup.yml` always said so; `school-backup.yml` never had the guard, so its
+production step ran with `PROD_DIRECT_URL` and `PROD_APP_DIRECT_URL` on any PR that
+touched the file. Both production steps (and the artifact upload) now carry
+`if: github.event_name != 'pull_request'`. With no branch protection available on
+this plan, that is the only thing between a branch and those secrets.
 
 ## Verification scripts
 
