@@ -98,9 +98,10 @@ runs:
 
         # Prove what we got, over the same TCP route the tests will use, rather than assume it.
         version=$(PGPASSWORD="$PW" psql -h localhost -p 5432 -U postgres -d "$DB" -Atc 'show server_version')
-        collate=$(PGPASSWORD="$PW" psql -h localhost -p 5432 -U postgres -d "$DB" -Atc 'show lc_collate')
+        # Postgres 17 removed the read-only lc_collate setting (`show lc_collate` is an error there), so ask the catalog.
+        collate=$(PGPASSWORD="$PW" psql -h localhost -p 5432 -U postgres -d "$DB" -Atc "select datcollate from pg_database where datname = current_database()")
         ssl=$(PGPASSWORD="$PW" psql -h localhost -p 5432 -U postgres -d "$DB" -Atc 'show ssl')
-        echo "Postgres $version, lc_collate=$collate, ssl=$ssl, database=$DB"
+        echo "Postgres $version, collate=$collate, ssl=$ssl, database=$DB"
         case "$version" in 17*) ;; *) echo "::error::expected Postgres 17, got $version"; exit 1;; esac
         case "$collate" in en_US.UTF-8|en_US.utf8) ;; *) echo "::error::expected an en_US collation (the image's), got $collate"; exit 1;; esac
         [ "$ssl" = "off" ] || { echo "::error::ssl must be off; Prisma will not trust the self-signed certificate"; exit 1; }
