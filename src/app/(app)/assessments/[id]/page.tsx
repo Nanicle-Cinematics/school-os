@@ -24,7 +24,7 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
   // ⚠️ TWO questions, answered separately. `canRecord` (MARK_ANY_CLASS) is whether the
   // marks grid is editable: leadership and the IT admin, who keys in what teachers hand
   // over on paper. `isLeadership` is whether the buttons that CHANGE THE ASSESSMENT show:
-  // submit, approve, send back, unlock and delete all require LEADERSHIP server-side, so
+  // approve, send back, unlock and delete require LEADERSHIP server-side (submit needs only `canRecord`), so
   // an IT admin who is shown one would only be redirected away on click. Hide what a role
   // cannot use, and read-only the grid for a role that cannot enter, rather than leaving
   // either to fail silently.
@@ -67,7 +67,7 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={assessment.status} />
 
-            {assessment.status === "OPEN" && isLeadership ? (
+            {assessment.status === "OPEN" && canRecord ? (
               <form action={setAssessmentStatus}>
                 <input type="hidden" name="assessmentId" value={assessment.id} />
                 <input type="hidden" name="status" value="SUBMITTED" />
@@ -123,8 +123,8 @@ export default async function ScoreEntryPage({ params }: PageProps<"/assessments
           </p>
         ) : !isLeadership ? (
           <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            You can enter and correct marks here. A head or proprietor submits, approves and
-            deletes the assessment.
+            You can enter and correct marks here and submit the assessment for review. A head or
+            proprietor approves, sends back, unlocks and deletes it.
           </p>
         ) : null}
       </div>

@@ -271,11 +271,14 @@ export async function saveScores(
 }
 
 /**
- * Submit, approve, send back and unlock: LEADERSHIP only. The IT admin may RECORD an
- * assessment (create it, enter its marks) but approving is a head's sign-off on it.
+ * Move an assessment along. MARK_ANY_CLASS may SUBMIT one for review (OPEN to SUBMITTED), which is the
+ * IT admin handing what they recorded to a head. Everything else is LEADERSHIP's sign-off: approve,
+ * send back, unlock. The gate is `requireRole(MARK_ANY_CLASS)` and the narrowing is the one check
+ * below, so a request that is not exactly OPEN to SUBMITTED from anyone else does nothing, whatever
+ * the form was forged to say.
  */
 export async function setAssessmentStatus(formData: FormData): Promise<void> {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(MARK_ANY_CLASS);
   setTenantContext(auth.tenant);
   const assessmentId = String(formData.get("assessmentId") ?? "");
   const status = String(formData.get("status") ?? "");
@@ -283,11 +286,15 @@ export async function setAssessmentStatus(formData: FormData): Promise<void> {
   if (!assessmentId || !["OPEN", "SUBMITTED", "APPROVED"].includes(status)) {
     return;
   }
-  // Only leadership may approve; a teacher can submit for review.
+  const isLeadership = canAccess(auth.roles, LEADERSHIP);
 
   await tenantTransaction(auth.schoolId, async (tx) => {
     const before = await tx.assessment.findUnique({ where: { id: assessmentId } });
     if (!before) {
+      return;
+    }
+    // Anyone who is not leadership may only submit an assessment that is still open.
+    if (!isLeadership && !(before.status === "OPEN" && status === "SUBMITTED")) {
       return;
     }
     // Reopening an approved assessment behind a published report card would let
