@@ -6,6 +6,7 @@ import {
   confirmSetup,
   regenerateRecoveryCodes,
   replaceAuthenticator,
+  submitEnrolmentCode,
   type TwoFactorState,
 } from "@/lib/platform-2fa-actions";
 import { buttonClass } from "../../(app)/button-style";
@@ -55,6 +56,32 @@ function ErrorLine({ error }: { error?: string }) {
       {error}
     </p>
   ) : null;
+}
+
+/** Before anything else: the one-time code that was sent separately from the password. */
+export function EnrolmentCodeForm() {
+  const [state, action, pending] = useActionState<TwoFactorState, FormData>(submitEnrolmentCode, {});
+  return (
+    <form action={action} className="space-y-3">
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-slate-700">Enrolment code</span>
+        <input
+          name="enrolmentCode"
+          type="text"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          required
+          placeholder="XXXX-XXXX-XXXX"
+          className={inputClass}
+        />
+      </label>
+      <ErrorLine error={state.error} />
+      <button type="submit" disabled={pending} className={buttonClass("primary")}>
+        {pending ? "Checking…" : "Continue"}
+      </button>
+    </form>
+  );
 }
 
 /** First step after scanning: prove the app has the secret, then show the recovery codes. */

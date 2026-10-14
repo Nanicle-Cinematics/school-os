@@ -466,16 +466,21 @@ model User {
   // The secret is AES-256-GCM encrypted under TOTP_ENCRYPTION_KEY before it is stored,
   // so a database dump alone does not contain it. `totpEnabledAt` null with a secret
   // present means enrolment was started and never confirmed.
-  totpSecretEnc      String?
-  totpEnabledAt      DateTime?
+  totpSecretEnc          String?
+  totpEnabledAt          DateTime?
   /// Newest 30-second step already accepted; a code for that step or an earlier one
   /// is refused, so a code cannot be replayed.
-  totpLastStep       Int?
+  totpLastStep           Int?
   /// SHA-256 of each unused one-time recovery code.
-  recoveryCodeHashes String[]  @default([])
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  deletedAt          DateTime?
+  recoveryCodeHashes     String[]  @default([])
+  /// SHA-256 of the one-time ENROLMENT code a platform admin must present before they may attach
+  /// their first authenticator. Issued by `make:admin`, `platform admin` and `reset-platform-2fa`,
+  /// never by the app, and cleared once enrolment completes. See `enrolment-code.ts`.
+  enrolmentCodeHash      String?
+  enrolmentCodeExpiresAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
 
   // Home school (nullable: platform admins belong to none)
   schoolId String?
@@ -575,17 +580,20 @@ model LoginAttempt {
 }
 
 model Session {
-  id             String    @id @default(cuid())
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash      String    @unique
-  activeSchoolId String? // which tenant this session is currently operating in
-  expiresAt      DateTime
-  ip             String?
-  userAgent      String?
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash           String    @unique
+  activeSchoolId      String? // which tenant this session is currently operating in
+  expiresAt           DateTime
+  ip                  String?
+  userAgent           String?
   /// When this session passed the second factor. Only the platform console looks at it.
-  mfaVerifiedAt  DateTime?
-  createdAt      DateTime  @default(now())
+  mfaVerifiedAt       DateTime?
+  /// When this session presented the platform admin's enrolment code. Per SESSION, not per user:
+  /// the password alone, from any other session, must not reach the setup that follows.
+  enrolmentVerifiedAt DateTime?
+  createdAt           DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])

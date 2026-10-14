@@ -8,6 +8,7 @@ import { requirePlatformAdminSession } from "@/lib/platform-auth";
 import { base32Encode, generateSecret, verifyTotp } from "@/lib/totp";
 import { decryptSecret, encryptSecret, hashRecoveryCode } from "@/lib/totp-crypto";
 import { clientIp, takeAttempt } from "@/lib/rate-limit";
+import { enrolmentCodeAccepted } from "@/lib/enrolment-code";
 
 export type TwoFactorState = { error?: string; recoveryCodes?: string[] };
 
@@ -30,6 +31,11 @@ async function withinLimit(userId: string) {
 }
 
 const TOO_MANY = "Too many attempts. Wait 15 minutes and try again.";
+/**
+ * One answer for a wrong code, an expired one and none issued: which of the three it was is
+ * information about the account that a password alone must not be able to learn.
+ */
+const CODE_WRONG = "That enrolment code is wrong or has expired. Ask whoever set up your account for a new one.";
 const WRONG = "That code is wrong or has expired. Check the time on your phone and try the newest code.";
 
 /** Mark a step as spent. False if it was spent already — i.e. someone raced us with the same code. */
@@ -68,10 +74,46 @@ async function acceptTotp(user: SessionUser, rawCode: string): Promise<string | 
   return null;
 }
 
+/**
+ * Present the one-time enrolment code, which opens the setup for THIS session.
+ *
+ * The password gets an admin to this page; it does not get them past it. A correct code marks the
+ * session (`enrolmentVerifiedAt`) and discards any secret already pending: that secret was made
+ * before this session proved anything, so it may be known to someone who holds only the password,
+ * and showing it to the real admin to scan would hand that someone the console. Every attempt counts
+ * against the same small allowance as a TOTP guess.
+ */
+export async function submitEnrolmentCode(_prev: TwoFactorState, formData: FormData): Promise<TwoFactorState> {
+  const { user, session } = await requirePlatformAdminSession();
+  if (user.totpEnabledAt) {
+    redirect("/admin/security");
+  }
+  if (!(await withinLimit(user.id))) {
+    return { error: TOO_MANY };
+  }
+  const accepted = enrolmentCodeAccepted(String(formData.get("enrolmentCode") ?? ""), {
+    hash: user.enrolmentCodeHash,
+    expiresAt: user.enrolmentCodeExpiresAt,
+  });
+  if (!accepted) {
+    return { error: CODE_WRONG };
+  }
+  await withBypass(async () => {
+    await prisma.user.update({ where: { id: user.id }, data: { totpSecretEnc: null, totpLastStep: null } });
+    await prisma.session.update({ where: { id: session.id }, data: { enrolmentVerifiedAt: new Date() } });
+  });
+  redirect("/admin/security");
+}
+
 /** Begin enrolment: make a secret, keep it (encrypted) as PENDING, and show it on the setup page. */
 export async function startSetup(): Promise<void> {
-  const { user } = await requirePlatformAdminSession();
+  const { user, session } = await requirePlatformAdminSession();
   if (user.totpEnabledAt) {
+    redirect("/admin/security");
+  }
+  // ⚠️ This SESSION must have presented the enrolment code. Per session and not per account, so a
+  // second session that has only the password cannot reach the secret the first one is shown.
+  if (!session.enrolmentVerifiedAt) {
     redirect("/admin/security");
   }
   await withBypass(() =>
@@ -87,6 +129,10 @@ export async function startSetup(): Promise<void> {
 export async function confirmSetup(_prev: TwoFactorState, formData: FormData): Promise<TwoFactorState> {
   const { user, session } = await requirePlatformAdminSession();
   if (user.totpEnabledAt || !user.totpSecretEnc) {
+    redirect("/admin/security");
+  }
+  // Checked here as well as in startSetup: the secret can already be pending when this is called.
+  if (!session.enrolmentVerifiedAt) {
     redirect("/admin/security");
   }
   if (!(await withinLimit(user.id))) {
@@ -111,6 +157,10 @@ export async function confirmSetup(_prev: TwoFactorState, formData: FormData): P
         totpEnabledAt: new Date(),
         totpLastStep: step,
         recoveryCodeHashes: codes.map(hashRecoveryCode),
+        // Spent. The code was for ONE enrolment; a lost phone is replaced from inside, or reset by
+        // someone with database access, who issues a new one.
+        enrolmentCodeHash: null,
+        enrolmentCodeExpiresAt: null,
       },
     });
     // The person who has just proved they hold the app does not have to prove it again.
@@ -197,7 +247,13 @@ export async function replaceAuthenticator(_prev: TwoFactorState, formData: Form
       data: { totpSecretEnc: null, totpEnabledAt: null, totpLastStep: null, recoveryCodeHashes: [] },
     });
     await prisma.session.deleteMany({ where: { userId: user.id, id: { not: session.id } } });
-    await prisma.session.update({ where: { id: session.id }, data: { mfaVerifiedAt: null } });
+    // The session that has just proved the old authenticator does not need an enrolment code to
+    // set up the new one, so it is marked as having presented one. Every OTHER session was ended
+    // above, and any session after this one is back to needing a code.
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { mfaVerifiedAt: null, enrolmentVerifiedAt: new Date() },
+    });
   });
   redirect("/admin/security");
 }

@@ -11,6 +11,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { enrolmentCodeNotice, newEnrolmentCode } from "./enrolment-code.mjs";
 
 const prisma = new PrismaClient();
 
@@ -24,7 +25,7 @@ if (!email) {
 } else {
   const user = await prisma.user.findFirst({
     where: { email, deletedAt: null },
-    select: { id: true, name: true, email: true, isPlatformAdmin: true },
+    select: { id: true, name: true, email: true, isPlatformAdmin: true, totpEnabledAt: true },
   });
 
   if (!user) {
@@ -35,13 +36,22 @@ if (!email) {
       `${user.name} <${user.email}> is already ${revoke ? "not " : ""}a platform admin.`,
     );
   } else {
+    // Granting to someone who has not enrolled an authenticator also issues the one-time enrolment
+    // code they will need: the password alone no longer reaches the setup page.
+    const issued = !revoke && !user.totpEnabledAt ? newEnrolmentCode() : null;
     await prisma.user.update({
       where: { id: user.id },
-      data: { isPlatformAdmin: !revoke },
+      data: {
+        isPlatformAdmin: !revoke,
+        ...(issued ? { enrolmentCodeHash: issued.hash, enrolmentCodeExpiresAt: issued.expiresAt } : {}),
+      },
     });
     console.log(
       `${revoke ? "Revoked" : "Granted"} platform admin ${revoke ? "from" : "to"} ${user.name} <${user.email}>.`,
     );
+    if (issued) {
+      console.log(`\n${enrolmentCodeNotice(issued)}\n`);
+    }
   }
 }
 

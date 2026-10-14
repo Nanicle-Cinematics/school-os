@@ -56,6 +56,8 @@
     "shots:portal": "node --env-file=.env scripts/portal-shots.mjs",
     "verify:actions": "node --env-file=.env scripts/verify-actions.mjs",
     "verify:totp": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-totp.mts",
+    "verify:enrolment-code": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-enrolment-code.mts",
+    "verify:platform-enrolment": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-platform-enrolment.mts",
     "verify:password": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-password.mts",
     "verify:session-policy": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-session-policy.mts",
     "verify:score-limits": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-score-limits.mts",

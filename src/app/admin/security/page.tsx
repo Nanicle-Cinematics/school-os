@@ -7,7 +7,7 @@ import { startSetup } from "@/lib/platform-2fa-actions";
 import { base32Encode, otpauthUri } from "@/lib/totp";
 import { decryptSecret, encryptionKeyProblem } from "@/lib/totp-crypto";
 import { buttonClass } from "../../(app)/button-style";
-import { ConfirmSetupForm, ManageForms } from "./security-forms";
+import { ConfirmSetupForm, EnrolmentCodeForm, ManageForms } from "./security-forms";
 
 export const metadata: Metadata = { title: "Two-factor sign-in" };
 
@@ -15,7 +15,11 @@ export default async function SecurityPage() {
   const { user, session } = await requirePlatformAdminSession();
   const problem = encryptionKeyProblem();
   const enabled = Boolean(user.totpEnabledAt);
-  const pending = !enabled && Boolean(user.totpSecretEnc);
+  // ⚠️ Setting up the first authenticator needs the one-time enrolment code, presented by THIS
+  // session. Until then the page shows the code box and nothing else: no secret, no QR code, and no
+  // button that would make one, because a password alone must not reach them.
+  const needsCode = !enabled && !session.enrolmentVerifiedAt;
+  const pending = !enabled && !needsCode && Boolean(user.totpSecretEnc);
   // Someone with an enabled factor who has not passed it this session must not read
   // the management page — it would let a password alone reach it.
   const locked = enabled && !session.mfaVerifiedAt;
@@ -59,6 +63,16 @@ export default async function SecurityPage() {
             <Link href="/admin" className="inline-block text-sm text-slate-500 hover:text-slate-900">
               ← Back to the console
             </Link>
+          </>
+        ) : needsCode ? (
+          <>
+            <p className="text-sm text-slate-600">
+              This console can see every school&rsquo;s records and subscriptions, so setting up
+              its second step needs more than your password. Enter the enrolment code you were
+              given separately. It works once and expires after two days; if it has, ask whoever set
+              up your account for a new one.
+            </p>
+            <EnrolmentCodeForm />
           </>
         ) : pending ? (
           <>

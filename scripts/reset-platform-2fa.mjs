@@ -11,6 +11,7 @@
  *   node --env-file=.env.prod scripts/reset-platform-2fa.mjs someone@example.com
  */
 import { PrismaClient } from "@prisma/client";
+import { enrolmentCodeNotice, newEnrolmentCode } from "./enrolment-code.mjs";
 
 const email = process.argv.slice(2).find((arg) => !arg.startsWith("--"))?.trim().toLowerCase();
 if (!email) {
@@ -29,13 +30,24 @@ if (!user) {
   process.exit(1);
 }
 
+// ⚠️ They are about to enrol again, and the password alone must not be enough to do that: a reset
+// is exactly when someone else may be holding it. So a fresh one-time enrolment code is issued.
+const issued = newEnrolmentCode();
 await prisma.user.update({
   where: { id: user.id },
-  data: { totpSecretEnc: null, totpEnabledAt: null, totpLastStep: null, recoveryCodeHashes: [] },
+  data: {
+    totpSecretEnc: null,
+    totpEnabledAt: null,
+    totpLastStep: null,
+    recoveryCodeHashes: [],
+    enrolmentCodeHash: issued.hash,
+    enrolmentCodeExpiresAt: issued.expiresAt,
+  },
 });
 const ended = await prisma.session.deleteMany({ where: { userId: user.id } });
 console.log(
   `Cleared the second factor for ${user.name} <${user.email}> (was ${user.totpEnabledAt ? "on" : "not set up"}). ` +
-    `${ended.count} session${ended.count === 1 ? "" : "s"} ended. They will be asked to enrol again at their next sign-in.`,
+    `${ended.count} session${ended.count === 1 ? "" : "s"} ended. They will be asked to enrol again at their next sign-in.\n\n` +
+    enrolmentCodeNotice(issued),
 );
 await prisma.$disconnect();
