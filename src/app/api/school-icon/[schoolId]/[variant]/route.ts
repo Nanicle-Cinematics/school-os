@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { schoolIcon } from "@/lib/school-icon";
+import {
+  busyResponse,
+  isBusy,
+  looksLikeSchoolId,
+  MISS_CACHE_CONTROL,
+  publicLookup,
+} from "@/lib/public-route";
 
 /**
  * The school's own crest, sized and shaped for a home screen.
@@ -34,7 +41,9 @@ const VARIANTS: Record<string, { size: number; maskable?: boolean }> = {
   "apple-touch": { size: 180, maskable: true },
 };
 
-const NOT_FOUND = () => new Response("Not found", { status: 404 });
+// Cached as well as refused: see MISS_CACHE_CONTROL in public-route.ts.
+const NOT_FOUND = () =>
+  new Response("Not found", { status: 404, headers: { "Cache-Control": MISS_CACHE_CONTROL } });
 
 export async function GET(
   _request: Request,
@@ -42,23 +51,37 @@ export async function GET(
 ) {
   const { schoolId, variant } = await params;
   const spec = VARIANTS[variant];
-  if (!spec) {
+  // Both refused BEFORE anything that costs a connection: this route is public, and the pool is four.
+  if (!spec || !looksLikeSchoolId(schoolId)) {
     return NOT_FOUND();
   }
 
-  const asset = await withBypass(() =>
-    prisma.schoolAsset.findFirst({
-      where: { schoolId, kind: "CREST" },
-      select: { bytes: true },
-    }),
-  );
-  if (!asset) {
-    return NOT_FOUND();
+  try {
+    // The whole costly part (the read AND the decode below) is inside the public budget.
+    return await publicLookup(async () => {
+      const asset = await withBypass(() =>
+        prisma.schoolAsset.findFirst({
+          where: { schoolId, kind: "CREST" },
+          select: { bytes: true },
+        }),
+      );
+      if (!asset) {
+        return NOT_FOUND();
+      }
+      return await render(asset.bytes, spec);
+    });
+  } catch (error) {
+    if (isBusy(error)) {
+      return busyResponse();
+    }
+    throw error;
   }
+}
 
+async function render(bytes: Uint8Array, spec: { size: number; maskable?: boolean }) {
   let png: Buffer;
   try {
-    png = await schoolIcon(Buffer.from(asset.bytes), spec.size, { maskable: spec.maskable });
+    png = await schoolIcon(Buffer.from(bytes), spec.size, { maskable: spec.maskable });
   } catch {
     // An unreadable or oversized crest has no icon; the caller falls back to the
     // generic mark. 404, not a 500 that a public route then repeats on every hit.
