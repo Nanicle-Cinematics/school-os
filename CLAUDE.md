@@ -1915,6 +1915,38 @@ from `/api/manifest` back to the generic file — decided one layer up, in
 show through untouched rather than the icon route guessing at a fallback of
 its own.
 
+⚠️ **Public means the budget is the only defence, and a rate limit is not one.**
+`/api/school-icon` and `/api/manifest` answer a stranger with a database lookup. The
+app role has FOUR connections and under RLS each query holds one for several round
+trips, so requests arriving faster than they finish do not just slow these routes:
+they queue the whole site behind them until Prisma's pool times out. A real school's
+icon also reads the crest blob and runs a decode and a PNG-9 encode, and the CDN
+caches by the FULL url, so a random `?v=` makes every request cold. Measured on the
+dev link (2026-10-14), 120 such requests at once, against the code as it was: **21
+of them returned a 500**.
+
+A per-address limit does not hold on serverless (no shared memory to count in), so the
+work is bounded instead, in `src/lib/public-route.ts`: `publicLookup` lets **two**
+run at once (two of the four connections stay free), queues **eight** (the manifest and
+three icons arrive together at an install and all must be served) and turns the rest
+away at once with a **503 + `Retry-After`, never cached**. The read AND the render are
+inside it; a malformed id (`looksLikeSchoolId`) and an unknown variant are refused
+before it, with no query. Misses are cached for five minutes (`MISS_CACHE_CONTROL`),
+which is safe because the url that points here is only minted once a crest exists and
+changes with `?v=`. The same run: 98 of 120 turned away, 22 served, **no 500**. The
+limiter's queue is bounded by `createLimiter(n, { maxWaiting })`; without
+`maxWaiting` it is unbounded, which a campaign send wants.
+
+**Any new route that reads the database with no session must go through
+`publicLookup`.** `verify:public-routes` (pure, in CI) finds them by scanning
+`src/app` for a route that uses `prisma.` and names no auth function, and fails on
+one that does not use it; a scan that finds nothing would prove nothing, so it also
+asserts it found the two. `verify:school-icon` (HTTP, in CI) serves a real crest as
+four icons, refuses junk with a cacheable 404, and floods the route. ⚠️ **On a fast
+machine the flood may see no 503**, and then what it proves is only that nothing
+returns a 500; the dev link, where a round trip takes seconds, saturates the budget
+every time. The budget's own arithmetic is pinned without a server.
+
 ## "Needs your attention"
 
 The dashboard's first card is four computed rules, each a sentence and the link

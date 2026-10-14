@@ -15,9 +15,27 @@
  * Plain functions only — no `server-only`, no Prisma — so a verify script can
  * exercise it without a database.
  */
-export function createLimiter(max: number) {
+/** Thrown by a limiter built with `maxWaiting` when too many are already queued. */
+export class LimiterFull extends Error {
+  constructor() {
+    super("the limiter's queue is full");
+  }
+}
+
+/**
+ * `maxWaiting` bounds the QUEUE as well as the work. Without it a limiter only turns a flood of
+ * requests into a flood of waiters, each holding a socket and a timeout, which is the same
+ * exhaustion one step later. It is for anything an anonymous caller can trigger: past `maxWaiting`
+ * a call rejects at once with `LimiterFull`, and the caller answers 503. Left out, the queue is
+ * unbounded, which is what a campaign send wants.
+ */
+export function createLimiter(max: number, opts: { maxWaiting?: number } = {}) {
   if (!Number.isInteger(max) || max < 1) {
     throw new Error(`a limiter needs a whole number of at least 1, got ${max}`);
+  }
+  const { maxWaiting } = opts;
+  if (maxWaiting !== undefined && (!Number.isInteger(maxWaiting) || maxWaiting < 0)) {
+    throw new Error(`maxWaiting needs a whole number of at least 0, got ${maxWaiting}`);
   }
 
   let active = 0;
@@ -25,6 +43,9 @@ export function createLimiter(max: number) {
 
   async function run<T>(task: () => Promise<T>): Promise<T> {
     if (active >= max) {
+      if (maxWaiting !== undefined && waiting.length >= maxWaiting) {
+        throw new LimiterFull();
+      }
       // Hand over the slot rather than release and re-take it: the waiter is
       // resumed already holding it, so `active` never dips below the real count
       // and a newcomer cannot jump the queue in the gap.

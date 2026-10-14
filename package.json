@@ -59,6 +59,8 @@
     "verify:password": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-password.mts",
     "verify:session-policy": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-session-policy.mts",
     "verify:score-limits": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-score-limits.mts",
+    "verify:public-routes": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-public-routes.mts",
+    "verify:school-icon": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-school-icon.mts",
     "verify:assessment-entry": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-assessment-entry.mts",
     "make:admin:reset-2fa": "node --env-file=.env scripts/reset-platform-2fa.mjs",
     "verify:carry-forward": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-carry-forward.mts",

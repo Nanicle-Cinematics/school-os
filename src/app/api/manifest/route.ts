@@ -3,6 +3,13 @@ import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { schoolIconUrls } from "@/lib/manifest-data";
+import {
+  busyResponse,
+  isBusy,
+  looksLikeSchoolId,
+  MISS_CACHE_CONTROL,
+  publicLookup,
+} from "@/lib/public-route";
 
 /**
  * The generic manifest, with one school's crest standing in for the mark.
@@ -24,18 +31,37 @@ import { schoolIconUrls } from "@/lib/manifest-data";
  * served an identical copy of it: one fewer thing that could drift.
  */
 export async function GET(request: Request) {
-  const fallback = () => Response.redirect(new URL("/manifest.webmanifest", request.url), 307);
+  // Redirected by hand rather than `Response.redirect`, whose headers cannot be set: this answer
+  // says "no crest here" and is worth remembering (see MISS_CACHE_CONTROL in public-route.ts).
+  const fallback = () =>
+    new Response(null, {
+      status: 307,
+      headers: {
+        Location: new URL("/manifest.webmanifest", request.url).toString(),
+        "Cache-Control": MISS_CACHE_CONTROL,
+      },
+    });
 
   const schoolId = new URL(request.url).searchParams.get("school");
-  if (!schoolId) {
+  // Refused before it costs a connection: this route is public, and the pool is four.
+  if (!schoolId || !looksLikeSchoolId(schoolId)) {
     return fallback();
   }
 
   // No session, so no tenant context to set; the read is scoped to the one
-  // school named in the url, exactly as /api/school-icon does it.
-  const school = await withBypass(() =>
-    prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true } }),
-  );
+  // school named in the url, exactly as /api/school-icon does it. Inside the
+  // public budget, which keeps a flood from queueing the whole site behind it.
+  let school: { crestUrl: string | null } | null;
+  try {
+    school = await publicLookup(() =>
+      withBypass(() => prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true } })),
+    );
+  } catch (error) {
+    if (isBusy(error)) {
+      return busyResponse();
+    }
+    throw error;
+  }
   const icons = schoolIconUrls(schoolId, school?.crestUrl ?? null);
   if (!icons) {
     return fallback();

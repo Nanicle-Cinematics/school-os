@@ -242,6 +242,9 @@ jobs:
       - name: Score limits — a mark may not exceed its total, and who may record one
         run: npm run verify:score-limits
 
+      - name: Public routes — what an unauthenticated route may spend, and that every one is inside it
+        run: npm run verify:public-routes
+
       # Ageing boundaries, the amount in words on a receipt, and the hold that
       # keeps unapproved spending out of the cash book. The approval check
       # WRITES a DRAFT expense and removes it — its first version asserted the
@@ -425,6 +428,13 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:assessment-entry
+
+      - name: School icon — the public routes serve a crest, refuse junk cheaply, and survive a flood
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:school-icon
 
       # if: always() so a failing guard still stops the app and shows its log —
       # a server left running would hang the job, and the log is usually where
