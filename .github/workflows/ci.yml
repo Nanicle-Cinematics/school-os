@@ -245,6 +245,9 @@ jobs:
       - name: Public routes — what an unauthenticated route may spend, and that every one is inside it
         run: npm run verify:public-routes
 
+      - name: Enrolment code — a platform admin cannot set up two-factor sign-in with the password alone
+        run: npm run verify:enrolment-code
+
       # Ageing boundaries, the amount in words on a receipt, and the hold that
       # keeps unapproved spending out of the cash book. The approval check
       # WRITES a DRAFT expense and removes it — its first version asserted the
@@ -310,6 +313,9 @@ jobs:
       # the restricted role with policies applied by the step above.
       - name: Start the built app
         env:
+          # Not a real secret: a fixed key so the enrolment guard can read back the authenticator
+          # secret the app makes. Production's lives in the deployment's environment.
+          TOTP_ENCRYPTION_KEY: "Y2ktdG90cC1rZXktbm90LWEtcmVhbC1zZWNyZXQteHg="
           DB_RLS: "on"
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
         run: |
@@ -435,6 +441,14 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:school-icon
+
+      - name: Platform enrolment — a session with only the password cannot enrol, through the real forms
+        env:
+          TOTP_ENCRYPTION_KEY: "Y2ktdG90cC1rZXktbm90LWEtcmVhbC1zZWNyZXQteHg="
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:platform-enrolment
 
       # if: always() so a failing guard still stops the app and shows its log —
       # a server left running would hang the job, and the log is usually where

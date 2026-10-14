@@ -1424,12 +1424,58 @@ Account creation already refused these accounts; the reset does now too. Suspend
 removing the seat is unchanged: it only affects the seat, though it also ends that admin's
 sessions that have no school chosen.
 
-**STILL OPEN: the window before first enrolment.** Until a platform admin has an authenticator,
-the password alone reaches the setup page and a session can attach an authenticator of its
-own, which both opens the console and locks the real admin out (reproduced on 2026-10-10 against
-the development database). The two changes above narrow it and do not close it. Closing it
-needs something the password does not carry: a one-time enrolment code issued by `make:admin`
-and required by `confirmSetup`. Not built; it needs a migration.
+⚠️ **First enrolment needs a one-time ENROLMENT CODE as well as the password (2026-10-14).**
+Until then the password alone reached the setup page, and whoever held it first could
+attach an authenticator of their own: that opens the console and locks the real admin
+out (reproduced on the development database on 2026-10-10). The password is the thing
+that gets seen (`make:admin` prints it to a terminal, and so to a scrollback buffer and
+possibly a screenshot), so it cannot also guard the step that follows.
+
+- **Issued by whoever has database access, never by the app**: `make:admin`,
+  `npm run platform -- admin <email>` (and the `sql` form for the Supabase editor),
+  `reset-platform-2fa.mjs`, and `npm run platform -- enrolment-code <email>` /
+  `sql-enrolment-code <email>` to reissue one. A screen that could mint one would be a
+  way around it, as for the second factor itself. Format `XXXX-XXXX-XXXX` (about 59
+  bits, no 0/O/1/I/L because it is read aloud), valid **48 hours**, one enrolment, only
+  its hash stored (domain-separated, so a recovery code or a token cannot stand in).
+- **Checked per SESSION, not per account** (`Session.enrolmentVerifiedAt`).
+  `submitEnrolmentCode` marks only the session that presented it. `startSetup` and
+  `confirmSetup` both refuse a session that has not, and the security page renders the
+  code box and NOTHING else (no secret, no QR, no setup button) until it has. A second
+  session that has only the password cannot reach the secret the first is shown,
+  even holding a valid authenticator code for it.
+- ⚠️ **A correct code discards any secret that was already pending.** It was made
+  before this session proved anything, so someone who had only the password may know
+  it; showing it to the real admin to scan would hand them the console.
+- **Spent when enrolment completes** (`enrolmentCodeHash` and expiry cleared in
+  `confirmSetup`). **Replacing an authenticator from inside waives it** for the session
+  that has just proved the old one; every other session is ended and any later one needs
+  a code again. A lost phone AND lost recovery codes is `reset-platform-2fa`, which
+  now issues a fresh code, since a reset is exactly when someone else may hold the password.
+- **Wrong, expired and none-issued get one answer**, so a password alone cannot learn
+  which. With no code on record nothing opens the setup: closed, not open. Every
+  attempt counts against the same small allowance as a TOTP guess (8 per account and
+  30 per address per 15 minutes).
+- ⚠️ **The code only helps if it travels by a different route from the password.** Every
+  script prints both on one screen and says so. If they go together, whoever saw one
+  saw both. Not defended: someone with only the password can spend the account's eight
+  attempts and make the real admin wait fifteen minutes. That is the same limit a
+  wrong TOTP guess already had, and it locks nobody out for longer.
+- **An admin made by the old path has no code.** An admin already enrolled is unaffected.
+  One who is NOT enrolled and was made before this cannot enrol until
+  `enrolment-code` issues one, which is the point.
+
+The two columns on `User` and one on `Session` are additive (a migration BEFORE the
+merge, per "Changing the schema"). `scripts/enrolment-code.mjs` ISSUES codes under
+plain `node` and `src/lib/enrolment-code.ts` CHECKS them; they are separate
+implementations that `verify:enrolment-code` proves agree, because a drift would lock
+out every new admin. `verify:enrolment-code` (pure, in CI) also runs the SQL the scripts
+print for the production editor and checks it against the app's hash.
+`verify:platform-enrolment` (HTTP, in CI, needs `TOTP_ENCRYPTION_KEY` on the server
+and in the script, so CI sets a fixed test key on both) gives a session only the
+password, the pending secret and a valid code for it, and shows it still cannot
+enrol while the identical form from the admin's session does; it then RUNS the printed
+SQL against the database.
 
 ## The subscription is MONTHLY
 
@@ -2054,9 +2100,10 @@ layout already had to learn.
 shows its empty state on a freshly seeded database. That is correct, not broken.
 To see it populated, insert rows and delete them again.
 
-## Open items (as of 2026-10-10)
+## Open items (as of 2026-10-14)
 
-Two decisions are outstanding after the audit. Neither blocks a release.
+One decision is outstanding after the audit. It does not block a release. (The second, a one-time
+enrolment code for platform admins, shipped on 2026-10-14: see "The platform admin has a second factor".)
 
 1. **Production has not been confirmed to carry the `User` and `Session` policies.**
    Merging #158 changed the code and `apply-rls.mjs`; policies exist only where
@@ -2075,16 +2122,6 @@ Two decisions are outstanding after the audit. Neither blocks a release.
    password, production's role was missing; do not paste that into Vercel without
    checking. Afterwards, try removing a user's access, removing a staff member and
    re-admitting a login that has no membership.
-
-2. **One-time enrolment code for platform admins: deferred.** Production had one platform
-   admin on 2026-10-10, enrolled, off its temporary password, with no school memberships,
-   so the first-enrolment window (see "The platform admin has a second factor") is not
-   exploitable today. Until built, **enrol any new or reset platform admin in the same
-   sitting, from a trusted machine.** If built: two nullable `User` columns (hash and
-   expiry of the code), issued by `make:admin`, its production SQL helper and
-   `reset-platform-2fa.mjs`, and required by `confirmSetup` together with the app code.
-   Proposed lifetime 48 hours; `replaceAuthenticator` waives it, as that session has just
-   proved the old factor. Adding columns, so migrate production BEFORE merging.
 
 ## Before you push
 

@@ -8,13 +8,15 @@
  *
  * Run it against whichever database the env file points at:
  *
- *   npm run platform -- admin you@example.com            # create or reset
+ *   npm run platform -- admin you@example.com            # create or reset, with an enrolment code
+ *   npm run platform -- enrolment-code you@example.com   # a new code for an admin not yet enrolled
  *   npm run platform -- delete-school hope-demo       # tenant + orphans
  *
  * Or, when the database password is lost rather than merely unused, the same
  * two things as SQL to paste into the Supabase editor — no connection at all:
  *
  *   npm run platform -- sql you@example.com
+ *   npm run platform -- sql-enrolment-code you@example.com
  *   npm run platform -- sql-delete-school hope-demo
  *
  * For PRODUCTION, put the connection string in `.env.prod` — covered by
@@ -30,6 +32,7 @@ import { createInterface } from "node:readline/promises";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { hashPassword, temporaryPassword } from "@/lib/password";
+import { ENROLMENT_CODE_HOURS, enrolmentCodeNotice, newEnrolmentCode } from "./enrolment-code.mjs";
 
 const [command, argument] = process.argv.slice(2).filter((a) => a !== "--");
 
@@ -54,6 +57,11 @@ async function makeAdmin(email: string) {
   );
   const password = temporaryPassword();
   const passwordHash = await hashPassword(password);
+  // ⚠️ An admin who has not enrolled an authenticator needs a one-time ENROLMENT code as well as
+  // the password, because the password alone must not reach the setup that follows. One who is
+  // already enrolled does not: their authenticator is the thing that protects them.
+  const issued = existing?.totpEnabledAt ? null : newEnrolmentCode();
+  const codeData = issued ? { enrolmentCodeHash: issued.hash, enrolmentCodeExpiresAt: issued.expiresAt } : {};
 
   if (existing) {
     await withBypass(() =>
@@ -62,7 +70,7 @@ async function makeAdmin(email: string) {
         // ⚠️ mustChangePassword, always. A password that reached a terminal —
         // and therefore a scrollback buffer and possibly a screenshot — is a
         // way in for one login, not a credential.
-        data: { isPlatformAdmin: true, passwordHash, mustChangePassword: true },
+        data: { isPlatformAdmin: true, passwordHash, mustChangePassword: true, ...codeData },
       }),
     );
     console.log(`\n${existing.name} <${email}> is a platform admin, with a new password.`);
@@ -75,6 +83,7 @@ async function makeAdmin(email: string) {
           passwordHash,
           isPlatformAdmin: true,
           mustChangePassword: true,
+          ...codeData,
         },
       }),
     );
@@ -82,7 +91,42 @@ async function makeAdmin(email: string) {
   }
 
   console.log(`Temporary password: ${password}`);
-  console.log("It must be changed at the first sign-in.\n");
+  console.log("It must be changed at the first sign-in.");
+  if (issued) {
+    console.log(`\n${enrolmentCodeNotice(issued)}\n`);
+  } else {
+    console.log("\nThey have already enrolled an authenticator, so no enrolment code was issued.\n");
+  }
+}
+
+/** A fresh enrolment code for an admin who has not enrolled (the old one expired, or was lost). */
+async function issueCode(email: string) {
+  const user = await withBypass(() =>
+    prisma.user.findFirst({ where: { email, deletedAt: null, isPlatformAdmin: true } }),
+  );
+  if (!user) {
+    console.error(`No platform admin with the email ${email}.`);
+    process.exitCode = 1;
+    return;
+  }
+  if (user.totpEnabledAt) {
+    console.error(
+      `${user.name} <${email}> has already enrolled an authenticator, so there is nothing to enrol.\n` +
+        "If the phone and the recovery codes are both gone, use: node --env-file=<env> scripts/reset-platform-2fa.mjs " +
+        email,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const issued = newEnrolmentCode();
+  await withBypass(() =>
+    prisma.user.update({
+      where: { id: user.id },
+      data: { enrolmentCodeHash: issued.hash, enrolmentCodeExpiresAt: issued.expiresAt },
+    }),
+  );
+  console.log(`\nA new enrolment code for ${user.name} <${email}>. Any earlier one no longer works.\n`);
+  console.log(`${enrolmentCodeNotice(issued)}\n`);
 }
 
 async function deleteSchool(slug: string) {
@@ -179,23 +223,51 @@ async function printSql(email: string) {
   }
 
   const hash = await hashPassword(password);
+  const issued = newEnrolmentCode();
   console.log(`
 Paste this into the Supabase SQL editor for the PRODUCTION project.
-It promotes the account if it exists, and creates it if it does not.
+It promotes the account if it exists, and creates it if it does not, and issues its enrolment code.
 
 ──────────────────────────────────────────────────────────────────────
 insert into "User" (id, email, name, "passwordHash", "isPlatformAdmin",
-                    "mustChangePassword", "createdAt", "updatedAt")
+                    "mustChangePassword", "enrolmentCodeHash",
+                    "enrolmentCodeExpiresAt", "createdAt", "updatedAt")
 values (gen_random_uuid()::text, '${email}', '${email.split("@")[0]}',
-        '${hash}', true, false, now(), now())
+        '${hash}', true, false, '${issued.hash}',
+        (now() at time zone 'utc') + interval '${ENROLMENT_CODE_HOURS} hours', now(), now())
 on conflict (email) do update
   set "passwordHash"      = excluded."passwordHash",
       "isPlatformAdmin"   = true,
       "mustChangePassword" = false,
+      "enrolmentCodeHash"      = excluded."enrolmentCodeHash",
+      "enrolmentCodeExpiresAt" = excluded."enrolmentCodeExpiresAt",
       "updatedAt"          = now();
 ──────────────────────────────────────────────────────────────────────
 
 Then sign in at /login with ${email} and the password you just typed.
+
+${enrolmentCodeNotice(issued)}
+  (Only needed if this account has no authenticator yet. For one that has, it is never asked for.)
+`);
+}
+
+/** The same fresh code, as SQL: for when the database password is lost. */
+function printCodeSql(email: string) {
+  const issued = newEnrolmentCode();
+  console.log(`
+Paste this into the Supabase SQL editor for the PRODUCTION project. It sets a new enrolment code on
+an existing platform admin who has not enrolled yet. If it changes no rows, there is no such admin or
+they have already enrolled (and then they do not need a code).
+
+──────────────────────────────────────────────────────────────────────
+update "User"
+   set "enrolmentCodeHash"      = '${issued.hash}',
+       "enrolmentCodeExpiresAt" = (now() at time zone 'utc') + interval '${ENROLMENT_CODE_HOURS} hours',
+       "updatedAt"              = now()
+ where email = '${email}' and "isPlatformAdmin" = true and "totpEnabledAt" is null;
+──────────────────────────────────────────────────────────────────────
+
+${enrolmentCodeNotice(issued)}
 `);
 }
 
@@ -291,13 +363,23 @@ that second number is your own way back in.
 `);
 }
 
-if (command === "sql" && argument) {
+/** The SQL commands paste the address into a statement that runs against production: plain addresses only. */
+const plainEmail = (value: string) => /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(value);
+if ((command === "sql" || command === "sql-enrolment-code") && argument && !plainEmail(argument.trim())) {
+  console.error(`\n"${argument}" is not a plain email address, and it is about to be written into SQL.`);
+  process.exitCode = 1;
+} else if (command === "sql" && argument) {
   await printSql(argument.trim().toLowerCase());
 } else if (command === "sql-delete-school" && argument) {
   printDeleteSql(argument.trim());
 } else if (command === "admin" && argument) {
   console.log(`\nDatabase: ${target()}`);
   await makeAdmin(argument.trim().toLowerCase());
+} else if (command === "enrolment-code" && argument) {
+  console.log(`\nDatabase: ${target()}`);
+  await issueCode(argument.trim().toLowerCase());
+} else if (command === "sql-enrolment-code" && argument) {
+  printCodeSql(argument.trim().toLowerCase());
 } else if (command === "delete-school" && argument) {
   await deleteSchool(argument.trim());
 } else {
@@ -306,6 +388,8 @@ if (command === "sql" && argument) {
       "  npm run platform -- sql <email>                  # no DB password needed\n" +
       "  npm run platform -- sql-delete-school <slug>     # no DB password needed\n" +
       "  npm run platform -- admin <email>\n" +
+      "  npm run platform -- enrolment-code <email>       # a new code for an admin not yet enrolled\n" +
+      "  npm run platform -- sql-enrolment-code <email>   # no DB password needed\n" +
       "  npm run platform -- delete-school <slug>",
   );
   process.exitCode = 1;
