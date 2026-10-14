@@ -194,15 +194,19 @@ export async function saveScores(
   const updates: { studentId: string; rawScore: number | null; isAbsent: boolean }[] = [];
   const problems: string[] = [];
 
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("score:")) {
-      continue;
+  // The pupils the form NAMES, by a mark box or by an absent tick, either alone: a browser does not
+  // submit a disabled input, so an absence must not depend on its mark box being sent (see saveSheet).
+  const named = new Set<string>();
+  for (const key of formData.keys()) {
+    if (key.startsWith("score:") || key.startsWith("absent:")) {
+      named.add(key.slice(key.indexOf(":") + 1));
     }
-    const studentId = key.slice("score:".length);
+  }
+  for (const studentId of named) {
     if (!enrolled.has(studentId)) {
       continue;
     }
-    const raw = String(value).trim();
+    const raw = String(formData.get(`score:${studentId}`) ?? "").trim();
     const isAbsent = formData.get(`absent:${studentId}`) === "on";
 
     if (isAbsent) {

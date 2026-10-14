@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { saveSheet, type SheetState } from "@/lib/sheet-actions";
 import { checkScore } from "@/lib/score-limits";
 import { SubmitButton } from "../../submit-button";
@@ -117,6 +117,22 @@ export function SheetForm({
     Object.fromEntries(columns.map((c) => [c.id, String(c.maxScore)])),
   );
 
+  // ⚠️ React resets a form's fields once its action returns, and a CONTROLLED checkbox is not put back
+  // (see CLAUDE.md). Without this an "absent" tick vanished from the screen after every save, or after a
+  // refusal, while the state behind it still held it: the next save then sent no absence at all. The tick
+  // is re-applied from state after each result. The timer matters: the reset lands after effects run.
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      for (const box of formRef.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name^="absent:"]') ?? []) {
+        box.checked = absent[box.name.slice("absent:".length)] ?? false;
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Only when the action returns: `absent` is read fresh inside, and re-running on every tick would race it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
   const marksAvailable = useMemo(
     () =>
       columns
@@ -149,7 +165,7 @@ export function SheetForm({
   const firstProblem = problems.values().next().value as string | undefined;
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form ref={formRef} action={formAction} className="space-y-3">
       <input type="hidden" name="termId" value={termId} />
       <input type="hidden" name="classGroupId" value={classGroupId} />
       <input type="hidden" name="subjectId" value={subjectId} />
@@ -246,11 +262,15 @@ export function SheetForm({
                           step="0.01"
                           aria-invalid={problems.has(key) ? true : undefined}
                           value={isAbsent ? "" : (values[key] ?? "")}
-                          disabled={locked || isAbsent}
+                          // `readOnly` for an absent pupil, NOT `disabled`: a disabled input is not submitted,
+                          // and an absence used to depend on its mark box being sent. `disabled` is only
+                          // for a locked (approved) column.
+                          disabled={locked}
+                          readOnly={isAbsent}
                           onChange={(e) =>
                             setValues((prev) => ({ ...prev, [key]: e.target.value }))
                           }
-                          className={`w-[3.75rem] rounded-lg border-[1.5px] px-1.5 py-1.5 text-center font-semibold tabular-nums outline-none transition focus:ring-2 ${problems.has(key) ? "border-danger-ink bg-danger-tint text-danger-ink focus:border-danger-ink focus:ring-danger-ink/25" : "border-slate-200 focus:border-brand-500 focus:ring-brand-500/25"} disabled:bg-slate-100 disabled:font-normal`}
+                          className={`w-[3.75rem] rounded-lg border-[1.5px] px-1.5 py-1.5 text-center font-semibold tabular-nums outline-none transition focus:ring-2 ${problems.has(key) ? "border-danger-ink bg-danger-tint text-danger-ink focus:border-danger-ink focus:ring-danger-ink/25" : "border-slate-200 focus:border-brand-500 focus:ring-brand-500/25"} disabled:bg-slate-100 disabled:font-normal read-only:bg-slate-100 read-only:font-normal`}
                           aria-label={`${column.title} for ${student.firstName} ${student.lastName}`}
                         />
                         <label className="mt-0.5 flex items-center justify-center gap-1 text-[10px] text-slate-400">

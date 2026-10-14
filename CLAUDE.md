@@ -125,6 +125,44 @@ payroll. Single-campus by design — there is no `Branch` model.
   value to the DOM in an effect as well, or the screen goes on lying about what
   it is about to do.
 
+  ⚠️ **It took an absence out of every mark grid, and a second bug was hiding behind
+  it (found 2026-10-14 by driving the grid in a browser).**
+
+  - **The reset.** The mark sheet and the score grid had controlled "absent"
+    checkboxes and no re-apply, so after a save the tick vanished while the state
+    behind it still held it. The next save then sent no absence at all: "Saved 3
+    scores" was followed by two rows in the database. The mock sheet and the fee form
+    already had the workaround (an effect keyed on the action's `state`, with a
+    `setTimeout(0)` because the reset lands after effects run, re-applying the DOM
+    from state); the mark sheet and the grid now do too. `promotions/bulk-form.tsx`
+    still does not: its controlled `class` boxes are only unticked by a reset, so a
+    re-submit would pick nothing rather than too much, and it was left alone and not
+    browser-checked.
+  - **A disabled input is not submitted.** The mark sheet DISABLED a pupil's mark box
+    once they were ticked absent, and `saveSheet` only looked for absences among the
+    `score:` fields it received. So **an absence typed on the mark sheet was never
+    saved from a real browser, from the day the sheet was written.** It saved as a
+    blank, and a blank is "not marked yet" and is left out of the average, where an
+    absence counts as zero: a pupil who missed a test was excluded instead of scoring
+    nothing. Those absences were never recorded, so no result can be repaired from
+    the data. Both actions (`saveSheet`, `saveScores`) now read an absence from its
+    `absent:` key on its own, and the mark sheet makes the box `readOnly`
+    (`disabled` is for a locked column only). To see whether a school has the
+    footprint: `select count(*) from "Score" where "isAbsent"`; a school that has
+    marked on the sheet for months and shows none has it.
+  - **Why every guard passed.** An HTTP client never resets a form and never skips a
+    disabled input, so `verify:actions`, `verify:attendance` and
+    `verify:assessment-entry` could not see either. `verify:grid-browser` (headless
+    Chrome through `scripts/chrome-cdp.mjs`, in CI) types, ticks, presses Save, waits,
+    then asks the page what it shows and the database what it holds, for both grids.
+    `verify:assessment-entry` now also posts an absence WITHOUT its mark box, which is
+    what a browser sends. `verify-mobile-nav.mjs` still carries its own copy of the
+    Chrome launcher; pointing it at `chrome-cdp.mjs` is the obvious tidy-up.
+  - **Type into a HYDRATED page.** The server renders every input, so one exists
+    the moment the page arrives, and React attaches its handlers later (seconds, on a
+    cold dev server). An event sent in between is lost and reads as the validation being
+    broken. The guard waits for React's `__reactProps$` key on the node.
+
 ## The GES curriculum is the onboarding baseline
 
 Every school is provisioned with the national curriculum already set up —

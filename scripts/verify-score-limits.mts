@@ -84,6 +84,10 @@ check("the mark sheet decides with checkScore", /checkScore\(/.test(files.sheetF
 check("neither server action keeps its own `parsed > max` any more", !/parsed\s*>\s*max/.test(files.actions) && !/parsed\s*>\s*max/.test(files.sheetActions));
 check("nor reads a mark with a bare Number(raw)", !/Number\(raw\)/.test(files.actions) && !/Number\(raw\)/.test(files.sheetActions));
 check("a refused save names every problem and writes nothing (refusalMessage, before the transaction)", /refusalMessage\(problems\)/.test(files.actions) && /refusalMessage\(problems\)/.test(files.sheetActions));
+check("saveSheet reads an absence from its `absent:` key alone, not only alongside a mark box", /key\.startsWith\("absent:"\)/.test(files.sheetActions) && /formData\.get\(`score:\$\{id\}`\)/.test(files.sheetActions));
+check("so does saveScores", /key\.startsWith\("absent:"\)/.test(files.actions) && /formData\.get\(`score:\$\{studentId\}`\)/.test(files.actions));
+check("the mark sheet never DISABLES an absent pupil's mark box (a disabled input is not submitted)", /readOnly=\{isAbsent\}/.test(files.sheetForm) && !/disabled=\{locked \|\| isAbsent\}/.test(files.sheetForm));
+check("both grids put an absent tick back after the action resets the form", [files.grid, files.sheetForm].every((f) => /querySelectorAll<HTMLInputElement>\('input\[type="checkbox"\]\[name\^="absent:"\]'\)/.test(f) && /\[state\]/.test(f)));
 check("the grids stop Save while any mark is out of range", /disabled=\{blocked\}/.test(files.grid) && /disabled=\{blocked\}/.test(files.sheetForm));
 check("the total a mark is held to is the persisted one in saveScores", /const max = Number\(assessment\.maxScore\)/.test(files.actions));
 check("and saveScores cannot change it (no maxScore write there)", !/maxScore:\s*new Prisma\.Decimal\(max\b/.test(files.actions.slice(files.actions.indexOf("export async function saveScores"), files.actions.indexOf("export async function setAssessmentStatus"))));

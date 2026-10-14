@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { saveScores, type ScoreEntryState } from "@/lib/assessment-actions";
 import { checkScore } from "@/lib/score-limits";
 import { SubmitButton } from "../../submit-button";
@@ -37,6 +37,22 @@ export function ScoreGrid({
     Object.fromEntries(rows.map((row) => [row.studentId, row.isAbsent])),
   );
 
+  // ⚠️ React resets a form's fields once its action returns, and a CONTROLLED checkbox is not put back
+  // (see CLAUDE.md). Without this an "absent" tick vanished from the screen after every save, or after a
+  // refusal, while the state behind it still held it: the next save then sent no absence at all. The tick
+  // is re-applied from state after each result. The timer matters: the reset lands after effects run.
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      for (const box of formRef.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name^="absent:"]') ?? []) {
+        box.checked = absent[box.name.slice("absent:".length)] ?? false;
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Only when the action returns: `absent` is read fresh inside, and re-running on every tick would race it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
   // An absent pupil's box is ignored by the server, so it is ignored here too.
   const problems = new Map<string, string>();
   for (const row of rows) {
@@ -47,7 +63,7 @@ export function ScoreGrid({
   const blocked = problems.size > 0;
 
   return (
-    <form action={formAction}>
+    <form ref={formRef} action={formAction}>
       <input type="hidden" name="assessmentId" value={assessmentId} />
 
       <div className="overflow-hidden rounded-card border border-hairline bg-surface">
