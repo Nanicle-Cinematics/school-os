@@ -701,7 +701,7 @@ model Level {
   name     String
   code     String
   stage    Stage
-  order    Int // ordering across the whole ladder, KG1 = 1 … SHS3 = n
+  order    Int // ordering across the whole ladder: Nursery 1 = -1, Nursery 2 = 0, KG1 = 1 … JHS3 = 11. Consecutive.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

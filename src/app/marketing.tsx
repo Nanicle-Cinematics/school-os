@@ -54,8 +54,8 @@ const FEATURES = [
     icon: BookOpenCheck,
     title: "The GES curriculum, already set up",
     body:
-      "11 levels from KG1 to JHS3, 18 subjects and 104 subject offerings arrive with the school — " +
-      "KG's four thematic areas, OWOP and History through B6, Social Studies from B7, French and " +
+      "13 levels from Nursery 1 to JHS3, 18 subjects and 112 subject offerings arrive with the school — " +
+      "the four thematic areas of Nursery and KG, OWOP and History through B6, Social Studies from B7, French and " +
       "Computing from B4. Nobody types a subject list.",
   },
   {
