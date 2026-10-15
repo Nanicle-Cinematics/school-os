@@ -386,7 +386,7 @@ jobs:
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:mobile-nav
 
-      - name: Mark grids in a browser — an absence survives a save, on both grids
+      - name: Mark grids and promotions in a browser — a tick survives a save, and a refusal
         env:
           DB_RLS: "on"
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
