@@ -55,7 +55,7 @@ export type ProvisionInput = {
 };
 
 /**
- * Seeding the curriculum is 11 levels, 18 subjects and 104 offerings, so the
+ * Seeding the curriculum is 13 levels, 18 subjects and 112 offerings, so the
  * transaction wrapping this needs a budget far past Prisma's 5s default.
  */
 export const PROVISION_TX_OPTS = { timeout: 180_000, maxWait: 20_000 };

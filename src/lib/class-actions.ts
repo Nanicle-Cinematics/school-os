@@ -117,7 +117,7 @@ export async function deleteClassGroup(formData: FormData): Promise<void> {
  *
  * The per-teacher form adds a single subject at a time, which is right for a
  * correction and hopeless for setup: the GES curriculum gives a level between
- * four and twelve subjects, so a school with one stream per level needs 104
+ * four and twelve subjects, so a school with one stream per level needs 112
  * assignments before a single teacher can open a mark sheet. This writes a
  * whole class at once, and takes the class's own level as the list of rows so
  * KG is never offered Mathematics.

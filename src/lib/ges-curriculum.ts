@@ -15,6 +15,11 @@ import type { TenantTx } from "@/lib/prisma";
  * list usually fumbles:
  *   - KG is NOT taught as discrete subjects. It is four thematic areas, and
  *     Mathematics/Science must not appear there.
+ *   - NURSERY 1 and 2 sit below KG and take the SAME four thematic areas. There
+ *     is no separate national subject curriculum for under-fives, and the app has
+ *     no other model for them, so they get the KG framework (and so a mark sheet
+ *     and a report card) rather than an empty offering list. A school that works
+ *     differently edits it afterwards, like everything else here.
  *   - OWOP and History exist only in B1–B6; at B7 they merge into Social Studies.
  *   - "Creative Arts" (B1–B6) becomes "Creative Arts and Design" at JHS.
  *   - French and Computing start at B4, not B1.
@@ -24,6 +29,14 @@ import type { TenantTx } from "@/lib/prisma";
  */
 
 export const GES_LEVELS: { code: string; name: string; stage: Stage; order: number }[] = [
+  // ⚠️ Nursery sits BELOW KG1, whose stored order is 1 in every school that already exists, and
+  // `applyGesCurriculum` only ever CREATES levels: it never renumbers one. So the new rungs take the
+  // orders before it (-1 and 0) rather than pushing everything else up, which would collide with
+  // KG1 in a school created earlier. The ladder must stay CONSECUTIVE: paper records work out "that
+  // many rungs down" by subtracting from `order` (records-engine.ts), and promotion finds the level
+  // above as the next order up. `verify:ges-baseline` pins both.
+  { code: "N1", name: "Nursery 1", stage: "NURSERY", order: -1 },
+  { code: "N2", name: "Nursery 2", stage: "NURSERY", order: 0 },
   { code: "KG1", name: "Kindergarten 1", stage: "KINDERGARTEN", order: 1 },
   { code: "KG2", name: "Kindergarten 2", stage: "KINDERGARTEN", order: 2 },
   { code: "B1", name: "Basic 1", stage: "PRIMARY", order: 3 },
@@ -37,7 +50,10 @@ export const GES_LEVELS: { code: string; name: string; stage: Stage; order: numb
   { code: "B9", name: "JHS 3", stage: "JHS", order: 11 },
 ];
 
+const NURSERY = ["N1", "N2"];
 const KG = ["KG1", "KG2"];
+/** The years that take the four thematic areas rather than discrete subjects. */
+const EARLY_YEARS = [...NURSERY, ...KG];
 const LOWER = ["B1", "B2", "B3"];
 const UPPER = ["B4", "B5", "B6"];
 const JHS = ["B7", "B8", "B9"];
@@ -45,20 +61,20 @@ const PRIMARY = [...LOWER, ...UPPER];
 
 /** `levels` lists the level codes that actually offer the subject. */
 export const GES_SUBJECTS: { code: string; name: string; order: number; levels: string[] }[] = [
-  // KG thematic areas. Creative Arts and OWOP continue into primary as subjects,
+  // The thematic areas of nursery and KG. Creative Arts and OWOP continue into primary as subjects,
   // so they are shared rows rather than duplicates.
-  { code: "NUM", name: "Numeracy", order: 10, levels: KG },
-  { code: "LIT", name: "Literacy", order: 20, levels: KG },
+  { code: "NUM", name: "Numeracy", order: 10, levels: EARLY_YEARS },
+  { code: "LIT", name: "Literacy", order: 20, levels: EARLY_YEARS },
 
   { code: "ENG", name: "English", order: 30, levels: [...PRIMARY, ...JHS] },
   { code: "MAT", name: "Mathematics", order: 40, levels: [...PRIMARY, ...JHS] },
   { code: "SCI", name: "Science", order: 50, levels: [...PRIMARY, ...JHS] },
-  { code: "OWOP", name: "Our World Our People", order: 60, levels: [...KG, ...PRIMARY] },
+  { code: "OWOP", name: "Our World Our People", order: 60, levels: [...EARLY_YEARS, ...PRIMARY] },
   { code: "HIS", name: "History", order: 70, levels: PRIMARY },
   { code: "SOC", name: "Social Studies", order: 80, levels: JHS },
   { code: "RME", name: "Religious and Moral Education", order: 90, levels: [...PRIMARY, ...JHS] },
   { code: "GHL", name: "Ghanaian Language", order: 100, levels: [...PRIMARY, ...JHS] },
-  { code: "CA", name: "Creative Arts", order: 110, levels: [...KG, ...PRIMARY] },
+  { code: "CA", name: "Creative Arts", order: 110, levels: [...EARLY_YEARS, ...PRIMARY] },
   { code: "CAD", name: "Creative Arts and Design", order: 120, levels: JHS },
   { code: "PE", name: "Physical Education", order: 130, levels: PRIMARY },
   { code: "PHE", name: "Physical Health", order: 140, levels: JHS },

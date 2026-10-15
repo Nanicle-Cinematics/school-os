@@ -175,7 +175,7 @@ payroll. Single-campus by design — there is no `Branch` model.
 ## The GES curriculum is the onboarding baseline
 
 Every school is provisioned with the national curriculum already set up —
-11 levels (KG 1 to JHS 3), 18 subjects and 104 level-subject offerings — rather
+13 levels (Nursery 1 to JHS 3), 18 subjects and 112 level-subject offerings — rather
 than an empty ladder. `src/lib/ges-curriculum.ts` holds it as ground truth;
 `applyGesCurriculum` is idempotent, so it also fills gaps for a school created
 earlier (offered on Settings → School structure).
@@ -192,7 +192,28 @@ data rather than documentation:
 - **PE** is "Physical Education" (B1–B6) and "Physical Health" (B7–B9) — one
   lineage, two names, so continuity checks must treat them as the same subject.
 
-Counts to assert against: KG 4, B1–B3 9, B4–B6 11, B7–B9 12. A school whose local
+Counts to assert against: Nursery 4, KG 4, B1–B3 9, B4–B6 11, B7–B9 12.
+
+**Nursery 1 and 2 (added 2026-10-15)** take the SAME four thematic areas as KG, because
+there is no separate national subject curriculum for under-fives and the app has no
+other model for them; a school that works differently edits it. They are stage
+`NURSERY` (the fee form, the class-teacher model and Settings → School structure
+already handled it), codes `N1` and `N2`.
+
+⚠️ **Their orders are -1 and 0, not 1 and 2, and that is the whole design.** `Level.order`
+is the position down the ladder, and KG1 is stored as 1 in every school that already
+exists. `applyGesCurriculum` only ever CREATES, so it cannot renumber, and inserting the
+nursery at 1 and 2 would collide with KG1 in a school created earlier. Putting them at
+-1 and 0 leaves every stored order untouched. The ladder must stay CONSECUTIVE: paper
+records find "that many rungs down" by subtracting from `order` (`records-engine.ts`),
+and promotion finds the level above as the next order up (`promotion-data.ts`), so
+Nursery 2 promotes into KG1 with no special case. **A school created before this does
+not gain them by itself:** its owner or an admin presses the existing button on
+Settings → School structure, which fills in what is missing and changes nothing else.
+`verify:ges-baseline` (in CI) pins the shape and runs that button for real against a
+school inside a transaction it rolls back. It does not create any CLASS: a class
+("Gold") is the school's own name for a stream under a level, and the nursery levels
+only make it possible to add one. A school whose local
 practice differs edits it afterwards — the structure is a baseline, and a
 deviation is a customisation rather than an error.
 
