@@ -17,31 +17,13 @@
  *   npm run dev   (or a built server on VERIFY_BASE_URL)
  *   npm run verify:mobile-nav
  */
-import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { sleep, startBrowser } from "./chrome-cdp.mjs";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const WIDTH = 390;
 const HEIGHT = 844;
-
-// ubuntu-latest ships google-chrome-stable; macOS has it in /Applications.
-// No silent skip when it is missing — a guard nobody runs is not a guard.
-const CHROME = [
-  process.env.CHROME_PATH,
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  "/usr/bin/google-chrome",
-  "/usr/bin/google-chrome-stable",
-  "/usr/bin/chromium-browser",
-  "/usr/bin/chromium",
-].find((p) => p && existsSync(p));
-if (!CHROME) {
-  console.error("no Chrome found — set CHROME_PATH");
-  process.exit(1);
-}
 
 let passed = 0;
 const failures = [];
@@ -65,7 +47,6 @@ const session = await prisma.session.create({
 // server under test and every page renders as its error screen.
 await prisma.$disconnect();
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** The login borrowed above, removed on EVERY way out, not just the happy one. */
 async function dropSession() {
@@ -77,114 +58,28 @@ async function dropSession() {
   }
 }
 
-/**
- * Start headless Chrome and wait for a page to drive.
- *
- * ⚠️ This failed twice on 2026-10-06, on two different branches, as "chrome
- * never opened the debugging port": the process was alive, had written NOTHING
- * to stderr, and 18 seconds of polling a fixed port found no listener. Each
- * time a re-run of the job passed. Three changes, each aimed at a way that
- * happens:
- *
- *  - `--remote-debugging-port=0`, and the port read back from the
- *    `DevToolsActivePort` file Chrome writes in its profile. A fixed port can be
- *    held by anything else on a shared runner, and then the failure looks
- *    exactly like a slow start.
- *  - A 45-second budget instead of 18. A healthy start takes about a second;
- *    a cold runner's first launch (font cache, shared memory) can take far
- *    longer, and running out of patience is not a finding about the menu.
- *  - ONE retry, with a fresh profile, after killing the whole process GROUP. A
- *    Chrome wedged before it binds stays wedged; a second launch does not
- *    inherit its state. This is the browser starting, before any assertion —
- *    a test that fails is never retried.
- *
- * `--disable-dev-shm-usage` because /dev/shm in CI containers is small and
- * Chrome stalls rather than erroring when it runs out.
- */
-const START_BUDGET_MS = 45_000;
-
-function devtoolsPort(profile, stderr) {
-  try {
-    const port = Number(readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]);
-    if (port > 0) return port;
-  } catch {}
-  const match = /DevTools listening on ws:\/\/[^:]+:(\d+)\//.exec(stderr);
-  return match ? Number(match[1]) : null;
+// The browser and its protocol client are the shared launcher's (scripts/chrome-cdp.mjs), with a deadline on
+// every call. A missing or wedged Chrome is reported there; the borrowed login is dropped here either way.
+let browser;
+try {
+  browser = await startBrowser();
+} catch (error) {
+  await dropSession();
+  throw error;
 }
+const { send, ev, close } = browser;
 
-function stopChrome(child, profile) {
-  // detached: true put Chrome and its helpers in their own process group, so
-  // one signal reaches all of them — killing the parent alone left renderer
-  // and crashpad processes for the runner to reap ("Terminate orphan process").
-  try { process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch {} }
-  try { rmSync(profile, { recursive: true, force: true }); } catch {}
-}
-
-async function launchChrome(attempt) {
-  const profile = mkdtempSync(join(tmpdir(), "school-os-mobile-nav-"));
-  const child = spawn(CHROME, [
-    "--headless=new", "--remote-debugging-port=0", "--hide-scrollbars", "--disable-gpu",
-    "--no-sandbox", "--no-first-run", "--no-default-browser-check", "--disable-dev-shm-usage",
-    "--disable-extensions", "--disable-background-networking", "--disable-component-update",
-    `--user-data-dir=${profile}`, "about:blank",
-  ], { stdio: ["ignore", "ignore", "pipe"], detached: true });
-
-  // Capture stderr and the exit itself, so a failure says what happened
-  // (missing shared lib, sandbox refusal, OOM-killed) rather than only that
-  // it did.
-  let stderr = "";
-  child.stderr.on("data", (chunk) => { stderr += chunk; });
-  let exited = null;
-  child.on("exit", (code, signal) => { exited = { code, signal }; });
-
-  const started = Date.now();
-  while (Date.now() - started < START_BUDGET_MS) {
-    if (exited) break; // no point polling a process that has already died
-    const port = devtoolsPort(profile, stderr);
-    if (port) {
-      try {
-        const listed = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-        const target = listed.find((t) => t.type === "page");
-        if (target) {
-          console.log(`chrome ready in ${((Date.now() - started) / 1000).toFixed(1)}s (attempt ${attempt}, port ${port})`);
-          return { child, profile, target };
-        }
-      } catch {}
-    }
-    await sleep(250);
-  }
-
-  stopChrome(child, profile);
-  const why = exited
-    ? `exited (code ${exited.code}, signal ${exited.signal})`
-    : `no page to drive after ${START_BUDGET_MS / 1000}s${devtoolsPort(profile, stderr) ? "" : ", debugging port never opened"}`;
-  return { error: `attempt ${attempt}: ${why}${stderr.trim() ? `\n${stderr.trim()}` : " (nothing on stderr)"}` };
-}
-
-let launched = await launchChrome(1);
-if (launched.error) {
-  console.log(`chrome did not start — ${launched.error}\nretrying once with a fresh profile`);
-  const first = launched.error;
-  launched = await launchChrome(2);
-  if (launched.error) {
+/** Read JSON out of the page, or stop and SAY the page did not answer (a call that times out gives nothing back). */
+async function json(expression, what) {
+  const raw = await ev(expression);
+  if (typeof raw !== "string") {
+    console.log(`  FAIL ${what} — the page did not answer within the deadline`);
+    close();
     await dropSession();
-    throw new Error(`chrome did not start, twice:\n${first}\n${launched.error}`);
+    process.exit(1);
   }
+  return JSON.parse(raw);
 }
-const { child: chrome, profile: chromeProfile, target } = launched;
-
-const ws = new WebSocket(target.webSocketDebuggerUrl);
-await new Promise((r) => (ws.onopen = r));
-let id = 0;
-const pending = new Map();
-ws.onmessage = (e) => {
-  const msg = JSON.parse(e.data);
-  if (pending.has(msg.id)) { pending.get(msg.id)(msg.result); pending.delete(msg.id); }
-};
-const send = (method, params = {}) =>
-  new Promise((res) => { const n = ++id; pending.set(n, res); ws.send(JSON.stringify({ id: n, method, params })); });
-const ev = async (expr) =>
-  (await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true }))?.result?.value;
 
 const host = new URL(BASE).hostname;
 await send("Page.enable");
@@ -207,13 +102,14 @@ await sleep(8000);
 // Report the viewport the page actually got, not the one requested: headless
 // does not always honour the override exactly, and a run that quietly widened
 // to desktop would pass by testing nothing — the drawer only exists below `lg`.
-const seen = JSON.parse(await ev(
+const seen = await json(
   `JSON.stringify({w:innerWidth,h:innerHeight,client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth})`,
-));
+  "reading the viewport",
+);
 console.log(`\nPhone menu at ${seen.w}x${seen.h}`);
 if (seen.w >= 1024) {
   console.log(`  FAIL viewport is below the lg breakpoint — got ${seen.w}px, the rail is not collapsed there`);
-  stopChrome(chrome, chromeProfile);
+  close();
   await dropSession();
   process.exit(1);
 }
@@ -252,10 +148,11 @@ if (hasButton === "true") {
   else bad("tapping it opens the drawer", "no close button after click");
 
   if (open === "true") {
-    const box = JSON.parse(await ev(
+    const box = await json(
       `(()=>{const c=document.querySelector('[aria-label="Close menu"]');const p=c.nextElementSibling;const r=p.getBoundingClientRect();` +
       `return JSON.stringify({w:Math.round(r.width),h:Math.round(r.height),y:Math.round(r.y),vh:innerHeight})})()`,
-    ));
+      "measuring the drawer",
+    );
     // THE regression. It was 63 tall against an 844 viewport.
     if (box.h >= box.vh * 0.9) ok("the drawer fills the screen", `${box.w}x${box.h} of ${box.vh}`);
     else bad("the drawer fills the screen",
@@ -284,8 +181,7 @@ if (hasButton === "true") {
   }
 }
 
-ws.close();
-stopChrome(chrome, chromeProfile);
+close();
 await dropSession();
 
 console.log(`\n${passed} passed, ${failures.length} failed`);

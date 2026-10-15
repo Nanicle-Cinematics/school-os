@@ -2,9 +2,9 @@
  * Start headless Chrome and drive it over the DevTools protocol, with no dependency.
  *
  * Extracted from `verify-mobile-nav.mjs`, whose launcher is the product of a bad day: see the notes on
- * `START_BUDGET_MS` and `launchChrome`. `verify-grid-browser.mjs` uses this copy. The mobile-nav script
- * still carries its own, untouched, so that a change here cannot break a guard that already works;
- * pointing it at this module is the obvious tidy-up and has not been done.
+ * `launchOnce`. Both `verify-grid-browser.mjs` and `verify-mobile-nav.mjs` use this one, so a fix to how Chrome
+ * is started, or a deadline on a call, reaches both. It used to be copied into each, and the copy that was not
+ * being looked at fell behind: the phone-menu guard had no deadline on its calls.
  *
  * ⚠️ Why a real browser at all: some bugs only exist AFTER an action returns, in the browser, where
  * React resets a form's fields. No HTTP test can see them, because an HTTP client never resets anything.
@@ -46,6 +46,10 @@ function stopChrome(child, profile) {
 }
 
 /**
+ * History: this failed twice on 2026-10-06, on two different branches, as "chrome never opened the debugging
+ * port". The process was alive, had written NOTHING to stderr, and 18 seconds of polling a fixed port found no
+ * listener; each time a re-run of the job passed. These are the changes aimed at the ways that happens.
+ *
  * `--remote-debugging-port=0` with the port read back from the profile (a fixed port can be held by
  * anything else on a shared runner, and then the failure looks like a slow start); a 45-second budget (a
  * cold runner's first launch can take far longer than a healthy second); and ONE retry with a fresh
@@ -118,14 +122,21 @@ export async function startBrowser() {
   // wedged renderer) leaves this promise pending for ever, and the guard sits there until the CI job's own
   // limit with nothing printed. A call that times out resolves to nothing, exactly as a protocol error does,
   // so the caller's own wait loop runs out its budget and REPORTS the failure.
+  //
+  // ⚠️ But NOT the same deadline for every call. `Page.navigate` does not answer until the server's response
+  // begins, which on a slow server is as long as the page takes to render (a minute, on the development link). A
+  // 30-second limit there gave up on the first page, started the next step against a page that had not loaded,
+  // and a guard that passes on a fast server failed on a slow one with "no menu button". A navigation gets a
+  // long deadline; everything else answers from a page that is already there.
   const CALL_DEADLINE_MS = 30_000;
+  const SLOW_CALLS = { "Page.navigate": 180_000 };
   const send = (method, params = {}) =>
     new Promise((resolve) => {
       const n = ++id;
       const timer = setTimeout(() => {
         pending.delete(n);
         resolve(undefined);
-      }, CALL_DEADLINE_MS);
+      }, SLOW_CALLS[method] ?? CALL_DEADLINE_MS);
       pending.set(n, (result) => {
         clearTimeout(timer);
         resolve(result);
