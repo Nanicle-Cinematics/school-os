@@ -164,8 +164,9 @@ payroll. Single-campus by design — there is no `Branch` model.
     Chrome through `scripts/chrome-cdp.mjs`, in CI) types, ticks, presses Save, waits,
     then asks the page what it shows and the database what it holds, for both grids.
     `verify:assessment-entry` now also posts an absence WITHOUT its mark box, which is
-    what a browser sends. `verify-mobile-nav.mjs` still carries its own copy of the
-    Chrome launcher; pointing it at `chrome-cdp.mjs` is the obvious tidy-up.
+    what a browser sends. `verify-mobile-nav.mjs` and `verify-grid-browser.mjs` share
+    one Chrome launcher, `scripts/chrome-cdp.mjs`, with a 30-second deadline on every
+    protocol call so a wedged page is reported rather than waited on.
   - **Type into a HYDRATED page.** The server renders every input, so one exists
     the moment the page arrives, and React attaches its handlers later (seconds, on a
     cold dev server). An event sent in between is lost and reads as the validation being
