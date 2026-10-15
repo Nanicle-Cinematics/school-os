@@ -68,6 +68,7 @@
     "verify:carry-forward": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-carry-forward.mts",
     "verify:invoicing": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-invoicing.mts",
     "verify:mobile-nav": "node --env-file=.env scripts/verify-mobile-nav.mjs",
+    "verify:grid-browser": "node --env-file=.env scripts/verify-grid-browser.mjs",
     "verify:finance": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-finance.mts",
     "verify:it-admin": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-it-admin.mts",
     "verify:logins": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-logins.mts",

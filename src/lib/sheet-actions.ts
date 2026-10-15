@@ -196,12 +196,20 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
 
   const cells: Cell[] = [];
   const problems: string[] = [];
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("score:")) {
-      continue;
+  // ⚠️ The cells the form NAMES, by a mark box or by an absent tick, either alone. A browser does not
+  // submit a disabled input, so a form that disables a pupil's mark box once they are ticked absent
+  // sends the tick and no mark at all, and a loop that only looked for `score:` keys never saw the
+  // absence: it was saved as nothing, for as long as the sheet has existed. Whatever the form does to
+  // its inputs, the tick is read.
+  const named = new Set<string>();
+  for (const key of formData.keys()) {
+    if (key.startsWith("score:") || key.startsWith("absent:")) {
+      named.add(key.slice(key.indexOf(":") + 1));
     }
-    // score:<assessmentId>:<studentId>
-    const [, assessmentId, studentId] = key.split(":");
+  }
+  for (const id of named) {
+    // <assessmentId>:<studentId>
+    const [assessmentId, studentId] = id.split(":");
     const assessment = byId.get(assessmentId);
     if (!assessment || !studentId || !enrolled.has(studentId)) {
       continue;
@@ -212,8 +220,8 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
       continue;
     }
 
-    const raw = String(value).trim();
-    const isAbsent = formData.get(`absent:${assessmentId}:${studentId}`) === "on";
+    const raw = String(formData.get(`score:${id}`) ?? "").trim();
+    const isAbsent = formData.get(`absent:${id}`) === "on";
 
     if (isAbsent) {
       cells.push({ assessmentId, studentId, rawScore: null, isAbsent: true });

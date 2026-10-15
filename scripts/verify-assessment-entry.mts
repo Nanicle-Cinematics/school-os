@@ -270,6 +270,20 @@ async function main() {
     check("a blank is 'not marked yet': it removes the row, it is not a zero", (await scoreOf(p2.id)) === null && !(await scores()).some((s) => s.studentId === p2.id), cleared.html.match(/Saved \d+ scores|Nothing was saved[^<]*/)?.[0] ?? "");
     await enter(tokens.IT_ADMIN, { [p1.id]: "10", [p2.id]: "7.5" });
 
+    console.log("\nAn absence is saved when its mark box is NOT sent, which is what a browser does");
+    // A browser does not submit a disabled input, and a form that disables a pupil's box once they are
+    // ticked absent sends the tick alone. `enter` above sends every box, so it could not see this.
+    const enterLikeABrowser = (as: string, marks: Record<string, string>, absentIds: string[]) =>
+      post(path, as, gridFields.filter(([name]) => !absentIds.some((id) => name === `score:${id}`)), {
+        ...Object.fromEntries(pupils.filter((p) => !absentIds.includes(p.id)).map((p) => [`score:${p.id}`, marks[p.id] ?? ""])),
+        ...Object.fromEntries(absentIds.map((id) => [`absent:${id}`, "on"])),
+      });
+    const lone = await enterLikeABrowser(tokens.IT_ADMIN, { [p1.id]: "10", [p2.id]: "7.5" }, [p3.id]);
+    const loneRow = (await scores()).find((r) => r.studentId === p3.id);
+    check("a tick with no mark box is saved as an absence", /Saved 3 scores/.test(lone.html) && loneRow?.isAbsent === true && loneRow.rawScore === null, lone.html.match(/Saved \d+ scores|Nothing was saved[^<]*/)?.[0] ?? "");
+    await enter(tokens.IT_ADMIN, { [p1.id]: "10", [p2.id]: "7.5" });
+    check("and clearing it again removes the row", !(await scores()).some((r) => r.studentId === p3.id));
+
     // --- 4. the head is held to it as well --------------------------------------------------------
     console.log("\nA head is held to the same total");
     const headOver = await enter(tokens.HEAD, { [p1.id]: "15" });
@@ -342,6 +356,22 @@ async function main() {
       check("the total is still 10", Number((await assessment())?.maxScore) === TOTAL);
       const sheetTeacher = await post(sheetUrl, tokens.TEACHER, sheetFields, { [`score:${assessmentId}:${p1.id}`]: "15" });
       check("a teacher with no assignment is turned away from the sheet before the total is looked at", !/above the 10/.test(sheetTeacher.html));
+      console.log("\nOn the mark sheet, an absence is saved when its mark box is NOT sent");
+      // The mark sheet disabled a pupil's box once they were ticked absent, so a real browser sent the tick and
+      // no mark, and saveSheet only looked for marks: an absence typed there was never saved, since the sheet
+      // was written. (This save recomputes the class, so the results it writes are removed at the end; the class
+      // was chosen because it had none.)
+      const absentLoneKey = `score:${assessmentId}:${p3.id}`;
+      const sheetLone = await post(sheetUrl, tokens.IT_ADMIN, sheetFields.filter(([name]) => name !== absentLoneKey), {
+        [`absent:${assessmentId}:${p3.id}`]: "on",
+      });
+      const sheetRow = (await scores()).find((r) => r.studentId === p3.id);
+      check("a tick with no mark box is saved as an absence", /Saved \d+ marks?/.test(sheetLone.html) && !/Nothing was saved/.test(sheetLone.html) && sheetRow?.isAbsent === true && sheetRow.rawScore === null, sheetLone.html.match(/Saved \d+ marks?|Nothing was saved[^<]*/)?.[0] ?? "");
+      const sheetAfter = await get(sheetUrl, tokens.IT_ADMIN);
+      const tag = sheetAfter.html.match(new RegExp(`<input[^>]*name="${absentLoneKey}"[^>]*>`))?.[0] ?? "";
+      // Attributes only: the class list carries `disabled:bg-slate-100`, which is not the attribute.
+      const attrs = tag.replace(/class="[^"]*"/, "");
+      check("and the sheet then renders that pupil's mark box read-only, NOT disabled (a disabled box is not sent)", /readonly/i.test(attrs) && !/\sdisabled(=|\s|\/|>)/i.test(attrs), attrs.slice(0, 120));
     }
   } finally {
     await withOwner(async (owner) => {
@@ -350,6 +380,10 @@ async function main() {
       }
       await owner.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
       await owner.assessment.deleteMany({ where: { schoolId: school.id, title: { startsWith: `Probe test ${stamp}` } } });
+      // The mark-sheet save above recomputes the class. This class had no results before (that is how it
+      // was chosen), so removing every result for the term and class puts it back exactly.
+      await owner.subjectResult.deleteMany({ where: { termId: term.id, classGroupId } });
+      await owner.termResult.deleteMany({ where: { termId: term.id, classGroupId } });
       await owner.session.deleteMany({ where: { userId: { in: userIds } } });
       await owner.membership.deleteMany({ where: { userId: { in: userIds } } });
       await owner.user.deleteMany({ where: { id: { in: userIds } } });

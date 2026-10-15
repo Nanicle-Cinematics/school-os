@@ -386,6 +386,13 @@ jobs:
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:mobile-nav
 
+      - name: Mark grids in a browser — an absence survives a save, on both grids
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:grid-browser
+
       - name: Onboarding — every screen a day-one school opens
         env:
           DB_RLS: "on"
