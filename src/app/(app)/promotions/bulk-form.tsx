@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { runWholeSchoolPromotion, type PromotionState } from "@/lib/promotion-actions";
 import { SubmitButton } from "../submit-button";
 import { Alert, EmptyRow, tableHeadClass, thClass } from "../ui";
@@ -36,6 +36,25 @@ export function BulkPromotionForm({
     Object.fromEntries(rows.map((row) => [row.classGroupId, !row.blocked])),
   );
 
+  // ⚠️ React resets a form's fields once its action returns (a refusal included), and a CONTROLLED checkbox is
+  // not put back (see CLAUDE.md). The reset puts every box back to what the SERVER rendered, which is all of
+  // them ticked, so a class the head had deliberately unticked came back ticked on screen while `included`
+  // (and so the button's "Roll 9 classes") still left it out. Pressing the button again would then have
+  // promoted a class they had chosen not to. The ticks are re-applied from state after each result; the timer
+  // matters, as the reset lands after effects run.
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      for (const box of formRef.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"][name="class"]') ?? []) {
+        const row = rows.find((r) => r.classGroupId === box.value);
+        box.checked = Boolean(included[box.value]) && !row?.blocked;
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Only when the action returns: `included` and `rows` are read fresh inside.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
   const chosen = rows.filter((row) => included[row.classGroupId] && !row.blocked);
   const totals = chosen.reduce(
     (acc, row) => ({
@@ -48,7 +67,7 @@ export function BulkPromotionForm({
   );
 
   return (
-    <form action={formAction}>
+    <form ref={formRef} action={formAction}>
       <input type="hidden" name="sourceYearId" value={sourceYearId} />
       <input type="hidden" name="targetYearId" value={targetYearId} />
 

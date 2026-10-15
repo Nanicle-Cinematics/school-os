@@ -135,9 +135,17 @@ payroll. Single-campus by design — there is no `Branch` model.
     already had the workaround (an effect keyed on the action's `state`, with a
     `setTimeout(0)` because the reset lands after effects run, re-applying the DOM
     from state); the mark sheet and the grid now do too. `promotions/bulk-form.tsx`
-    still does not: its controlled `class` boxes are only unticked by a reset, so a
-    re-submit would pick nothing rather than too much, and it was left alone and not
-    browser-checked.
+    had the same trap and was fixed afterwards, and it was WORSE than I first said.
+    I wrote that a reset there only unticks boxes, so a re-submit would pick nothing.
+    That was wrong, and the browser guard showed it: the reset puts every box back to
+    what the SERVER rendered (all ticked), so a class the head had deliberately
+    unticked came back ticked on screen while the state, and the button's "Roll 9
+    classes", still left it out. Pressing the button again would have promoted a class
+    they had chosen not to, in a form that moves pupils between classes. It is tested
+    through a forced REFUSAL (target year = source year), never a real promotion.
+    ⚠️ Which way a reset moves a controlled box depends on its server-rendered
+    default: absent ticks reset to unticked (a lost absence), class ticks reset to
+    ticked (an extra class). Do not reason about it; look.
   - **A disabled input is not submitted.** The mark sheet DISABLED a pupil's mark box
     once they were ticked absent, and `saveSheet` only looked for absences among the
     `score:` fields it received. So **an absence typed on the mark sheet was never

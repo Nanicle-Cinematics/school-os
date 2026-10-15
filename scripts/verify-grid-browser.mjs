@@ -15,6 +15,11 @@
  * a disabled input. So this drives the real pages: it types, ticks and presses Save, waits for the result,
  * then asks the page what it shows and the database what it holds.
  *
+ * The promotions form has the same trap: its class ticks are controlled, and a completed action (a refusal
+ * included) reset them while the button went on saying "Roll 11 classes". It is tested through a REFUSAL, forced
+ * by pointing the target year at the source year, so nothing is ever promoted: a whole-school promotion moves
+ * pupils between classes, and a test must not do that.
+ *
  * Fixtures: a login, an open assessment out of 10 for a class with no results at all (so the recompute a
  * mark-sheet save triggers can be removed exactly), all deleted at the end, also on a failed run.
  *
@@ -63,6 +68,7 @@ async function removeFixtures() {
       await owner.termResult.deleteMany({ where: { termId: fixtures.termId, classGroupId: fixtures.classGroupId } });
     }
     await owner.assessment.deleteMany({ where: { title: { startsWith: "Browser probe " }, createdAt: { gte: new Date(stamp - 1000) } } });
+    await owner.academicYear.deleteMany({ where: { name: { startsWith: "Browser probe " }, createdAt: { gte: new Date(stamp - 1000) } } });
     await owner.session.deleteMany({ where: { userId: fixtures.userId || "none" } });
     await owner.membership.deleteMany({ where: { userId: fixtures.userId || "none" } });
     await owner.user.deleteMany({ where: { OR: [{ id: fixtures.userId || "none" }, { email: { startsWith: "gridbrowser-" } }] } });
@@ -88,6 +94,7 @@ async function main() {
     }
     await owner.auditLog.deleteMany({ where: { entityId: { in: stale.map((a) => a.id) } } });
     await owner.assessment.deleteMany({ where: { id: { in: stale.map((a) => a.id) } } });
+    await owner.academicYear.deleteMany({ where: { name: { startsWith: "Browser probe " } } });
     await owner.session.deleteMany({ where: { user: { email: { startsWith: "gridbrowser-" } } } });
     await owner.membership.deleteMany({ where: { user: { email: { startsWith: "gridbrowser-" } } } });
     await owner.user.deleteMany({ where: { email: { startsWith: "gridbrowser-" } } });
@@ -116,7 +123,12 @@ async function main() {
       data: { schoolId: school.id, termId: term.id, classGroupId, subjectId: subject.id, type: "CLASS_TEST", title, maxScore: 10, weight: 0, status: "OPEN" },
       select: { id: true },
     });
-    return { userId: user.id, assessmentId: assessment.id, termId: term.id, classGroupId, subjectId: subject.id };
+    // A later year to promote INTO, so the whole-school form is offered. Nothing is ever promoted into it.
+    const probeYear = await owner.academicYear.create({
+      data: { schoolId: school.id, name: `Browser probe ${stamp}`, startDate: new Date("2099-09-01"), endDate: new Date("2100-07-31") },
+      select: { id: true },
+    });
+    return { userId: user.id, assessmentId: assessment.id, termId: term.id, classGroupId, subjectId: subject.id, sourceYearId: term.academicYearId, probeYearId: probeYear.id, schoolId: school.id };
   });
   Object.assign(fixtures, setup);
   const gridPath = `/assessments/${setup.assessmentId}`;
@@ -130,7 +142,7 @@ async function main() {
     await send("Runtime.enable");
     await send("Network.enable");
     await send("Network.setCookie", { name: "school_os_session", value: token, domain: new URL(BASE).hostname, path: "/" });
-    const open = async (path) => {
+    const open = async (path, selector = 'input[name^="score:"]') => {
       await send("Page.navigate", { url: BASE + path });
       for (let i = 0; i < 240; i += 1) {
         await sleep(500);
@@ -138,7 +150,7 @@ async function main() {
         // arrives; React attaches its handlers later (on a cold dev server, seconds later), and an event
         // dispatched in between is lost. Typing into an un-hydrated page reads as the validation being
         // broken, which it is not. React marks a node it controls with a `__reactProps$…` key.
-        if ((await ev(`(()=>{const el=document.querySelector('input[name^="score:"]');return String(document.readyState === "complete" && !!el && Object.keys(el).some((k)=>k.startsWith("__reactProps")))})()`)) === "true") return true;
+        if ((await ev(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});return String(document.readyState === "complete" && !!el && Object.keys(el).some((k)=>k.startsWith("__reactProps")))})()`)) === "true") return true;
       }
       return false;
     };
@@ -214,6 +226,30 @@ async function main() {
     stored = await rows();
     check("and both absences are stored (a disabled box sent none, and the sheet saved nothing for them)", stored.filter((r) => r.isAbsent).map((r) => r.studentId).sort().join() === [b, c].sort().join(), stored.map((r) => `${r.rawScore === null ? "-" : Number(r.rawScore)}${r.isAbsent ? "A" : ""}`).join(" "));
     check("beside the mark that was already there", stored.some((r) => r.studentId === a && Number(r.rawScore) === 8));
+
+    // --- the promotions form -----------------------------------------------------------------------------
+    console.log("\nThe promotions form");
+    check("the whole-school form opens", await open(`/promotions?from=${setup.sourceYearId}&to=${setup.probeYearId}`, 'input[type="checkbox"][name="class"]'));
+    const states = () => read(`[...document.querySelectorAll('input[type="checkbox"][name="class"]')].map(b=>({v:b.value,c:b.checked,d:b.disabled}))`);
+    const before0 = await states();
+    const enabled = before0.filter((b) => !b.d);
+    check("with at least two classes that can be ticked", enabled.length >= 2, `${enabled.length} classes`);
+    // Untick one: the state now differs from the default, which is what a reset would lose.
+    await ev(`document.querySelector('input[type="checkbox"][name="class"][value="${enabled[0].v}"]').click()`);
+    await sleep(500);
+    const before = await states();
+    check("unticking a class unticks it, and the rest stay ticked", before.find((b) => b.v === enabled[0].v)?.c === false && before.filter((b) => !b.d && b.v !== enabled[0].v).every((b) => b.c));
+    // Force a REFUSAL: promote the source year into itself. The action refuses before it reads or writes anything.
+    await ev(`document.querySelector('input[name="targetYearId"]').value = document.querySelector('input[name="sourceYearId"]').value`);
+    await ev(`[...document.querySelectorAll("button")].find((x)=>/^Roll /.test(x.textContent.trim())).click()`);
+    check("the action refuses, and says why", await until(`/cannot be promoted into the year it is already in/.test(document.body.innerText)`, 120_000));
+    await sleep(1500); // the form reset lands after the result renders
+    const after = await states();
+    check("every tick is where it was before the action (React resets the form; a controlled checkbox is not put back)", JSON.stringify(after) === JSON.stringify(before), `${after.filter((b) => b.c).length} ticked of ${after.length}`);
+    const buttonSays = await ev(`(()=>{const b=[...document.querySelectorAll("button")].find((x)=>/^Roll /.test(x.textContent.trim()));return b?b.textContent.trim():""})()`);
+    check("and the button's count agrees with the boxes on screen", new RegExp(`^Roll ${after.filter((b) => b.c).length} class`).test(buttonSays ?? ""), buttonSays ?? "");
+    const placed = await db((owner) => owner.enrollment.count({ where: { academicYearId: setup.probeYearId } }));
+    check("and nothing was promoted: the target year has no enrolments", placed === 0, `${placed} enrolments`);
   } finally {
     if (browser) browser.close();
     await removeFixtures();
