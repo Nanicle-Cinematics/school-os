@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP } from "@/lib/permissions";
+import { MERGE_PUPILS } from "@/lib/permissions";
 import { getDuplicateCards, type DuplicateSide } from "@/lib/duplicate-data";
 import { REASON_TEXT } from "@/lib/duplicate-detect";
 import { mergeDuplicate } from "@/lib/duplicate-actions";
@@ -38,7 +38,7 @@ function Facts({ side }: { side: DuplicateSide }) {
 }
 
 export default async function DuplicatesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  await requireRole(LEADERSHIP);
+  await requireRole(MERGE_PUPILS);
   const query = await searchParams;
   const cards = await getDuplicateCards();
   const error = typeof query.error === "string" ? query.error : "";

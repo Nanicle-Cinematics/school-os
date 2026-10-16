@@ -3,18 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP } from "@/lib/permissions";
+import { MERGE_PUPILS } from "@/lib/permissions";
 import { tenantTransaction } from "@/lib/prisma";
 import { setTenantContext } from "@/lib/tenant-context";
 import { ownsStudents } from "@/lib/ownership";
 import { mergeStudents } from "@/lib/student-merge";
 
 /**
- * Merge one pupil record into another: leadership only, because it moves a child's money and marks.
+ * Merge one pupil record into another: leadership and the IT admin, because it moves a child's money and marks.
  * Every refusal is a redirect back to the screen with the reason; nothing is changed unless the merge returns ok.
  */
 export async function mergeDuplicate(formData: FormData): Promise<void> {
-  const auth = await requireRole(LEADERSHIP);
+  const auth = await requireRole(MERGE_PUPILS);
   setTenantContext(auth.tenant);
 
   const a = String(formData.get("a") ?? "");

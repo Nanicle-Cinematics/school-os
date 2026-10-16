@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
+import { MERGE_PUPILS, OFFICE, canAccess } from "@/lib/permissions";
 import { getStudentFormOptions, getStudentList } from "@/lib/student-data";
 import { Users } from "lucide-react";
 import { Avatar, PageHeader, StatusBadge, filterClass } from "../ui";
@@ -47,7 +47,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
   });
   const { classGroups, houses, programmes } = await getStudentFormOptions();
   const canEdit = canAccess(auth.roles, OFFICE);
-  const canMerge = canAccess(auth.roles, LEADERSHIP);
+  const canMerge = canAccess(auth.roles, MERGE_PUPILS);
 
   const filtered = Boolean(query || classGroupId || status || placement);
   // Carried into the paging links so a page change keeps the filters.
