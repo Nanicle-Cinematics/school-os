@@ -20,6 +20,7 @@
  * copy quietly disagreeing with it. Its SUBJECT rows are left alone too (the
  * results engine skips every published pupil), so the card stays consistent.
  */
+import "./owner-env.mts";
 import { PrismaClient } from "@prisma/client";
 import { computeClassResults } from "@/lib/results-engine";
 

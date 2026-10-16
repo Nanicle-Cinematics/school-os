@@ -28,6 +28,7 @@
  * Use the session pooler `aws-0-eu-central-1.pooler.supabase.com:5432`, where
  * the username is `postgres.<ref>` rather than plain `postgres`.
  */
+import "./owner-env.mts";
 import { createInterface } from "node:readline/promises";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
