@@ -1728,6 +1728,32 @@ A class-teacher level with no form teacher set says that instead of asking
 someone to pick the same name nine times — the fix is the form teacher field,
 not these rows.
 
+## Duplicate pupils
+
+`/students/duplicates` (LEADERSHIP, linked as "Find duplicates" on the Students page) lists pairs that look like one
+child entered twice and lets the head merge them. Added 2026-10-17 after a school's roll showed 298 on the
+dashboard against 279 enrolled; most of that gap was soft-deleted and unplaced pupils, not duplicates (8 live pairs
+among 290), but nothing could find or merge a real one.
+
+- **Detection is a suggestion** (`duplicate-detect.ts`, pure): same name and birthday, names swapped, a slip in ONE
+  part of the name, or the same name and a parent's phone in common. Twins are the hard case (same surname, same
+  birthday, first names a letter apart), so a loose whole-name match was dropped after `verify:duplicates` suggested
+  Kofi/Kojo Mensah. A missing birthday never matches another missing one. Nothing is stored about a pair, so a pair
+  that is really two children is suggested again until one of them changes: a "not a duplicate" memory needs a table
+  (migration, RLS) and is not built.
+- **A merge refuses rather than guesses** (`student-merge.ts`). Eleven tables point at a pupil and eight carry a
+  unique key including them, so when both records hold the same key (a score for the same test, a report card for the
+  same term, a live invoice for the same term, a register day, a class placement in the same year) it changes nothing
+  and names the table. Safe overlaps are settled: a parent linked to both keeps one link, a duplicate discount or a
+  withdrawn placement is dropped, a cancelled invoice stays behind. Everything else moves; blank fields on the kept
+  record are filled from the other; the other is soft-deleted and `student.merge` goes to the audit log.
+- **The action** (`duplicate-actions.ts`) is `requireRole(LEADERSHIP)`, reads both ids back with `ownsStudents`, needs
+  the confirmation box, and runs the engine in one `tenantTransaction`.
+- **`verify:duplicates`** runs the real merge inside transactions it rolls back, and was forced red three ways (no
+  soft delete, a second primary parent, no score conflict). Its first version of the primary-parent check was vacuous:
+  the fixture linked the same parent to both records, so no link was ever moved. Look at what a fixture can reach.
+- Not built: a warning at admission, and a "not a duplicate" memory.
+
 ## The look
 
 The palette lives in ONE place: the `@theme` block in `src/app/globals.css`.

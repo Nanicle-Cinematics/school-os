@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { OFFICE, canAccess } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { getStudentFormOptions, getStudentList } from "@/lib/student-data";
 import { Users } from "lucide-react";
 import { Avatar, PageHeader, StatusBadge, filterClass } from "../ui";
@@ -47,6 +47,7 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
   });
   const { classGroups, houses, programmes } = await getStudentFormOptions();
   const canEdit = canAccess(auth.roles, OFFICE);
+  const canMerge = canAccess(auth.roles, LEADERSHIP);
 
   const filtered = Boolean(query || classGroupId || status || placement);
   // Carried into the paging links so a page change keeps the filters.
@@ -70,6 +71,14 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
         action={
           canEdit ? (
             <div className="flex items-center gap-2">
+              {canMerge ? (
+                <Link
+                  href="/students/duplicates"
+                  className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Find duplicates
+                </Link>
+              ) : null}
               <Link
                 href="/students/import"
                 className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
