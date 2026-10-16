@@ -25,12 +25,15 @@ export async function getDashboard(schoolId: string) {
     include: { academicYear: true },
   });
 
+  // ⚠️ `deletedAt: null` on every one of these. Deleting a pupil or a staff member is a soft delete that leaves
+  // `status` at ACTIVE, so a count on status alone kept counting people the office had already removed: the
+  // dashboard read 298 pupils while the Students page held 290 (8 deleted duplicates still ACTIVE).
   const [students, staff, classGroups, boys, girls] = await Promise.all([
-    prisma.student.count({ where: { schoolId, status: "ACTIVE" } }),
-    prisma.staff.count({ where: { schoolId, status: "ACTIVE" } }),
+    prisma.student.count({ where: { schoolId, status: "ACTIVE", deletedAt: null } }),
+    prisma.staff.count({ where: { schoolId, status: "ACTIVE", deletedAt: null } }),
     prisma.classGroup.count({ where: { schoolId } }),
-    prisma.student.count({ where: { schoolId, status: "ACTIVE", gender: "MALE" } }),
-    prisma.student.count({ where: { schoolId, status: "ACTIVE", gender: "FEMALE" } }),
+    prisma.student.count({ where: { schoolId, status: "ACTIVE", deletedAt: null, gender: "MALE" } }),
+    prisma.student.count({ where: { schoolId, status: "ACTIVE", deletedAt: null, gender: "FEMALE" } }),
   ]);
 
   const invoiceTotals = term

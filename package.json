@@ -61,6 +61,7 @@
     "verify:password": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-password.mts",
     "verify:session-policy": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-session-policy.mts",
     "verify:score-limits": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-score-limits.mts",
+    "verify:dashboard-counts": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-dashboard-counts.mts",
     "verify:home-screen-label": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-home-screen-label.mts",
     "verify:icon-compose": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-icon-compose.mts",
     "verify:owner-env": "tsx scripts/verify-owner-env.mts",
