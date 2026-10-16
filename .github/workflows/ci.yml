@@ -130,6 +130,8 @@ jobs:
       - name: Results — grading, weighting, ranking, aggregate
         run: npm run verify:results
 
+      - name: Owner scripts ignore dev env
+        run: npm run verify:owner-env
       - name: GES baseline — the ladder, nursery to JHS 3, and what adding to it does to an existing school
         run: npm run verify:ges-baseline
 
