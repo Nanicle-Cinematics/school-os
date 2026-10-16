@@ -1730,7 +1730,7 @@ not these rows.
 
 ## Duplicate pupils
 
-`/students/duplicates` (LEADERSHIP, linked as "Find duplicates" on the Students page) lists pairs that look like one
+`/students/duplicates` (`MERGE_PUPILS`: leadership and the IT admin, since 2026-10-16; linked as "Find duplicates" on the Students page) lists pairs that look like one
 child entered twice and lets the head merge them. Added 2026-10-17 after a school's roll showed 298 on the
 dashboard against 279 enrolled; most of that gap was soft-deleted and unplaced pupils, not duplicates (8 live pairs
 among 290), but nothing could find or merge a real one.
@@ -1747,7 +1747,7 @@ among 290), but nothing could find or merge a real one.
   and names the table. Safe overlaps are settled: a parent linked to both keeps one link, a duplicate discount or a
   withdrawn placement is dropped, a cancelled invoice stays behind. Everything else moves; blank fields on the kept
   record are filled from the other; the other is soft-deleted and `student.merge` goes to the audit log.
-- **The action** (`duplicate-actions.ts`) is `requireRole(LEADERSHIP)`, reads both ids back with `ownsStudents`, needs
+- **The action** (`duplicate-actions.ts`) is `requireRole(MERGE_PUPILS)`, reads both ids back with `ownsStudents`, needs
   the confirmation box, and runs the engine in one `tenantTransaction`.
 - **`verify:duplicates`** runs the real merge inside transactions it rolls back, and was forced red three ways (no
   soft delete, a second primary parent, no score conflict). Its first version of the primary-parent check was vacuous:

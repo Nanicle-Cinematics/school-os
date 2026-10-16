@@ -87,6 +87,16 @@ export const MARKING: Role[] = [...LEADERSHIP, "TEACHER", "IT_ADMIN"];
 export const MARK_ANY_CLASS: Role[] = [...LEADERSHIP, "IT_ADMIN"];
 
 /**
+ * Find and merge duplicate pupil records (/students/duplicates).
+ *
+ * IT_ADMIN is here on the school's request (2026-10-16): the IT admin keeps the
+ * register clean. ⚠️ A merge moves the surviving child's invoices, payments and
+ * discounts, so this is the one place IT_ADMIN changes money records, and only
+ * by re-pointing them at the same child; no amount is edited.
+ */
+export const MERGE_PUPILS: Role[] = [...LEADERSHIP, "IT_ADMIN"];
+
+/**
  * The class register — the third and only other place a teacher goes.
  *
  * A form teacher keeps a register of their own class, boys then girls, and

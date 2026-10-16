@@ -180,7 +180,9 @@ try {
 
 console.log("\nWiring");
 const action = code("src/lib/duplicate-actions.ts");
-check("the merge action is leadership only", /requireRole\(LEADERSHIP\)/.test(action));
+check("the merge action is leadership and the IT admin only", /requireRole\(MERGE_PUPILS\)/.test(action));
+check("MERGE_PUPILS is leadership plus IT_ADMIN and nothing else", /MERGE_PUPILS: Role\[\] = \[\.\.\.LEADERSHIP, "IT_ADMIN"\]/.test(code("src/lib/permissions.ts")));
+check("the page and the button use the same set", /requireRole\(MERGE_PUPILS\)/.test(code("src/app/(app)/students/duplicates/page.tsx")) && /canAccess\(auth\.roles, MERGE_PUPILS\)/.test(code("src/app/(app)/students/page.tsx")));
 check("it reads both ids back through the tenant client before acting", /ownsStudents\(\[a, b\]\)/.test(action));
 check("it refuses without the confirmation box", /confirm/.test(action) && /!== "yes"/.test(action));
 check("the engine writes the audit action the dashboard has a phrase for", /"student\.merge"/.test(code("src/lib/student-merge.ts")) && /"student\.merge"/.test(code("src/lib/dashboard-data.ts")));
