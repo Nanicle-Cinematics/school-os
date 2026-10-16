@@ -3,6 +3,7 @@ import "server-only";
 import { StudentStatus, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { netOutstanding } from "@/lib/invoice-engine";
+import { unplacedWhere } from "@/lib/class-roster";
 
 // Queries are sequential rather than Promise.all — see the note in class-data.ts:
 // the pool holds one connection, so a fan-out only queues and then times out.
@@ -13,6 +14,8 @@ export type StudentFilters = {
   q?: string;
   classGroupId?: string;
   status?: string;
+  /** "none": on the roll but in no class this academic year (see `unplacedWhere`). */
+  placement?: string;
   page?: number;
 };
 
@@ -20,8 +23,14 @@ export async function getStudentList(filters: StudentFilters) {
   const query = filters.q?.trim() ?? "";
   const page = Math.max(1, filters.page ?? 1);
 
+  const year =
+    filters.placement === "none"
+      ? await prisma.academicYear.findFirst({ where: { isCurrent: true }, select: { id: true } })
+      : null;
+
   const where: Prisma.StudentWhereInput = {
     deletedAt: null,
+    ...(year ? unplacedWhere(year.id) : {}),
     ...(filters.classGroupId ? { currentClassGroupId: filters.classGroupId } : {}),
     ...(filters.status && filters.status in StudentStatus
       ? { status: filters.status as StudentStatus }

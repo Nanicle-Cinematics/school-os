@@ -35,23 +35,26 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
   const query = typeof params.q === "string" ? params.q.trim() : "";
   const classGroupId = typeof params.class === "string" ? params.class : "";
   const status = typeof params.status === "string" ? params.status : "";
+  const placement = params.placement === "none" ? "none" : "";
   const page = Number(params.page) > 0 ? Number(params.page) : 1;
 
   const { students, matching, total, pageCount } = await getStudentList({
     q: query,
     classGroupId,
     status,
+    placement,
     page,
   });
   const { classGroups, houses, programmes } = await getStudentFormOptions();
   const canEdit = canAccess(auth.roles, OFFICE);
 
-  const filtered = Boolean(query || classGroupId || status);
+  const filtered = Boolean(query || classGroupId || status || placement);
   // Carried into the paging links so a page change keeps the filters.
   const carry = new URLSearchParams();
   if (query) carry.set("q", query);
   if (classGroupId) carry.set("class", classGroupId);
   if (status) carry.set("status", status);
+  if (placement) carry.set("placement", placement);
 
   const pageHref = (target: number) => {
     const next = new URLSearchParams(carry);
@@ -83,7 +86,17 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
         }
       />
 
+      {placement ? (
+        <p className="rounded-card border border-hairline bg-surface px-4 py-3 text-sm text-slate-700">
+          Showing pupils on the roll with <strong>no class this year</strong>. Open one and use “Place in class”.{" "}
+          <Link href="/students" className="font-semibold text-brand-ink hover:underline">
+            Show everyone
+          </Link>
+        </p>
+      ) : null}
+
       <form className="flex flex-wrap items-center gap-2">
+        {placement ? <input type="hidden" name="placement" value={placement} /> : null}
         <input
           type="search"
           name="q"
