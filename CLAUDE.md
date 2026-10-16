@@ -289,59 +289,10 @@ level security` on them. `verify:isolation` proves the verdict flags the owner
 as the restricted role, once as the school and once as a school that does not
 exist, instead of the three tables it used to name.
 
-⚠️ **What row security does NOT defend against** (audited 2026-10-10). It is a net
-under a query that forgot its school. It is not a wall around a process that has
-been subverted, and "enforcement is LIVE" should not be read as one:
+⚠️ **Row security is a net under a query that forgot its school, not a wall around a subverted process.**
+Detail of what it does not defend against, and the outstanding production items, are kept in
+`CLAUDE.local.md` (private, not committed). Ask the maintainer.
 
-- **The bypass is a setting any statement can change.** The policy passes every
-  row when `app.bypass_rls` is `'on'`, and that is a plain `set_config`, so code
-  that can run an arbitrary SQL string can lift isolation for itself. On a
-  development database one such statement took a session scoped to a school of
-  44 pupils to all 110 in the database. Raw SQL today is 3 tagged templates
-  (advisory locks) and 2 fixed strings in `prisma.ts`; `npm run verify:raw-sql`
-  (source-only, in CI) fails on `$queryRawUnsafe`, `$executeRawUnsafe` or
-  `Prisma.raw` anywhere else in `src/`. A second database role for the bypass
-  would close it properly, at the cost of a second connection pool that this
-  instance cannot spare.
-- **`User` and `Session` are scoped by policies of their own (2026-10-10).** They had
-  none: sign-in happens before a school is known, so the generic
-  `schoolId = current school` template could not apply, and from any school's context
-  the app role could read every login's password hash, encrypted TOTP secret and
-  recovery-code hashes and every session token hash (19 users across 5 schools and 33
-  sessions on the development database). `enableAuthTables` in `apply-rls.mjs` writes
-  them: a school sees a **login** when it is that login's home school or the login holds
-  a membership there, and a **session** on the same terms or when the session is working
-  in that school. Nothing but the bypass may write a Session (`WITH CHECK` admits the
-  bypass alone): sign-in, school switching and sign-out all run under it already.
-  `verify:isolation` proves it as the restricted role against the owner's view of what
-  exists (the demo school sees 9 of 19 logins and 13 of 33 sessions), and every write
-  probe runs in a rolled-back transaction so a missing policy cannot cost a real login
-  its sessions. Four things it took, each found by forcing a check red:
-
-  - ⚠️ **End the sessions BEFORE removing the membership.** The membership is what
-    makes a session visible to the school, so deleting it first hid any session that
-    had not chosen a school yet, and `deleteMany` removed nothing while looking like it
-    had worked: a removed person stayed signed in. `removeUserAccess` and the staff
-    removal now delete sessions first; `verify:actions` (`loginGuards`) fails with one
-    session left if that order is undone.
-  - ⚠️ **Taking on a login that has no membership anywhere is done under the bypass.**
-    Its home school can be another school's (it was removed there), which this school's
-    policy hides, so the update through the tenant client found nothing. `createUserAccount`
-    does it before the transaction; a transaction that then fails leaves a login with no
-    membership, the state that branch already treats as reusable.
-  - **`Session` is in the tenant-context guard by name.** It has no `schoolId` column, so
-    reading the models off the schema missed it and an unscoped read would have been
-    answered with nothing instead of refused. `TENANT_MODELS` in `prisma.ts` lists it.
-  - **A login that belongs to two schools is visible to both,** and so are its
-    sessions: a reset or a suspension from either must be able to end all of them, and
-    either school can already reset that password. Tenant tables join `User` only through
-    optional relations (recorder, author, actor), so a login a school cannot see reads as
-    no name rather than an error.
-
-  **Applying it:** the policies exist where `npm run db:rls` has been run. Merging does
-  not change production; `audit:rls` (daily, and on every push to main) now expects them
-  and stays red until `apply-rls.mjs` has been run against production — the ordering
-  working, not a failure.
 - **Foreign-reference constraints ignore row security.** A school can insert a
   row pointing at another school's id and Postgres accepts it. The row cannot be
   read back through a join, so the harm is untidy data and a way to learn that an
@@ -2168,28 +2119,9 @@ layout already had to learn.
 shows its empty state on a freshly seeded database. That is correct, not broken.
 To see it populated, insert rows and delete them again.
 
-## Open items (as of 2026-10-14)
+## Open items
 
-One decision is outstanding after the audit. It does not block a release. (The second, a one-time
-enrolment code for platform admins, shipped on 2026-10-14: see "The platform admin has a second factor".)
-
-1. **Production has not been confirmed to carry the `User` and `Session` policies.**
-   Merging #158 changed the code and `apply-rls.mjs`; policies exist only where
-   `npm run db:rls` has been run. Until it is run against production, every school's
-   context can read all logins and session token hashes, and the "Production checks —
-   RLS coverage and schema drift" job on `main` stays red (the intended order, not a
-   fault). To apply, from a checkout of `main` with dependencies installed:
-
-   ```
-   node --env-file=.env.prod scripts/apply-rls.mjs    # DIRECT_URL = production, port 5432
-   node --env-file=.env.prod scripts/audit-rls.mjs    # expect a pass
-   ```
-
-   It is a Node script, not SQL: it does not run in the Supabase SQL editor. The
-   application behaves the same before and after. If it prints a new `APP_DATABASE_URL`
-   password, production's role was missing; do not paste that into Vercel without
-   checking. Afterwards, try removing a user's access, removing a staff member and
-   re-admitting a login that has no membership.
+Tracked privately in `CLAUDE.local.md`.
 
 ## Before you push
 
