@@ -31,6 +31,11 @@ export async function schoolIcon(
 
   const mark = await sharp(crestBytes, { limitInputPixels: MAX_CREST_PIXELS })
     .resize(content, content, { fit: "contain", background: { r: 255, g: 255, b: 255, alpha: 0 } })
+    // ⚠️ Name the format. Left alone, sharp writes the SOURCE's: a crest uploaded as a JPEG comes out as a JPEG,
+    // which has no transparency, so the padding added by `contain` is flattened to BLACK. A crest that is not
+    // exactly square then showed a black bar down each side on the home screen (and nowhere on paper, which
+    // never goes through here). PNG keeps the padding transparent, and it lands on the white square below.
+    .png()
     .toBuffer();
 
   return sharp({
