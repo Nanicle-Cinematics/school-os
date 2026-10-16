@@ -5,7 +5,8 @@ import { ThemeToggle } from "../theme-toggle";
 import { SkinPicker } from "../skin-picker";
 import { logout } from "@/lib/auth-actions";
 import { requireGuardian } from "@/lib/portal-auth";
-import { schoolIconUrls } from "@/lib/manifest-data";
+import { schoolIconUrls, schoolManifestUrl } from "@/lib/manifest-data";
+import { homeScreenLabel } from "@/lib/home-screen-label";
 
 /**
  * The parent portal's chrome.
@@ -29,19 +30,25 @@ import { schoolIconUrls } from "@/lib/manifest-data";
  */
 export async function generateMetadata(): Promise<Metadata> {
   const ctx = await requireGuardian();
+  const label = homeScreenLabel({ shortName: ctx.schoolShortName, name: ctx.schoolName });
   const icons = schoolIconUrls(ctx.schoolId, ctx.schoolCrestUrl);
-  if (!icons) {
-    return {};
-  }
   return {
-    manifest: icons.manifest,
-    icons: {
-      icon: [
-        { url: icons.icon192, sizes: "192x192", type: "image/png" },
-        { url: icons.icon512, sizes: "512x512", type: "image/png" },
-      ],
-      apple: [{ url: icons.appleTouch, sizes: "180x180", type: "image/png" }],
-    },
+    // The name under the icon: the school's, not "School OS". `appleWebApp` replaces the root layout's whole
+    // object, so its other fields are repeated here.
+    applicationName: label,
+    appleWebApp: { capable: true, title: label, statusBarStyle: "default" },
+    manifest: schoolManifestUrl(ctx.schoolId, ctx.schoolCrestUrl),
+    ...(icons
+      ? {
+          icons: {
+            icon: [
+              { url: icons.icon192, sizes: "192x192", type: "image/png" },
+              { url: icons.icon512, sizes: "512x512", type: "image/png" },
+            ],
+            apple: [{ url: icons.appleTouch, sizes: "180x180", type: "image/png" }],
+          },
+        }
+      : {}),
   };
 }
 export default async function PortalLayout({ children }: LayoutProps<"/">) {

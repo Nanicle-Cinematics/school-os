@@ -42,3 +42,14 @@ export function schoolIconUrls(schoolId: string, crestUrl: string | null) {
     appleTouch: `/api/school-icon/${schoolId}/apple-touch?v=${v}`,
   };
 }
+
+/**
+ * The per-school manifest url, for a school WITH OR WITHOUT a crest: the manifest carries the school's own
+ * home-screen label (`short_name`), which every school has, so it no longer depends on an upload. `v` is the
+ * crest's version when there is one; a changed short name reaches an Android install when the one-hour cache on
+ * the route lapses.
+ */
+export function schoolManifestUrl(schoolId: string, crestUrl: string | null) {
+  const v = crestUrl ? (new URL(crestUrl, "http://school-os.invalid").searchParams.get("v") ?? "0") : "0";
+  return `/api/manifest?school=${encodeURIComponent(schoolId)}&v=${v}`;
+}

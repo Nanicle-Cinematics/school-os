@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
 import { withBypass } from "@/lib/tenant-context";
 import { schoolIconUrls } from "@/lib/manifest-data";
+import { homeScreenLabel } from "@/lib/home-screen-label";
 import {
   busyResponse,
   isBusy,
@@ -17,7 +18,7 @@ import {
  * Reads `public/manifest.webmanifest` off disk rather than keeping a second
  * copy of its fields — name, description, start_url, theme colours — so this
  * can never drift from the generic one the way a hand-kept duplicate would.
- * The ONLY thing this route ever changes is `icons`.
+ * What this route changes: `icons` (when the school has a crest) and `short_name`, the label under the icon.
  *
  * ⚠️ The school comes from `?school=`, NOT the session cookie. A browser
  * fetches a manifest with credentials mode "omit" (see `schoolIconUrls`), so
@@ -27,8 +28,8 @@ import {
  * reason the icon route is: the response says nothing but which crest a
  * school prints on its bills.
  *
- * A school with no crest is redirected to the static file outright rather than
- * served an identical copy of it: one fewer thing that could drift.
+ * A school that does not exist is redirected to the static file. One with no crest is served its own
+ * manifest, because the label under the icon is the school's whether or not it uploaded one.
  */
 export async function GET(request: Request) {
   // Redirected by hand rather than `Response.redirect`, whose headers cannot be set: this answer
@@ -51,10 +52,10 @@ export async function GET(request: Request) {
   // No session, so no tenant context to set; the read is scoped to the one
   // school named in the url, exactly as /api/school-icon does it. Inside the
   // public budget, which keeps a flood from queueing the whole site behind it.
-  let school: { crestUrl: string | null } | null;
+  let school: { crestUrl: string | null; name: string; shortName: string | null } | null;
   try {
     school = await publicLookup(() =>
-      withBypass(() => prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true } })),
+      withBypass(() => prisma.school.findUnique({ where: { id: schoolId }, select: { crestUrl: true, name: true, shortName: true } })),
     );
   } catch (error) {
     if (isBusy(error)) {
@@ -62,18 +63,23 @@ export async function GET(request: Request) {
     }
     throw error;
   }
-  const icons = schoolIconUrls(schoolId, school?.crestUrl ?? null);
-  if (!icons) {
+  // No such school: the generic file. A school with no crest still gets ITS manifest, for the label.
+  if (!school) {
     return fallback();
   }
+  const icons = schoolIconUrls(schoolId, school.crestUrl);
 
   const raw = await readFile(join(process.cwd(), "public", "manifest.webmanifest"), "utf8");
   const manifest = JSON.parse(raw);
-  manifest.icons = [
-    { src: icons.icon192, sizes: "192x192", type: "image/png", purpose: "any" },
-    { src: icons.icon512, sizes: "512x512", type: "image/png", purpose: "any" },
-    { src: icons.maskable512, sizes: "512x512", type: "image/png", purpose: "maskable" },
-  ];
+  // The name under the icon is the school's short name; `name` (install prompt, splash) stays "School OS".
+  manifest.short_name = homeScreenLabel(school);
+  if (icons) {
+    manifest.icons = [
+      { src: icons.icon192, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: icons.icon512, sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: icons.maskable512, sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ];
+  }
 
   return Response.json(manifest, {
     headers: {

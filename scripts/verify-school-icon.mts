@@ -19,6 +19,7 @@
  *   npm run verify:school-icon
  */
 import sharp from "sharp";
+import { homeScreenLabel } from "@/lib/home-screen-label";
 import { demoSchool, withOwner } from "./fixture.mjs";
 
 const BASE = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
@@ -107,9 +108,10 @@ async function main() {
 
     console.log("\nThe manifest");
     const man = await get(`/api/manifest?school=${school.id}&v=1`, 6);
-    let json: { icons?: { src: string }[] } = {};
+    let json: { icons?: { src: string }[]; short_name?: string; name?: string } = {};
     try { json = JSON.parse(man.body.toString("utf8")); } catch { /* reported below */ }
     check("a school with a crest gets its own manifest", man.status === 200 && Array.isArray(json.icons), `HTTP ${man.status}`);
+    check("whose short_name, the label under the icon, is the school's own (name stays the product's)", json.short_name === homeScreenLabel(school) && json.name === "School OS", `${json.short_name} / ${json.name}`);
     check("whose icons point at that school's icon route", (json.icons ?? []).length === 3 && (json.icons ?? []).every((i) => i.src.startsWith(`/api/school-icon/${school.id}/`)));
     for (const [label, path] of [
       ["no school at all", "/api/manifest"],
