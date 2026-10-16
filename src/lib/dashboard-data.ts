@@ -786,6 +786,7 @@ const ACTIVITY: Record<
   "gradingScale.delete": { kind: "admin", title: () => "A grading scale was removed", detail: "Grading" },
   "gradeBand.delete": { kind: "admin", title: () => "A grade band was removed", detail: "Grading" },
   "student.delete": { kind: "people", title: () => "A pupil record was removed", detail: "Students" },
+  "student.merge": { kind: "people", title: () => "Two pupil records were merged into one", detail: "Students" },
   "student.restore": { kind: "people", title: () => "A removed pupil record was restored", detail: "Students" },
   "staff.remove": {
     kind: "people",
