@@ -30,7 +30,7 @@ function run(preamble: boolean) {
     `${preamble ? 'import "./owner-env.mts";\n' : ""}import { PrismaClient } from "@prisma/client";\nnew PrismaClient();\nconsole.log(JSON.stringify({ app: process.env.APP_DATABASE_URL ?? "", owner: process.env.DATABASE_URL ?? "" }));\n`,
   );
   try {
-    const env: Record<string, string | undefined> = { ...process.env, DATABASE_URL: PROD };
+    const env = { ...process.env, DATABASE_URL: PROD } as NodeJS.ProcessEnv;
     delete env.APP_DATABASE_URL;
     const out = spawnSync("node_modules/.bin/tsx", [probe], { env, encoding: "utf8" });
     const line = out.stdout.trim().split("\n").pop() ?? "{}";
