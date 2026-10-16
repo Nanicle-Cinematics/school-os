@@ -130,6 +130,9 @@ jobs:
       - name: Results — grading, weighting, ranking, aggregate
         run: npm run verify:results
 
+      - name: Home-screen label — the school's short name under its icon
+        run: npm run verify:home-screen-label
+
       - name: Icon compose — padding never goes black
         run: npm run verify:icon-compose
 
