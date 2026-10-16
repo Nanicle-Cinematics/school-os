@@ -2028,7 +2028,17 @@ that resolves it — `getAttention` in `dashboard-data.ts`:
 - **Fees** — handed the counts the stat cards already computed, so the debtors
   are not queried twice.
 
-Five aggregate queries, deliberately. This runs on every dashboard load over a
+- **Placement** — a pupil on the roll (ACTIVE, not deleted) with no enrolment this year that is not
+  WITHDRAWN: on no register, no mark sheet, no class invoice run. `unplacedWhere` in `class-roster.ts` is
+  the one rule; the item links to `/students?placement=none`, which uses the same rule, so the number is the
+  list behind it. (A school's Students page said 290 on roll while 279 were enrolled, and nothing said why.)
+  `verify:unplaced` plants one pupil of each kind and compares the card, the filter and a long-way recount.
+
+⚠️ **A soft delete leaves `Student.status` and `Staff.status` ACTIVE.** Any count on status alone includes the
+people the office removed: the dashboard read 298 pupils against 290 on the Students page. Always add
+`deletedAt: null`; `verify:dashboard-counts` pins the dashboard's four counts.
+
+Six aggregate queries, deliberately. This runs on every dashboard load over a
 link where a round trip is seconds, so a rule needing a per-row query does not
 belong here.
 

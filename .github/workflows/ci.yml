@@ -220,6 +220,9 @@ jobs:
       # dashboard as raw strings ("data export · Activity · Grace Amoah") while
       # verify:activity sat in package.json with the answer in it. They cost
       # seconds; the reason they were not here is that nobody added them.
+      - name: Unplaced pupils — the attention item and the Students filter agree
+        run: npm run verify:unplaced
+
       - name: Dashboard counts — deleted people are not counted
         run: npm run verify:dashboard-counts
 

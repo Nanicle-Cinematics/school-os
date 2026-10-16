@@ -34,3 +34,20 @@ export function rosterWhere(academicYearId: string, classGroupId: string): Prism
     student: { deletedAt: null },
   };
 }
+
+/**
+ * Pupils who are on the roll but sit in NO class this academic year.
+ *
+ * "On the roll" is `Student.status` ACTIVE and not deleted; "in a class" is an enrolment for the year that is not
+ * WITHDRAWN, which is the same test `rosterWhere` uses for a class. A pupil with none appears on no register,
+ * no mark sheet and no class invoice run, and nothing else says so: the Students page lists them like anyone
+ * (it counts the live roll, 290 in one school, against 279 enrolled). The dashboard's attention card and the
+ * Students page's "no class" filter both read this, so the number on one is the list behind the other.
+ */
+export function unplacedWhere(academicYearId: string): Prisma.StudentWhereInput {
+  return {
+    deletedAt: null,
+    status: "ACTIVE",
+    enrollments: { none: { academicYearId, status: { not: "WITHDRAWN" } } },
+  };
+}

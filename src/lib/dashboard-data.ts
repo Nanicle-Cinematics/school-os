@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { unplacedWhere } from "@/lib/class-roster";
 import type { Role } from "@prisma/client";
 import { canAccess, FINANCE, OFFICE } from "@/lib/permissions";
 
@@ -126,7 +127,7 @@ export async function getDashboard(schoolId: string) {
 
 export type AttentionItem = {
   /** Stable key, and what the row is ABOUT. Not what colour it wears. */
-  kind: "marking" | "fees" | "results" | "staffing" | "setup";
+  kind: "marking" | "fees" | "results" | "staffing" | "setup" | "placement";
   /**
    * ⚠️ What this BLOCKS, which is a different question from what it is about.
    *
@@ -257,6 +258,21 @@ export async function getAttention(
         detail: `Across ${classes} ${classes === 1 ? "class" : "classes"} this term`,
         href: "/assessments/sheet",
         cta: "Open",
+      });
+    }
+
+    // 5. Placement. A pupil on the roll with no class this year is on no register and no mark sheet, and nothing
+    //    else says so. The same rule filters the Students page, so this number is the list behind it.
+    const unplaced = await prisma.student.count({ where: { schoolId, ...unplacedWhere(term.academicYearId) } });
+    if (unplaced > 0) {
+      items.push({
+        kind: "placement",
+        severity: "soon",
+        tag: "Pupils",
+        title: `${unplaced} ${unplaced === 1 ? "pupil has" : "pupils have"} no class this year`,
+        detail: "They are on the roll but on no register or mark sheet until placed in a class",
+        href: "/students?placement=none",
+        cta: "Place",
       });
     }
 
