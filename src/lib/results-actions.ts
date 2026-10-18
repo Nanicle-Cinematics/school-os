@@ -6,6 +6,8 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { MARKING, LEADERSHIP, MARK_ANY_CLASS, canAccess } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { computeClassResults } from "@/lib/results-engine";
+import { LimiterFull } from "@/lib/concurrency";
+import { heavyWork } from "@/lib/heavy-work";
 import { writeAudit } from "@/lib/audit";
 import { rosterWhere } from "@/lib/class-roster";
 import { textResultsPublished } from "@/lib/transactional-sms";
@@ -25,20 +27,32 @@ export async function computeResults(
     return { error: "Choose a term and a class." };
   }
 
-  const result = await tenantTransaction(auth.schoolId, async (tx) => {
-      const computed = await computeClassResults(tx, auth.schoolId, termId, classGroupId);
-      await writeAudit(tx, {
-        schoolId: auth.schoolId,
-        actorUserId: auth.userId,
-        action: "results.compute",
-        entity: "ClassGroup",
-        entityId: classGroupId,
-        after: { termId, ...computed },
-      });
-      return computed;
-    },
-    { timeout: 180_000, maxWait: 30_000 },
-  );
+  let result;
+  try {
+    result = await heavyWork("results", () =>
+      tenantTransaction(
+        auth.schoolId,
+        async (tx) => {
+          const computed = await computeClassResults(tx, auth.schoolId, termId, classGroupId);
+          await writeAudit(tx, {
+            schoolId: auth.schoolId,
+            actorUserId: auth.userId,
+            action: "results.compute",
+            entity: "ClassGroup",
+            entityId: classGroupId,
+            after: { termId, ...computed },
+          });
+          return computed;
+        },
+        { timeout: 180_000, maxWait: 30_000 },
+      ),
+    );
+  } catch (error) {
+    if (error instanceof LimiterFull) {
+      return { error: "The system is busy with other classes. Wait a minute and press Compute again." };
+    }
+    throw error;
+  }
 
   revalidatePath("/results");
 

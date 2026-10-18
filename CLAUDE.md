@@ -2395,11 +2395,32 @@ First results (2026-10-18, three schools of 650, ONE server instance on a 2013 d
 also running the runner and Postgres, so read the shape and the ratios, not the speeds):
 
 - The parent portal alone is cheap: 300 parents, 10 requests a second, 0 failures, 38 ms of CPU a request.
-- **A mark-sheet save is about 2.4 CPU-seconds and an invoice run about 7.5 (650 pupils), 20 to 70 times a
+- **A mark-sheet save was about 2.4 CPU-seconds and an invoice run about 7.5 (650 pupils), 20 to 70 times a
   page.** Added to the same crowd they took a run from "slow, nothing failed" to 10% failed with 218 P2024.
   The database was nearly idle (5-7 of 100 connections), so the wait was inside the app: four connections per
-  instance, held for seconds by one long transaction. Cheaper heavy jobs and a `createLimiter` cap on them are
-  the next work. The CPU costs of the flows added up to the measured total (192 s), so the cost model is sound.
+  instance, held for seconds by one long transaction. The cost model added up to the measured total (192 s).
+- **Fixed in `heavy-jobs` (measured on the same data, 20 saves of 140 marks):** a save is 3.6 s -> 0.6 s at the
+  median and 48 -> 10 CPU-seconds; the full peak went from 58 failures and 222 pool timeouts to 1 failure and none
+  (portal p95 from 24-35 s to about 2 s on a laptop at 233% CPU). Three changes:
+  - **The class roll-up is a diff** (`computeClassResults`): it used to upsert every pupil's every subject, 550
+    for a class of 50, plus every pupil's total, in one transaction. It now reads what is stored once and writes
+    only what differs (`row-diff.ts`). One changed mark writes 6 to 32 statements, nothing changed writes none,
+    and an incremental roll-up equals a from-scratch one row for row (`verify:rollup`, forced red both ways).
+  - **A mark-sheet save is a diff too** (`planScoreWrites`): the sheet posts every cell (about 300), and each was
+    a delete or an upsert. `verify:score-writes` (pure) plans exactly the changed ones. One visible difference: a
+    mark nobody changed keeps whoever entered it, where it used to be re-attributed to whoever pressed Save last
+    (only the staff-deletion guard reads `enteredByStaffId`).
+  - **Heavy transactions are capped per instance** (`heavy-work.ts`): one roll-up and one invoice run at a time,
+    two LANES of one and not one lane of two. With a shared pair, two invoice runs held both slots and every
+    teacher's save waited behind them (p95 34 s). Waiting happens before the transaction opens, so a queued
+    request holds no connection; a full queue is turned away with `LimiterFull` and each caller already says
+    what to do. `verify:heavy-work` fails on any new caller of either engine that skips it.
+- **Still open: invoice generation** (`generateInvoicesForTerm`) is about 10 statements per invoice (a number,
+  the invoice with its lines, a journal entry with a number of its own, a carried-forward sync), 7.5 CPU-seconds
+  and 12 s alone for 650 pupils, 36-60 s at peak on a laptop. The cap stops it starving the pool; making it cheap
+  means batching numbers, invoices, lines and journal lines, and must produce identical rows (compare against the
+  current engine the way `verify:rollup` does). The mark-sheet GRID (`saveScores` in assessment-actions.ts, one
+  column) has the same per-row upsert and is smaller.
 - **What this does not settle:** whether Nano's burst credits hold (the local database has no network and no
   credit limit), and what one hosted instance does. That needs a deployed copy against a throwaway project at the
   tier under test.
@@ -2410,6 +2431,14 @@ the flag. `scripts/load/with-env.mjs` loads the file into the environment and sp
 ⚠️ **The runner's first peak run was a third of the crowd it claimed.** It sized the parent list by the schools
 ASKED for (ten) and not the three that existed, so 300 parents became 108 and the 60 sign-ins were none. It now
 sizes by what exists and prints how many of each virtual user it launched. Read that line before trusting a run.
+
+⚠️ **Prisma loads `.env` for any variable the environment does not define, so an env file that leaves out
+`APP_DATABASE_URL` silently inherits the DEV one.** Found 2026-10-18 while running the CI guards against a
+scratch database: `--env-file` (or `with-env.mjs`) set `DATABASE_URL` and `DIRECT_URL` and left
+`APP_DATABASE_URL` out, the tenant client in `@/lib/prisma` connected to dev, and read queries went there (they
+returned nothing, because row security hides everything without a school, and every write in those scripts uses
+the owner client). Any env file used for a scratch database must define ALL THREE URLs and the SMS variables, as
+`.env.load.example` does; the load test's guard refuses a target that does not.
 
 ⚠️ **The invoice run is idempotent**, so a second run measures nothing; the runner clears the open term's invoices
 at the schools that will generate them. Term 2 is seeded unbilled for exactly this.

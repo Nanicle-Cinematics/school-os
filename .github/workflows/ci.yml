@@ -130,6 +130,9 @@ jobs:
       - name: Results — grading, weighting, ranking, aggregate
         run: npm run verify:results
 
+      - name: Roll-up — a class roll-up writes only what changed, and the same rows a fresh one would
+        run: npm run verify:rollup
+
       - name: Home-screen label — the school's short name under its icon
         run: npm run verify:home-screen-label
 
@@ -267,6 +270,12 @@ jobs:
 
       - name: Load-test guard — the load test refuses a target that is dev, production or unnamed
         run: npm run verify:load-guard
+
+      - name: Heavy work — roll-ups and invoice runs are capped at two per instance, and nothing skips the cap
+        run: npm run verify:heavy-work
+
+      - name: Score writes — a mark-sheet save writes only the cells that changed, and loses none
+        run: npm run verify:score-writes
 
       - name: Enrolment code — a platform admin cannot set up two-factor sign-in with the password alone
         run: npm run verify:enrolment-code
