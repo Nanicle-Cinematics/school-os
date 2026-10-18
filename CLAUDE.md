@@ -2384,6 +2384,36 @@ Three things about it that are not obvious, each of which failed first:
 The comparison forces its own three failure modes every night and asserts the
 exit codes, because it had only ever agreed.
 
+## Load test
+
+`scripts/load/` seeds ten schools and drives them as a bad day would; read `scripts/load/README.md` to run it.
+It answers "what gives first at ten schools of 500-700 pupils", and it refuses to start unless `.env.load`
+names a throwaway database (`guard.mts`, pinned by `verify:load-guard`, in CI). **Never point it at dev or
+production.** It writes a great deal and a few thousand requests is what took the dev project Unhealthy.
+
+First results (2026-10-18, three schools of 650, ONE server instance on a 2013 dual-core laptop that was
+also running the runner and Postgres, so read the shape and the ratios, not the speeds):
+
+- The parent portal alone is cheap: 300 parents, 10 requests a second, 0 failures, 38 ms of CPU a request.
+- **A mark-sheet save is about 2.4 CPU-seconds and an invoice run about 7.5 (650 pupils), 20 to 70 times a
+  page.** Added to the same crowd they took a run from "slow, nothing failed" to 10% failed with 218 P2024.
+  The database was nearly idle (5-7 of 100 connections), so the wait was inside the app: four connections per
+  instance, held for seconds by one long transaction. Cheaper heavy jobs and a `createLimiter` cap on them are
+  the next work. The CPU costs of the flows added up to the measured total (192 s), so the cost model is sound.
+- **What this does not settle:** whether Nano's burst credits hold (the local database has no network and no
+  credit limit), and what one hosted instance does. That needs a deployed copy against a throwaway project at the
+  tier under test.
+
+⚠️ **`node --env-file=... next build` fails** ("--env-file= is not allowed in NODE_OPTIONS"): Next's workers inherit
+the flag. `scripts/load/with-env.mjs` loads the file into the environment and spawns Next without it.
+
+⚠️ **The runner's first peak run was a third of the crowd it claimed.** It sized the parent list by the schools
+ASKED for (ten) and not the three that existed, so 300 parents became 108 and the 60 sign-ins were none. It now
+sizes by what exists and prints how many of each virtual user it launched. Read that line before trusting a run.
+
+⚠️ **The invoice run is idempotent**, so a second run measures nothing; the runner clears the open term's invoices
+at the schools that will generate them. Term 2 is seeded unbilled for exactly this.
+
 ## Commands
 
 ```bash
