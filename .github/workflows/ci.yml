@@ -265,6 +265,9 @@ jobs:
       - name: Public routes — what an unauthenticated route may spend, and that every one is inside it
         run: npm run verify:public-routes
 
+      - name: Load-test guard — the load test refuses a target that is dev, production or unnamed
+        run: npm run verify:load-guard
+
       - name: Enrolment code — a platform admin cannot set up two-factor sign-in with the password alone
         run: npm run verify:enrolment-code
 

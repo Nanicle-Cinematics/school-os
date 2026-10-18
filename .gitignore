@@ -34,6 +34,10 @@ yarn-error.log*
 # The example is the opposite: it is how the next person knows what to set.
 .env*
 !.env.example
+!.env.load.example
+
+# what the load test measured: local, and no use to anyone else
+/load-results/
 
 # vercel
 .vercel
