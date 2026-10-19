@@ -14,6 +14,8 @@ import {
   type BlockedGroup,
 } from "@/lib/invoice-engine";
 import { writeAudit } from "@/lib/audit";
+import { LimiterFull } from "@/lib/concurrency";
+import { heavyWork } from "@/lib/heavy-work";
 import { lockOn } from "@/lib/locks";
 import { findJournalEntryForSource, reverseJournalEntry } from "@/lib/ledger-engine";
 
@@ -43,7 +45,8 @@ export async function generateInvoices(
   // plus its lines for each, and the database is a continent away.
   let result;
   try {
-  result = await tenantTransaction(auth.schoolId, async (tx) => {
+  result = await heavyWork("invoices", () =>
+    tenantTransaction(auth.schoolId, async (tx) => {
       const generated = await generateInvoicesForTerm(tx, auth.schoolId, termId, dueDays, auth.userId);
       await writeAudit(tx, {
         schoolId: auth.schoolId,
@@ -56,8 +59,12 @@ export async function generateInvoices(
       return generated;
     },
     { timeout: 120_000, maxWait: 20_000 },
+    ),
   );
   } catch (error) {
+    if (error instanceof LimiterFull) {
+      return { error: "The system is busy generating other bills. Wait a minute and press Generate again." };
+    }
     // Two presses at once: the other run created them first. Nothing was lost.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return { error: "Invoices for that term are already being generated. Reload the page to see them." };

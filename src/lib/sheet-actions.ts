@@ -8,6 +8,8 @@ import { MARKING, LEADERSHIP, MARK_ANY_CLASS, canAccess } from "@/lib/permission
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { materialiseComponents } from "@/lib/assessment-templates";
 import { computeClassResults } from "@/lib/results-engine";
+import { heavyWork } from "@/lib/heavy-work";
+import { planScoreWrites, type SheetCell } from "@/lib/row-diff";
 import { writeAudit } from "@/lib/audit";
 import { rosterWhere } from "@/lib/class-roster";
 import { ownsSheet } from "@/lib/ownership";
@@ -263,31 +265,48 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
         });
       }
 
-      for (const cell of cells) {
-        if (cell.rawScore === null && !cell.isAbsent) {
-          await tx.score.deleteMany({
-            where: { assessmentId: cell.assessmentId, studentId: cell.studentId },
-          });
-          continue;
+      // ⚠️ A DIFF, not a statement per cell. The sheet posts every cell it shows (about three hundred for a class of
+      // fifty), whether or not anyone touched it, and each used to be a delete or an upsert inside this one
+      // transaction. Read what is stored once, write only what changed. The result is the same set of scores; the
+      // one visible difference is that a mark nobody changed keeps whoever entered it, where it used to be
+      // re-attributed to whoever pressed Save last. See row-diff.ts.
+      const stored = await tx.score.findMany({
+        where: {
+          assessmentId: { in: [...new Set(cells.map((c) => c.assessmentId))] },
+          studentId: { in: [...new Set(cells.map((c) => c.studentId))] },
+        },
+        select: { id: true, assessmentId: true, studentId: true, rawScore: true, isAbsent: true },
+      });
+      const plan = planScoreWrites(cells, stored);
+      const row = (cell: SheetCell) => ({
+        schoolId: auth.schoolId,
+        assessmentId: cell.assessmentId,
+        studentId: cell.studentId,
+        rawScore: cell.rawScore === null ? null : new Prisma.Decimal(cell.rawScore),
+        isAbsent: cell.isAbsent,
+        enteredByStaffId: auth.staffId,
+      });
+
+      if (plan.deletes.length > 0) {
+        await tx.score.deleteMany({ where: { id: { in: plan.deletes } } });
+      }
+      if (plan.creates.length > 0) {
+        const made = await tx.score.createMany({ data: plan.creates.map(row), skipDuplicates: true });
+        if (made.count < plan.creates.length) {
+          // Another save of this class got there first (two teachers, two subjects, one moment): settle each the way
+          // the upsert always did, so the later write wins.
+          for (const cell of plan.creates) {
+            const data = row(cell);
+            await tx.score.upsert({
+              where: { assessmentId_studentId: { assessmentId: cell.assessmentId, studentId: cell.studentId } },
+              create: data,
+              update: data,
+            });
+          }
         }
-        const data = {
-          schoolId: auth.schoolId,
-          assessmentId: cell.assessmentId,
-          studentId: cell.studentId,
-          rawScore: cell.rawScore === null ? null : new Prisma.Decimal(cell.rawScore),
-          isAbsent: cell.isAbsent,
-          enteredByStaffId: auth.staffId,
-        };
-        await tx.score.upsert({
-          where: {
-            assessmentId_studentId: {
-              assessmentId: cell.assessmentId,
-              studentId: cell.studentId,
-            },
-          },
-          create: data,
-          update: data,
-        });
+      }
+      for (const { id, cell } of plan.updates) {
+        await tx.score.update({ where: { id }, data: row(cell) });
       }
 
       await writeAudit(tx, {
@@ -321,10 +340,15 @@ export async function saveSheet(_prev: SheetState, formData: FormData): Promise<
    */
   let totalsError = false;
   try {
-    await tenantTransaction(
-      auth.schoolId,
-      (tx) => computeClassResults(tx, auth.schoolId, termId, classGroupId),
-      { timeout: 180_000, maxWait: 30_000 },
+    // Waits for one of two slots BEFORE opening the transaction, so a crowd of teachers saving at once cannot take
+    // every connection from the parents reading report cards. A full queue lands in the catch below, as any failure
+    // does: the marks are saved, and the totals can be recomputed.
+    await heavyWork("results", () =>
+      tenantTransaction(
+        auth.schoolId,
+        (tx) => computeClassResults(tx, auth.schoolId, termId, classGroupId),
+        { timeout: 180_000, maxWait: 30_000 },
+      ),
     );
   } catch {
     totalsError = true;

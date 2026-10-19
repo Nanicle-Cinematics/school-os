@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { isExamType } from "@/lib/assessment-templates";
+import { sameFields } from "@/lib/row-diff";
 import { rosterWhere } from "@/lib/class-roster";
 import type { TenantTx } from "@/lib/prisma";
 
@@ -178,6 +179,36 @@ export type YearPromotion = {
 };
 
 /**
+ * The columns a roll-up writes, and so the columns that say whether a stored row already says what it would write.
+ * Anything not listed is not this function's to change (the status, the remarks, the register totals).
+ */
+const SUBJECT_RESULT_FIELDS = [
+  "classGroupId",
+  "classScore",
+  "examScore",
+  "totalScore",
+  "gradingScaleId",
+  "grade",
+  "points",
+  "remark",
+  "subjectPosition",
+  "subjectSize",
+  "teacherId",
+] as const;
+const TERM_RESULT_FIELDS = [
+  "classGroupId",
+  "subjectsCount",
+  "subjectsOffered",
+  "possibleMarks",
+  "totalMarks",
+  "average",
+  "percentage",
+  "aggregate",
+  "classPosition",
+  "classSize",
+] as const;
+
+/**
  * Recompute every SubjectResult and TermResult for one class in one term.
  *
  * Results are stored, not derived on read: positions, class size and aggregate
@@ -262,13 +293,16 @@ export async function computeClassResults(
     Map<string, { classScore: Prisma.Decimal | null; examScore: Prisma.Decimal | null; total: Prisma.Decimal | null }>
   >();
 
+  // One lookup per assessment, so reading a pupil's mark is a map hit rather than a scan of the class's scores.
+  const scoreOf = new Map(assessments.map((a) => [a.id, new Map(a.scores.map((s) => [s.studentId, s]))]));
+
   for (const subjectId of subjectIds) {
     const subjectAssessments = assessments.filter((a) => a.subjectId === subjectId);
     const perStudent = new Map<string, ReturnType<typeof computeSubjectScore>>();
 
     for (const studentId of studentIds) {
       const inputs: ScoreInput[] = subjectAssessments.map((assessment) => {
-        const score = assessment.scores.find((s) => s.studentId === studentId);
+        const score = scoreOf.get(assessment.id)?.get(studentId);
         return {
           rawScore: score?.rawScore ?? null,
           isAbsent: score?.isAbsent ?? false,
@@ -308,6 +342,22 @@ export async function computeClassResults(
   );
 
   // Persist SubjectResults with per-subject positions.
+  //
+  // ⚠️ Written as a DIFF, not as one upsert per pupil per subject. A class of 50 over eleven subjects is 550
+  // upserts, each its own round trip, all inside one transaction that holds one of the app role's four
+  // connections for the whole time, and a teacher saving ONE subject's marks changes about fifty of them. The
+  // load test measured a mark-sheet save at about 2.4 CPU-seconds, and a handful at once starving every other
+  // request on the instance (P2024). So: read what is there once, write only what differs, and create the
+  // new rows in one statement. The rows that result are the same ones the upserts wrote.
+  const existingSubjects = new Map(
+    (await tx.subjectResult.findMany({ where: { termId, studentId: { in: studentIds } } })).map((row) => [
+      `${row.studentId}:${row.subjectId}`,
+      row,
+    ]),
+  );
+  const subjectCreates: Prisma.SubjectResultCreateManyInput[] = [];
+  const subjectUpdates: { id: string; data: Prisma.SubjectResultCreateManyInput }[] = [];
+  const subjectDeletes: string[] = [];
   let skipped = 0;
   for (const subjectId of subjectIds) {
     const perStudent = computed.get(subjectId)!;
@@ -319,17 +369,18 @@ export async function computeClassResults(
       if (publishedHere.has(entry.studentId)) {
         continue;
       }
+      const had = existingSubjects.get(`${entry.studentId}:${subjectId}`);
       if (entry.total === null) {
         skipped += 1;
         // Remove a stale row rather than leaving last week's number behind.
-        await tx.subjectResult.deleteMany({
-          where: { termId, studentId: entry.studentId, subjectId, source: "COMPUTED" },
-        });
+        if (had && had.source === "COMPUTED") {
+          subjectDeletes.push(had.id);
+        }
         continue;
       }
 
       const band = gradeFor(bands, entry.total);
-      const data = {
+      const data: Prisma.SubjectResultCreateManyInput = {
         schoolId,
         termId,
         studentId: entry.studentId,
@@ -347,12 +398,33 @@ export async function computeClassResults(
         teacherId: teacherBySubject.get(subjectId) ?? null,
       };
 
-      await tx.subjectResult.upsert({
-        where: { termId_studentId_subjectId: { termId, studentId: entry.studentId, subjectId } },
-        create: data,
-        update: data,
-      });
+      if (!had) {
+        subjectCreates.push(data);
+      } else if (!sameFields(had, data, SUBJECT_RESULT_FIELDS)) {
+        subjectUpdates.push({ id: had.id, data });
+      }
     }
+  }
+
+  if (subjectDeletes.length > 0) {
+    await tx.subjectResult.deleteMany({ where: { id: { in: subjectDeletes } } });
+  }
+  if (subjectCreates.length > 0) {
+    const made = await tx.subjectResult.createMany({ data: subjectCreates, skipDuplicates: true });
+    if (made.count < subjectCreates.length) {
+      // Another roll-up of this class created some of these between our read and now (two teachers saving two
+      // subjects at the same moment). Settle every one the way the upsert always did, so the later write wins.
+      for (const data of subjectCreates) {
+        await tx.subjectResult.upsert({
+          where: { termId_studentId_subjectId: { termId, studentId: data.studentId, subjectId: data.subjectId } },
+          create: data,
+          update: data,
+        });
+      }
+    }
+  }
+  for (const { id, data } of subjectUpdates) {
+    await tx.subjectResult.update({ where: { id }, data });
   }
 
   /**
@@ -439,10 +511,15 @@ export async function computeClassResults(
   const classPositions = rank(rollups, (row) => row.totalMarks);
   const classSize = rollups.filter((row) => row.totalMarks !== null).length;
 
+  // The same diff for the term totals: one read, then only the pupils whose figures moved.
+  const existingTerms = new Map(
+    (await tx.termResult.findMany({ where: { termId, studentId: { in: studentIds } } })).map((row) => [row.studentId, row]),
+  );
+  const termCreates: Prisma.TermResultCreateManyInput[] = [];
+  const termUpdates: { id: string; data: Prisma.TermResultCreateManyInput }[] = [];
+
   for (const row of rollups) {
-    const existing = await tx.termResult.findUnique({
-      where: { termId_studentId: { termId, studentId: row.studentId } },
-    });
+    const existing = existingTerms.get(row.studentId);
 
     // Never overwrite a published report card — republishing is an explicit act —
     // nor a term transcribed from paper records, which has no marks to recompute.
@@ -450,7 +527,7 @@ export async function computeClassResults(
       continue;
     }
 
-    const data = {
+    const data: Prisma.TermResultCreateManyInput = {
       schoolId,
       termId,
       studentId: row.studentId,
@@ -466,11 +543,28 @@ export async function computeClassResults(
       classSize,
     };
 
-    await tx.termResult.upsert({
-      where: { termId_studentId: { termId, studentId: row.studentId } },
-      create: { ...data, status: "DRAFT" as const },
-      update: data,
-    });
+    if (!existing) {
+      termCreates.push({ ...data, status: "DRAFT" as const });
+    } else if (!sameFields(existing, data, TERM_RESULT_FIELDS)) {
+      termUpdates.push({ id: existing.id, data });
+    }
+  }
+
+  if (termCreates.length > 0) {
+    const made = await tx.termResult.createMany({ data: termCreates, skipDuplicates: true });
+    if (made.count < termCreates.length) {
+      for (const data of termCreates) {
+        const { status: _status, ...update } = data;
+        await tx.termResult.upsert({
+          where: { termId_studentId: { termId, studentId: data.studentId } },
+          create: data,
+          update,
+        });
+      }
+    }
+  }
+  for (const { id, data } of termUpdates) {
+    await tx.termResult.update({ where: { id }, data });
   }
 
   // The third term is the one that decides the year. Doing it here rather than
