@@ -71,6 +71,64 @@ export async function nextNumber(
   );
 }
 
+/**
+ * Allocate `count` numbers from a per-school sequence in as few statements as it takes: one to claim a block and
+ * one to ask which of the block are already used, rather than the two per number `nextNumber` costs.
+ *
+ * It gives EXACTLY the numbers `count` calls to `nextNumber` would have: the same candidates in the same order,
+ * the taken ones skipped (and burned, as before: the counter never goes back), and the counter left just past the
+ * last number used. A round claims only what is still missing, so the last round is never over-claimed: when a
+ * round's candidates are all free it uses all of them and stops. `takenAmong` is the batch form of `nextNumber`'s
+ * `isTaken` (see `takenSets`).
+ *
+ * Same rules as `nextNumber`: inside the transaction that uses the numbers.
+ */
+export async function nextNumbers(
+  tx: Tx,
+  schoolId: string,
+  key: SequenceKey,
+  count: number,
+  takenAmong?: (candidates: string[]) => Promise<Set<string>>,
+): Promise<string[]> {
+  const fallback = DEFAULTS[key];
+  const numbers: string[] = [];
+
+  for (let round = 0; round < MAX_PROBES && numbers.length < count; round += 1) {
+    const need = count - numbers.length;
+    const sequence = await tx.numberSequence.upsert({
+      where: { schoolId_key: { schoolId, key } },
+      create: { schoolId, key, prefix: fallback.prefix, padding: fallback.padding, next: need + 1 },
+      update: { next: { increment: need } },
+    });
+
+    // upsert returns the row AFTER the increment, so the block just claimed starts `need` below it.
+    const first = sequence.next - need;
+    const candidates = Array.from(
+      { length: need },
+      (_, i) => `${sequence.prefix}${String(first + i).padStart(sequence.padding, "0")}`,
+    );
+    const taken = takenAmong ? await takenAmong(candidates) : new Set<string>();
+    for (const candidate of candidates) {
+      if (!taken.has(candidate)) numbers.push(candidate);
+    }
+  }
+
+  if (numbers.length < count) {
+    throw new Error(
+      `Could not allocate ${count} free ${key} numbers after ${MAX_PROBES} attempts — check the ${key} sequence against existing records.`,
+    );
+  }
+  return numbers;
+}
+
+/** The batch form of `takenProbes`: which of these candidates already exist. For the sequences a bulk write needs. */
+export const takenSets = {
+  invoice: (tx: Tx, schoolId: string) => async (candidates: string[]) =>
+    new Set((await tx.invoice.findMany({ where: { schoolId, invoiceNo: { in: candidates } }, select: { invoiceNo: true } })).map((row) => row.invoiceNo)),
+  journal: (tx: Tx, schoolId: string) => async (candidates: string[]) =>
+    new Set((await tx.journalEntry.findMany({ where: { schoolId, entryNo: { in: candidates } }, select: { entryNo: true } })).map((row) => row.entryNo)),
+};
+
 /** Probes for the three sequences that name a row with a unique constraint. */
 export const takenProbes = {
   invoice: (tx: Tx, schoolId: string) => async (invoiceNo: string) =>

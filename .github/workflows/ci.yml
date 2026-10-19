@@ -133,6 +133,9 @@ jobs:
       - name: Roll-up — a class roll-up writes only what changed, and the same rows a fresh one would
         run: npm run verify:rollup
 
+      - name: Invoice batch — the batched invoice run writes the same rows as the one-at-a-time run, in a few statements
+        run: npm run verify:invoice-batch
+
       - name: Home-screen label — the school's short name under its icon
         run: npm run verify:home-screen-label
 

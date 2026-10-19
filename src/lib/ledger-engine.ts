@@ -2,7 +2,7 @@ import "server-only";
 
 import { Prisma, type JournalSourceType, type PaymentMethod } from "@prisma/client";
 import type { TenantTx } from "@/lib/prisma";
-import { nextNumber, takenProbes } from "@/lib/sequences";
+import { nextNumber, nextNumbers, takenProbes, takenSets } from "@/lib/sequences";
 import { writeAudit } from "@/lib/audit";
 
 type Tx = TenantTx;
@@ -61,6 +61,33 @@ export type JournalLineInput = {
 };
 
 /**
+ * A journal entry's two rules, and the only place they are written: every line is a debit XOR a credit, and the
+ * debits equal the credits. Violating either is a bug in the caller, not a business condition, so it throws.
+ * Shared by `postJournalEntry` and `postJournalEntries` so the single and the bulk path cannot disagree on what a
+ * valid entry is.
+ */
+export function assertBalanced(lines: JournalLineInput[]) {
+  let totalDebit = new Prisma.Decimal(0);
+  let totalCredit = new Prisma.Decimal(0);
+  for (const line of lines) {
+    const debit = new Prisma.Decimal(line.debit ?? 0);
+    const credit = new Prisma.Decimal(line.credit ?? 0);
+    if (debit.greaterThan(0) === credit.greaterThan(0)) {
+      throw new Error(
+        `Journal line for account ${line.accountId} must be a debit XOR a credit, not both or neither.`,
+      );
+    }
+    totalDebit = totalDebit.add(debit);
+    totalCredit = totalCredit.add(credit);
+  }
+  if (!totalDebit.equals(totalCredit)) {
+    throw new Error(
+      `Journal entry does not balance: debits ${totalDebit.toString()} vs credits ${totalCredit.toString()}.`,
+    );
+  }
+}
+
+/**
  * The one rule every call site in this codebase follows: posting is
  * ADDITIVE and BEST-EFFORT. `recalcInvoice`/`recalcVendorBill` remain the
  * sole source of truth for what is owed — this is a PARALLEL record for the
@@ -88,24 +115,7 @@ export async function postJournalEntry(
     return null;
   }
 
-  let totalDebit = new Prisma.Decimal(0);
-  let totalCredit = new Prisma.Decimal(0);
-  for (const line of opts.lines) {
-    const debit = new Prisma.Decimal(line.debit ?? 0);
-    const credit = new Prisma.Decimal(line.credit ?? 0);
-    if (debit.greaterThan(0) === credit.greaterThan(0)) {
-      throw new Error(
-        `Journal line for account ${line.accountId} must be a debit XOR a credit, not both or neither.`,
-      );
-    }
-    totalDebit = totalDebit.add(debit);
-    totalCredit = totalCredit.add(credit);
-  }
-  if (!totalDebit.equals(totalCredit)) {
-    throw new Error(
-      `Journal entry does not balance: debits ${totalDebit.toString()} vs credits ${totalCredit.toString()}.`,
-    );
-  }
+  assertBalanced(opts.lines);
 
   const entryNo = await nextNumber(tx, schoolId, "JOURNAL", takenProbes.journal(tx, schoolId));
 
@@ -140,6 +150,82 @@ export async function postJournalEntry(
   });
 
   return entry;
+}
+
+export type JournalPosting = {
+  sourceType: JournalSourceType;
+  sourceId: string;
+  memo: string;
+  lines: JournalLineInput[];
+};
+
+/** Rows per statement: a bulk insert of a few thousand lines stays well inside Postgres's bind-parameter limit. */
+const CHUNK = 2000;
+
+/**
+ * Post many entries at once: the same rows `postJournalEntry` writes for each (the entry with its own number, its
+ * lines, and the `journal.post` audit row), in a handful of statements instead of six or so per entry.
+ *
+ * Built for the invoice run, which posted one entry per pupil: 650 pupils was about four thousand statements in one
+ * transaction. Every entry is validated BEFORE anything is written, as each single post validates before its own
+ * write, so a bad one leaves nothing half-posted. Entries with no lines are skipped, as `postJournalEntry` returns
+ * null for them. Returns how many were posted.
+ */
+export async function postJournalEntries(
+  tx: Tx,
+  schoolId: string,
+  entries: JournalPosting[],
+  actorUserId?: string | null,
+): Promise<number> {
+  const postings = entries.filter((entry) => entry.lines.length > 0);
+  if (postings.length === 0) {
+    return 0;
+  }
+  for (const posting of postings) {
+    assertBalanced(posting.lines);
+  }
+
+  const numbers = await nextNumbers(tx, schoolId, "JOURNAL", postings.length, takenSets.journal(tx, schoolId));
+  const created = await tx.journalEntry.createManyAndReturn({
+    data: postings.map((posting, i) => ({
+      schoolId,
+      entryNo: numbers[i]!,
+      memo: posting.memo,
+      sourceType: posting.sourceType,
+      sourceId: posting.sourceId,
+      postedByUserId: actorUserId ?? null,
+    })),
+    select: { id: true, entryNo: true },
+  });
+  const idOf = new Map(created.map((entry) => [entry.entryNo, entry.id]));
+
+  const lines = postings.flatMap((posting, i) =>
+    posting.lines.map((line) => ({
+      schoolId,
+      journalEntryId: idOf.get(numbers[i]!)!,
+      accountId: line.accountId,
+      debit: line.debit ?? 0,
+      credit: line.credit ?? 0,
+      description: line.description,
+    })),
+  );
+  for (let at = 0; at < lines.length; at += CHUNK) {
+    await tx.journalLine.createMany({ data: lines.slice(at, at + CHUNK) });
+  }
+
+  const audits = postings.map((posting, i) => ({
+    schoolId,
+    actorUserId: actorUserId ?? null,
+    action: "journal.post",
+    entity: "JournalEntry",
+    entityId: idOf.get(numbers[i]!)!,
+    after: { entryNo: numbers[i]!, sourceType: posting.sourceType, sourceId: posting.sourceId, lines: posting.lines.length },
+  }));
+  for (let at = 0; at < audits.length; at += CHUNK) {
+    await tx.auditLog.createMany({ data: audits.slice(at, at + CHUNK) });
+  }
+
+  return created.length;
 }
 
 /** The entry originally posted for a source row, if one was — a missing account mapping at the time means there may be none. */

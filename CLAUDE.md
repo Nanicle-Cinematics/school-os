@@ -2415,12 +2415,26 @@ also running the runner and Postgres, so read the shape and the ratios, not the 
     teacher's save waited behind them (p95 34 s). Waiting happens before the transaction opens, so a queued
     request holds no connection; a full queue is turned away with `LimiterFull` and each caller already says
     what to do. `verify:heavy-work` fails on any new caller of either engine that skips it.
-- **Still open: invoice generation** (`generateInvoicesForTerm`) is about 10 statements per invoice (a number,
-  the invoice with its lines, a journal entry with a number of its own, a carried-forward sync), 7.5 CPU-seconds
-  and 12 s alone for 650 pupils, 36-60 s at peak on a laptop. The cap stops it starving the pool; making it cheap
-  means batching numbers, invoices, lines and journal lines, and must produce identical rows (compare against the
-  current engine the way `verify:rollup` does). The mark-sheet GRID (`saveScores` in assessment-actions.ts, one
-  column) has the same per-row upsert and is smaller.
+- **Invoice generation is batched** (`generateInvoicesForTerm`, branch `batch-invoices`). It billed one pupil at a
+  time: a number, the invoice with its lines, a journal entry with a number of its own, an audit row, a
+  carried-forward check, about ten statements each. For 650 pupils with the ledger mapped that was **5,206
+  statements and 28 s** in one transaction; it is now **19 statements and 3.6 to 5.4 s** (the rest is row-insert
+  time: 4,550 invoice lines and 3,250 journal lines). Numbers come from `nextNumbers` (claim a block, skip the taken,
+  leave the counter just past the last used: the same numbers and counter as N calls to `nextNumber`), entries from
+  `postJournalEntries` (beside `postJournalEntry`, sharing `assertBalanced`), and the brought-forward chain is read
+  once for everyone (`syncCarriedForwardMany`). **`scripts/invoice-engine.reference.mts` is a copy of the ORIGINAL
+  loop, kept only as the oracle for `verify:invoice-batch`** (DB-backed, in CI): it runs both engines from the same
+  state in rolled-back transactions and compares every invoice, line, journal entry, audit row and both counters
+  across no ledger, a mapped ledger with arrears, discounts, billing an earlier term after a later one (the relink),
+  taken numbers and skipped pupils; run at 650 pupils too. Forced red four ways (no audit rows, a dropped journal
+  line, numbers off by one, no relink). Do not delete the reference; change the engine and the reference together
+  only if the persisted rows are meant to change. Not batched: the relink itself when an earlier term is billed
+  after a later one (about 2.7 statements per pupil, rare).
+- **Measuring on a laptop that swaps is a trap.** With 8 GB, Chrome and the Claude app open and 3.7 of 4 GB of swap
+  used, the same full peak swung from 2 s to 25 s at p95 and from 0 to 11 failures between runs, with the code
+  unchanged (the run with NO invoice jobs was as bad as the one with them). The parents-only run is the canary: if it
+  is not fast, nothing else on that run means anything. Check `vm_stat` swapouts and the server's resident size
+  (about 650 MB on a good run, 800+ on a bad one) before believing a peak.
 - **What this does not settle:** whether Nano's burst credits hold (the local database has no network and no
   credit limit), and what one hosted instance does. That needs a deployed copy against a throwaway project at the
   tier under test.

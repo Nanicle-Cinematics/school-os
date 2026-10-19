@@ -4,8 +4,8 @@ import { Prisma } from "@prisma/client";
 import type { Invoice, InvoiceStatus, Student } from "@prisma/client";
 import { money } from "@/lib/money";
 import type { TenantTx } from "@/lib/prisma";
-import { nextNumber, takenProbes } from "@/lib/sequences";
-import { getCoreAccounts, postJournalEntry } from "@/lib/ledger-engine";
+import { nextNumbers, takenSets } from "@/lib/sequences";
+import { getCoreAccounts, postJournalEntries, type JournalPosting } from "@/lib/ledger-engine";
 
 type Tx = TenantTx;
 
@@ -298,13 +298,51 @@ export async function recalcInvoice(tx: Tx, invoiceId: string) {
 export async function syncCarriedForward(tx: Tx, studentId: string) {
   const rows = await tx.invoice.findMany({
     where: { studentId, status: { not: "CANCELLED" } },
-    select: {
-      id: true,
-      broughtForward: true,
-      balance: true,
-      term: { select: { sequence: true, academicYear: { select: { startDate: true } } } },
-    },
+    select: CARRY_SELECT,
   });
+  await relinkChain(tx, rows);
+}
+
+/**
+ * `syncCarriedForward` for many pupils with ONE read: the invoice run needs it for every pupil it just billed, and
+ * a query per pupil was a third of its statements. The chain walk is the very same function, per pupil; only
+ * a pupil whose chain is actually out of step costs anything more (the update and the recalculation it always
+ * needed).
+ */
+export async function syncCarriedForwardMany(tx: Tx, studentIds: string[]) {
+  if (studentIds.length === 0) {
+    return;
+  }
+  const rows = await tx.invoice.findMany({
+    where: { studentId: { in: studentIds }, status: { not: "CANCELLED" } },
+    select: { ...CARRY_SELECT, studentId: true },
+  });
+  const byStudent = new Map<string, CarryRow[]>();
+  for (const row of rows) {
+    const list = byStudent.get(row.studentId) ?? [];
+    list.push(row);
+    byStudent.set(row.studentId, list);
+  }
+  for (const list of byStudent.values()) {
+    await relinkChain(tx, list);
+  }
+}
+
+const CARRY_SELECT = {
+  id: true,
+  broughtForward: true,
+  balance: true,
+  term: { select: { sequence: true, academicYear: { select: { startDate: true } } } },
+} as const;
+
+type CarryRow = {
+  id: string;
+  broughtForward: Prisma.Decimal;
+  balance: Prisma.Decimal;
+  term: { sequence: number; academicYear: { startDate: Date } };
+};
+
+async function relinkChain(tx: Tx, rows: CarryRow[]) {
   rows.sort(
     (a, b) =>
       a.term.academicYear.startDate.getTime() - b.term.academicYear.startDate.getTime() ||
@@ -593,6 +631,14 @@ export async function generateInvoicesForTerm(
 
   const result: GenerationResult = { created: 0, skipped: 0, noStructure: [] };
 
+  // ⚠️ BATCHED. This used to bill one pupil at a time: a number, the invoice with its lines, a journal entry with a
+  // number of its own and an audit row, a carried-forward check. About ten statements a pupil, so 650 pupils was
+  // six or seven thousand in one transaction, 7.5 CPU-seconds, holding a connection for the whole of it. Now every
+  // pupil is priced in memory first (nothing below touches the database), then written in a handful of bulk
+  // statements. It writes the same rows the one-at-a-time version did; that is what verify:invoice-batch
+  // compares, against a copy of the old loop kept in scripts/invoice-engine.reference.mts.
+  const pending: { studentId: string; priced: ReturnType<typeof priceFromStructure> }[] = [];
+
   for (const student of students) {
     if (student.invoices.length > 0) {
       result.skipped += 1;
@@ -626,45 +672,62 @@ export async function generateInvoicesForTerm(
       continue;
     }
 
-    const priced = priceFromStructure(
-      schoolId,
-      structure,
-      student.discounts.map((sd) => sd.discount),
-      previousBalances.get(student.id) ?? new Prisma.Decimal(0),
-    );
-    const { lines, subtotal, discountTotal, broughtForward, total } = priced;
-
-    const invoiceNo = await nextNumber(tx, schoolId, "INVOICE", takenProbes.invoice(tx, schoolId));
-
-    const invoice = await tx.invoice.create({
-      data: {
+    pending.push({
+      studentId: student.id,
+      priced: priceFromStructure(
         schoolId,
-        studentId: student.id,
-        termId,
-        billCodeId: termBillCode?.id,
-        invoiceNo,
-        issueDate: new Date(),
-        dueDate,
-        subtotal,
-        discountTotal,
-        broughtForward,
-        total,
-        amountPaid: money(0),
-        balance: total,
-        status: "ISSUED",
-        items: { create: lines },
-      },
+        structure,
+        student.discounts.map((sd) => sd.discount),
+        previousBalances.get(student.id) ?? new Prisma.Decimal(0),
+      ),
     });
+  }
 
-    // Dr Accounts Receivable / Cr each line's income account, net of its
-    // discount — only for the slice of the bill that IS mapped, so a
-    // partially-configured chart of accounts posts a smaller, still-balanced
-    // entry rather than an incomplete one. broughtForward is deliberately
-    // excluded: that arrears was already posted when the PRIOR invoice was
-    // raised, and posting it again would double it.
-    if (core.receivableAccountId) {
+  if (pending.length === 0) {
+    return result;
+  }
+
+  const invoiceNos = await nextNumbers(tx, schoolId, "INVOICE", pending.length, takenSets.invoice(tx, schoolId));
+  const issueDate = new Date();
+  const created = await tx.invoice.createManyAndReturn({
+    data: pending.map(({ studentId, priced }, i) => ({
+      schoolId,
+      studentId,
+      termId,
+      billCodeId: termBillCode?.id,
+      invoiceNo: invoiceNos[i]!,
+      issueDate,
+      dueDate,
+      subtotal: priced.subtotal,
+      discountTotal: priced.discountTotal,
+      broughtForward: priced.broughtForward,
+      total: priced.total,
+      amountPaid: money(0),
+      balance: priced.total,
+      status: "ISSUED" as const,
+    })),
+    select: { id: true, studentId: true },
+  });
+  const invoiceIdOf = new Map(created.map((invoice) => [invoice.studentId, invoice.id]));
+
+  const items = pending.flatMap(({ studentId, priced }) =>
+    priced.lines.map((line) => ({ ...line, invoiceId: invoiceIdOf.get(studentId)! })),
+  );
+  for (let at = 0; at < items.length; at += BULK_CHUNK) {
+    await tx.invoiceItem.createMany({ data: items.slice(at, at + BULK_CHUNK) });
+  }
+
+  // Dr Accounts Receivable / Cr each line's income account, net of its
+  // discount — only for the slice of the bill that IS mapped, so a
+  // partially-configured chart of accounts posts a smaller, still-balanced
+  // entry rather than an incomplete one. broughtForward is deliberately
+  // excluded: that arrears was already posted when the PRIOR invoice was
+  // raised, and posting it again would double it.
+  if (core.receivableAccountId) {
+    const postings: JournalPosting[] = [];
+    for (const [i, { studentId, priced }] of pending.entries()) {
       const creditByAccount = new Map<string, Prisma.Decimal>();
-      for (const line of lines) {
+      for (const line of priced.lines) {
         const incomeAccountId = incomeAccountByFeeCategory.get(line.feeCategoryId);
         if (!incomeAccountId) continue;
         const net = line.amount.sub(line.discount);
@@ -672,11 +735,10 @@ export async function generateInvoicesForTerm(
       }
       const mappedTotal = [...creditByAccount.values()].reduce((a, b) => a.add(b), new Prisma.Decimal(0));
       if (mappedTotal.greaterThan(0)) {
-        await postJournalEntry(tx, schoolId, {
+        postings.push({
           sourceType: "INVOICE",
-          sourceId: invoice.id,
-          memo: `Invoice ${invoiceNo}`,
-          actorUserId,
+          sourceId: invoiceIdOf.get(studentId)!,
+          memo: `Invoice ${invoiceNos[i]}`,
           lines: [
             { accountId: core.receivableAccountId, debit: mappedTotal },
             ...[...creditByAccount.entries()].map(([accountId, credit]) => ({ accountId, credit })),
@@ -684,15 +746,18 @@ export async function generateInvoicesForTerm(
         });
       }
     }
-
-    // Generating an EARLIER term after later ones exist must still re-link them.
-    await syncCarriedForward(tx, student.id);
-
-    result.created += 1;
+    await postJournalEntries(tx, schoolId, postings, actorUserId);
   }
 
+  // Generating an EARLIER term after later ones exist must still re-link them.
+  await syncCarriedForwardMany(tx, pending.map((p) => p.studentId));
+
+  result.created = pending.length;
   return result;
 }
+
+/** Rows per bulk statement: a few thousand stays well inside Postgres's bind-parameter limit. */
+const BULK_CHUNK = 2000;
 
 /**
  * What a pupil actually owes, ACROSS terms.
