@@ -2430,6 +2430,37 @@ also running the runner and Postgres, so read the shape and the ratios, not the 
   line, numbers off by one, no relink). Do not delete the reference; change the engine and the reference together
   only if the persisted rows are meant to change. Not batched: the relink itself when an earlier term is billed
   after a later one (about 2.7 statements per pupil, rare).
+- **Ten schools showed a scaling problem three never could: some queries cost more with every school added**
+  (`scale-queries`, 2026-10-20). Found by running `pg_stat_statements` and `auto_explain` (both ship with the embedded
+  Postgres; start it with `shared_preload_libraries=pg_stat_statements,auto_explain`) through a peak and reading
+  which plans were sequential scans. Two causes:
+  - **Prisma's relation `_count` aggregates the WHOLE child table across every school**, then narrows it:
+    `_count: { select: { scores: true } }` is a join to `SELECT assessmentId, COUNT(*) FROM Score GROUP BY 1`. On the
+    dashboard's marking rule that was about 190 ms for 450,000 scores at ten schools and grows with total data. The
+    hot four (dashboard, assessments list, Fees, chart of accounts) now use `scoped-counts.ts`: a `groupBy` on only
+    the ids on the page, through an index. Statement time over the same office and portal scenarios fell from 31.4 s
+    to 10.7 s and the dashboard's p95 from 3.2 s to 0.78 s. **`verify:wide-counts` (source-only) fails on any new
+    relation `_count` over a big table that is not on its list of the remaining sites**, and fails on a stale
+    entry, so the list only shrinks; `verify:scoped-counts` compares every scoped number with Prisma's own `_count`
+    row for row (1,344 assessments, the fee items, and a journal built in a rolled-back transaction).
+  - **A query is only as indexed as its own `where`.** The row-security policy is `bypass OR schoolId = this
+    school`, an OR Postgres cannot turn into an index condition, so it never helps an index; and an index that leads
+    with `schoolId` does not serve a query that names only the pupil. `TermResult` and `Payment` had no index leading
+    with `studentId`, so every portal page read both tables in full (every school's rows). Migration
+    `scale_indexes` adds `TermResult(studentId)`, `Payment(studentId)` and `InvoiceItem(feeCategoryId)`. Isolated
+    A/B, same build and machine, indexes dropped then restored twice: **portal database time 11.9-12.3 s -> 1.8-2.3 s
+    for the same 1,350 requests (-83%)** and a lower median in both pairs.
+  - **What did NOT need fixing, so nobody re-investigates:** `Score` by assessment, `SubjectResult` by term and pupil
+    and `AttendanceEntry` by day are all index scans; the small tables (`ClassGroup`, `Level`, `Term`, `Subject`,
+    `LedgerAccount`) are scanned thousands of times a run and cost nothing.
+  - **Still on `_count`, deliberately** (each has its reason in `verify-wide-counts.mts`): the guardian, subject,
+    staff, grading and bill-code pages, and the delete guards. Cheap per call, and several would need an index on
+    `SubjectResult` or `Invoice` that costs the heavy write paths.
+- ⚠️ **A/B on indexes needs the index REALLY gone.** The first "without indexes" runs had them: a temporary helper's
+  `reset` mode fell into the same branch as `create`, so every reset recreated the indexes, and the run printed equal
+  timings for "with" and "without". What gave it away was `pg_stat_statements` showing 0.15 ms per query in the run that
+  was supposed to be seq scans. Print `pg_indexes` before each arm, and never send the script's output to
+  `/dev/null`.
 - **Measuring on a laptop that swaps is a trap.** With 8 GB, Chrome and the Claude app open and 3.7 of 4 GB of swap
   used, the same full peak swung from 2 s to 25 s at p95 and from 0 to 11 failures between runs, with the code
   unchanged (the run with NO invoice jobs was as bad as the one with them). The parents-only run is the canary: if it

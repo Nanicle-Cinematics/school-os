@@ -130,6 +130,12 @@ async function buildSchool(n: number, passwordHash: string, actorId: string, pho
   const schoolId = school.id;
   await prisma.user.update({ where: { id: owner.id }, data: { mustChangePassword: false, schoolId } });
 
+  // A school that has set up its books has mapped its receivable account, and only then does an invoice run post a
+  // journal entry per pupil (the heavier path). Provisioning creates the chart but leaves the mapping to the school,
+  // so without this every load run measured a school that had not done it.
+  const receivable = await prisma.ledgerAccount.findFirst({ where: { schoolId, type: "ASSET", name: { contains: "eceivable", mode: "insensitive" } } });
+  if (receivable) await prisma.schoolSettings.update({ where: { schoolId }, data: { receivableAccountId: receivable.id } });
+
   // ── The calendar: term 1 over, term 2 under way, so there is something published AND something open.
   const year = await prisma.academicYear.findFirstOrThrow({ where: { schoolId } });
   const shapes = [

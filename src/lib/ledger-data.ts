@@ -1,39 +1,34 @@
 import "server-only";
 
+import { journalActivityPerAccount } from "@/lib/scoped-counts";
 import { prisma } from "@/lib/prisma";
 
 /** Asset and Expense accounts run a normal DEBIT balance; Liability, Equity and Income run a normal CREDIT balance — standard bookkeeping convention, so a credit-heavy Income account reads as a positive figure rather than a confusing negative one. */
 const DEBIT_NORMAL = new Set(["ASSET", "EXPENSE"]);
 
 export async function getLedgerAccounts() {
-  const [accounts, postings, coreSettings] = await Promise.all([
-    prisma.ledgerAccount.findMany({
-      orderBy: [{ type: "asc" }, { order: "asc" }],
-      include: {
-        _count: {
-          select: {
-            feeCategoriesAsIncome: true,
-            expenseCategoriesAsExpense: true,
-            journalLines: true,
-          },
-        },
-      },
-    }),
-    prisma.journalLine.groupBy({ by: ["accountId"], _sum: { debit: true, credit: true } }),
-    // Plain ids, not a Prisma relation (see the schema comment on
-    // SchoolSettings) — counted here by hand instead of a _count include.
-    prisma.schoolSettings.findFirst({
-      select: {
-        cashAccountId: true,
-        bankAccountId: true,
-        momoAccountId: true,
-        receivableAccountId: true,
-        payableAccountId: true,
-      },
-    }),
-  ]);
+  // Accounts first: the postings are read for THESE accounts only, through the account index. This was one
+  // `Promise.all` that grouped the WHOLE journal-line table (every school's) and counted it again per account.
+  const accounts = await prisma.ledgerAccount.findMany({
+    orderBy: [{ type: "asc" }, { order: "asc" }],
+    include: {
+      // Two small tables. The journal-line count is taken below from the same grouped read as the totals.
+      _count: { select: { feeCategoriesAsIncome: true, expenseCategoriesAsExpense: true } },
+    },
+  });
+  const activity = await journalActivityPerAccount(accounts.map((account) => account.id));
+  // Plain ids, not a Prisma relation (see the schema comment on
+  // SchoolSettings) — counted here by hand instead of a _count include.
+  const coreSettings = await prisma.schoolSettings.findFirst({
+    select: {
+      cashAccountId: true,
+      bankAccountId: true,
+      momoAccountId: true,
+      receivableAccountId: true,
+      payableAccountId: true,
+    },
+  });
 
-  const postingByAccount = new Map(postings.map((p) => [p.accountId, p]));
   const coreAccountIds = new Set(
     [
       coreSettings?.cashAccountId,
@@ -45,11 +40,17 @@ export async function getLedgerAccounts() {
   );
 
   return accounts.map((account) => {
-    const posting = postingByAccount.get(account.id);
-    const debit = Number(posting?._sum.debit ?? 0);
-    const credit = Number(posting?._sum.credit ?? 0);
+    const posting = activity.get(account.id);
+    const debit = posting?.debit ?? 0;
+    const credit = posting?.credit ?? 0;
     const balance = DEBIT_NORMAL.has(account.type) ? debit - credit : credit - debit;
-    return { ...account, balance, isCoreAccount: coreAccountIds.has(account.id) };
+    return {
+      ...account,
+      // The shape the page already reads: the same three counts, the journal-line one now from the scoped read.
+      _count: { ...account._count, journalLines: posting?.lines ?? 0 },
+      balance,
+      isCoreAccount: coreAccountIds.has(account.id),
+    };
   });
 }
 
