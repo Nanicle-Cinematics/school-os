@@ -11,6 +11,7 @@ import { normalisePhone } from "@/lib/sms-shared";
 import { ownsGuardians, ownsStudents } from "@/lib/ownership";
 import { hashPassword, temporaryPassword } from "@/lib/password";
 import { writeAudit } from "@/lib/audit";
+import { removeGuardian } from "@/lib/guardian-removal";
 
 export type GuardianState = { error?: string; ok?: string };
 
@@ -193,9 +194,11 @@ export async function deleteGuardian(formData: FormData): Promise<void> {
     redirect(`/guardians/${id}?error=has-payments`);
   }
 
-  // Soft delete — a guardian who paid nothing may still appear in an old SMS log.
-  await prisma.guardian.update({ where: { id }, data: { deletedAt: new Date() } });
+  // The record stays (a guardian who paid nothing may still appear in an old SMS log), but everything that hung off
+  // it goes: the links to the children, the primary-contact role, and the portal login. See removeGuardian.
+  await tenantTransaction(auth.schoolId, (tx) => removeGuardian(tx, auth.schoolId, id, auth.userId), { timeout: 60_000, maxWait: 20_000 });
   revalidatePath("/guardians");
+  revalidatePath("/students");
   redirect("/guardians");
 }
 

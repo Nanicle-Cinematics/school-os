@@ -142,6 +142,9 @@ jobs:
       - name: Staff removal — who cannot be removed is asked when Remove is pressed, not counted on every view
         run: npm run verify:staff-removal
 
+      - name: Guardian removal — deleting a guardian takes them off the child, ends their login, and the clean-up migration repairs old strays
+        run: npm run verify:guardian-removal
+
       - name: Home-screen label — the school's short name under its icon
         run: npm run verify:home-screen-label
 
