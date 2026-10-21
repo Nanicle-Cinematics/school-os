@@ -1,5 +1,6 @@
 import "server-only";
 
+import { scoresPerAssessment } from "@/lib/scoped-counts";
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/auth";
 import { canAccess, MARK_ANY_CLASS } from "@/lib/permissions";
@@ -64,7 +65,7 @@ export async function getAssessmentList(filters: {
   subjectId?: string;
   allowedPairs: { classGroupId: string; subjectId: string }[] | null;
 }) {
-  return prisma.assessment.findMany({
+  const rows = await prisma.assessment.findMany({
     where: {
       ...(filters.termId ? { termId: filters.termId } : {}),
       ...(filters.classGroupId ? { classGroupId: filters.classGroupId } : {}),
@@ -81,9 +82,13 @@ export async function getAssessmentList(filters: {
       classGroup: { include: { level: { select: { name: true } } } },
       term: { select: { sequence: true } },
       createdBy: { select: { firstName: true, lastName: true } },
-      _count: { select: { scores: true } },
     },
   });
+
+  // Counted for these (at most 200) assessments only: a relation `_count` here read every school's scores.
+  // The shape is the one the page already reads, `_count.scores`.
+  const counts = await scoresPerAssessment(rows.map((row) => row.id));
+  return rows.map((row) => ({ ...row, _count: { scores: counts.get(row.id) ?? 0 } }));
 }
 
 export async function getAssessmentForEntry(id: string) {

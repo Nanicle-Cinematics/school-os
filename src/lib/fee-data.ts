@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
+import { invoiceItemsPerCategory, structureItemsPerCategory } from "@/lib/scoped-counts";
 import { prisma } from "@/lib/prisma";
 
 export async function getCurrentTerm() {
@@ -18,10 +19,16 @@ export async function getFeeSetup() {
 
   // Sequential, not Promise.all — see the connection_limit note in CLAUDE.md.
   const levels = await prisma.level.findMany({ orderBy: { order: "asc" } });
-  const categories = await prisma.feeCategory.findMany({
-    orderBy: { order: "asc" },
-    include: { _count: { select: { structureItems: true, invoiceItems: true } } },
-  });
+  const categoryRows = await prisma.feeCategory.findMany({ orderBy: { order: "asc" } });
+  // Counted for these categories only (see scoped-counts.ts): the relation `_count` this replaced aggregated every
+  // school's invoice lines. Sequential, like everything here, to stay inside the connection pool.
+  const categoryIds = categoryRows.map((category) => category.id);
+  const priced = await structureItemsPerCategory(categoryIds);
+  const billed = await invoiceItemsPerCategory(categoryIds);
+  const categories = categoryRows.map((category) => ({
+    ...category,
+    _count: { structureItems: priced.get(category.id) ?? 0, invoiceItems: billed.get(category.id) ?? 0 },
+  }));
   const structures = await prisma.feeStructure.findMany({
     where: { academicYearId: year.id },
     include: {

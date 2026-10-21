@@ -1413,6 +1413,7 @@ model TermResult {
   @@unique([termId, studentId])
   @@index([schoolId, termId, classGroupId])
   @@index([schoolId, status])
+  @@index([studentId]) // the parent portal asks for one child's cards; no other index leads with the pupil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1770,6 +1771,7 @@ model InvoiceItem {
 
   @@index([schoolId])
   @@index([invoiceId])
+  @@index([feeCategoryId]) // how many lines a fee item has been billed on, for the Fees page
 }
 
 enum DiscountType {
@@ -1893,6 +1895,7 @@ model Payment {
   @@unique([schoolId, receiptNo])
   @@index([schoolId, paidAt])
   @@index([schoolId, studentId])
+  @@index([studentId]) // (schoolId, studentId) cannot serve a query that names only the pupil
 }
 
 // A payment can settle several invoices (this term plus arrears).

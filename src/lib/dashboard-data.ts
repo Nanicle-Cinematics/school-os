@@ -1,5 +1,6 @@
 import "server-only";
 
+import { scoresPerAssessment } from "@/lib/scoped-counts";
 import { prisma } from "@/lib/prisma";
 import { unplacedWhere } from "@/lib/class-roster";
 import type { Role } from "@prisma/client";
@@ -243,10 +244,12 @@ export async function getAttention(
 
     const assessments = await prisma.assessment.findMany({
       where: { schoolId, termId: term.id, status: { not: "APPROVED" } },
-      select: { id: true, classGroupId: true, _count: { select: { scores: true } } },
+      select: { id: true, classGroupId: true },
     });
+    // Counted for THESE assessments only (see scoped-counts.ts): a relation `_count` here read every school's scores.
+    const scoreCounts = await scoresPerAssessment(assessments.map((a) => a.id));
     const unfinished = assessments.filter(
-      (a) => a._count.scores < (rosterByClass.get(a.classGroupId) ?? 0),
+      (a) => (scoreCounts.get(a.id) ?? 0) < (rosterByClass.get(a.classGroupId) ?? 0),
     );
     if (unfinished.length > 0) {
       const classes = new Set(unfinished.map((a) => a.classGroupId)).size;

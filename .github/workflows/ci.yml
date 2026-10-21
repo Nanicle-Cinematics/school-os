@@ -136,6 +136,9 @@ jobs:
       - name: Invoice batch — the batched invoice run writes the same rows as the one-at-a-time run, in a few statements
         run: npm run verify:invoice-batch
 
+      - name: Scoped counts — the dashboard, assessments, fees and chart-of-accounts counts equal Prisma's, and their indexes exist
+        run: npm run verify:scoped-counts
+
       - name: Home-screen label — the school's short name under its icon
         run: npm run verify:home-screen-label
 
@@ -276,6 +279,9 @@ jobs:
 
       - name: Heavy work — roll-ups and invoice runs are capped at two per instance, and nothing skips the cap
         run: npm run verify:heavy-work
+
+      - name: Wide counts — no new whole-table relation count over a table that grows without bound
+        run: npm run verify:wide-counts
 
       - name: Score writes — a mark-sheet save writes only the cells that changed, and loses none
         run: npm run verify:score-writes
