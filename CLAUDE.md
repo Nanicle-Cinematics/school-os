@@ -1034,6 +1034,81 @@ admin) for every class, as on the term mark sheet; the broadsheet, slips and
 progress are ACADEMIC. `npm run verify:mocks` (CI, after the app starts) pins the aggregate
 and drives the sheet as leadership, an assigned teacher and an unassigned one.
 
+## Nursery reports are skills and ratings, not marks
+
+A nursery child is not marked out of 100 per subject. The school's own Nursery One form lists
+**skills under areas** (Language > News telling, Poem recitals; Reading; Writing; Mathematics; Art and
+creativity; Health and self help; Free play) and gives each skill **a score out of 100 and an A/B/C
+rating** (A Excellent, B Very good, C Good), with general comments, the class teacher's and the head's
+remarks. Added 2026-10-22 from a photo of that form. It is a separate path from the marks engine on purpose.
+
+- **Which levels:** `SKILL_CARD_STAGES` in `src/lib/skills.ts`, which is **NURSERY only** (the school's
+  decision). KG and above keep the marked card. Widening it is one line, but KG's skills would then need
+  listing. `src/lib/skills.ts` is pure (no `server-only`) and holds every rule: the A/B/C key and its
+  wording, `checkSkillScore` (the same rule as a mark, out of 100: `checkScore`), `checkSkillGrade`,
+  `splitSkillLines`, `areaCode`, `ageLabel`.
+- **Data:** `SubjectSkill` (a skill under a SUBJECT, for one LEVEL: Nursery 2 is not Nursery 1 with the same
+  list) and `SkillRating` (term, pupil, skill: `score` and `grade`, either may be blank, and blank is "not
+  assessed", never zero). An **area is an ordinary `Subject` offered at the level**, so nothing about
+  subjects changed; the skills are what make it a section of the card. Nothing here touches `Assessment`,
+  `Score` or `computeClassResults`, so a rating can never move a term's marks. `verify:skills` fails if the
+  actions mention them.
+- **Setup:** `/subjects/skills` (OFFICE; "Nursery skills" on the Subjects page). Add an area, then one row per
+  skill, a box per area for new ones one a line. A row left blank removes its skill, **except that a skill
+  with ratings can only be renamed** (the foreign key cascades, so removing it would take the ratings off
+  cards already printed; refused with how many). Deleting a subject with rated skills is refused too.
+- **Entry:** `/results/skills` (`MARKING`: leadership, the IT admin and a teacher). One class, one AREA at a time,
+  children down and the area's skills across, a score box and three rating buttons per cell. A teacher reaches
+  a class they teach anything in (the remarks rule, not the mark sheet's per-subject one: the class teacher
+  of a nursery class rates every area and may not be assigned each); leadership and the IT admin any class.
+  `/results/skills` is on the teacher's allowed list in `verify-teacher`, and refused to a parent.
+  ⚠️ The rating is **buttons plus a hidden input**, not a select or radios. React resets a form when its
+  action returns and does not put a controlled select/radio/checkbox back (the mark sheet's lost "absent"
+  tick, above), so a select would show blank after every save with the state still holding the grade.
+  A refused save is all or nothing and names every offender, as a mark does. A pupil whose card is
+  PUBLISHED is shown read-only and skipped. Saving a rating also creates the pupil's `TermResult` row
+  (`skipDuplicates`) so the card can be approved and published from Results with no remark typed first.
+- **The card:** `ReportCard` hands over to `SkillReportCard` when the loaders give it `skills`
+  (`getSkillCard`, null for every level that is marked, decided from the stage the card already carries so
+  those pay no query). Single card, class print run and the parent portal all go through
+  `getReportCard`/`getClassReportCards`, so the arrears hold and the publication check in front of them apply
+  unchanged. No totals and no positions: the paper form has none. "General comments" prints conduct, attitude
+  and interest when any is written and a ruled line otherwise (there is no separate field for it yet).
+  `/results` shows "N rated" and a "Skills & ratings" link in place of Compute for a nursery class.
+- **Not built:** suggesting a rating from the score (the form gives no cut-offs, so none were invented);
+  a per-pupil view of all areas at once; nursery promotion defaults (there are no marks to decide on, so the
+  promotions screen opens `PENDING` for them); the form's "items to bring" list and "school fees / balance" line.
+  The migration is additive (`nursery_skill_ratings`): run it BEFORE the merge, then `npm run db:rls` and,
+  on production, `migrate.yml action=rls`. The two tables are tenant tables and are unprotected until then.
+- **Guards:** `verify:skills` (pure, in CI, forced red three ways: no ownership read-back, a fourth grade,
+  and see below for the bill).
+
+## Next term's bill, with what is still owing, on one sheet
+
+`/invoices/proforma?term=<next term>` (the "advance bill", FINANCE) prices a term that has not been invoiced
+and writes nothing. It is offered from Invoices, from `/results` ("Next term's bills") and from the class
+print run ("Next term's bills for this class"), all through `getNextTermId`, so the three cannot disagree
+about which term is next. It is the sheet to hand home beside the report card at the end of every term.
+
+⚠️ **Two things it got wrong at the END OF THE YEAR, which is when it matters most, fixed 2026-10-22:**
+
+- **Arrears.** It looked for the previous term *inside the same academic year*, so the bill printed at the
+  end of the third term found no previous term and quoted **no arrears**. Arrears are now `arrearsBefore`
+  (`src/lib/proforma.ts`): the balance of the pupil's latest earlier non-cancelled invoice in
+  (year start, term) order, which is exactly the chain `relinkChain` keeps and already contains everything
+  that invoice carried. A term that was never invoiced no longer hides what was owed before it; a credit is
+  not arrears. The line on the bill names the term it is owed from.
+- **Level.** It priced from the class a child sits in today, which at the end of the year is the class they
+  are LEAVING. `levelForNextTerm` bills them at the class they are placed in for the coming year if the
+  promotion has run; otherwise by the verdict on their third term (`promotionStatus`): promoted goes one
+  rung up (the next ORDER, so Nursery 2 at 0 goes to KG1 at 1), repeating stays, graduating is not billed.
+  A pupil with **no verdict** is priced where they are and listed on screen (not on the paper) as
+  "assumed" so the office decides them under Promotions and prints again.
+
+`verify:proforma` (pure, in CI) walks every case and was forced red by restoring each old behaviour.
+Not done: a payment already on account is not netted off the "Expected total" (it is applied on the real
+invoice, as before); and the form's "items to bring" list is not on the bill.
+
 ## The register, and the day nobody marked it
 
 Attendance is a **daily** mark per child, taken by the form teacher on

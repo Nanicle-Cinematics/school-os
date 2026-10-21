@@ -121,6 +121,8 @@ model School {
   scores         Score[]
   mockExams      MockExam[]
   mockScores     MockScore[]
+  subjectSkills  SubjectSkill[]
+  skillRatings   SkillRating[]
   subjectResults SubjectResult[]
   termResults    TermResult[]
 
@@ -682,6 +684,7 @@ model Term {
   assessments    Assessment[]
   subjectResults SubjectResult[]
   termResults    TermResult[]
+  skillRatings   SkillRating[]
   invoices       Invoice[]
   feeStructures  FeeStructure[]
   expenses       Expense[]
@@ -710,6 +713,7 @@ model Level {
   levelSubjects LevelSubject[]
   feeStructures FeeStructure[]
   mockExams     MockExam[]
+  subjectSkills SubjectSkill[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -763,6 +767,7 @@ model Subject {
   subjectResults      SubjectResult[]
   teachingAssignments TeachingAssignment[]
   mockScores          MockScore[]
+  skills              SubjectSkill[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -903,6 +908,7 @@ model Student {
   scores         Score[]
   subjectResults SubjectResult[]
   termResults    TermResult[]
+  skillRatings   SkillRating[]
   invoices       Invoice[]
   payments       Payment[]
   discounts      StudentDiscount[]
@@ -1414,6 +1420,72 @@ model TermResult {
   @@index([schoolId, termId, classGroupId])
   @@index([schoolId, status])
   @@index([studentId]) // the parent portal asks for one child's cards; no other index leads with the pupil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SKILL REPORTS (nursery)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// How a skill is rated on a nursery progress report: the key printed on the
+/// school's own form (A Excellent, B Very Good, C Good). Wording lives in
+/// `src/lib/skills.ts`; adding a grade is a migration here and a line there.
+enum SkillGrade {
+  A
+  B
+  C
+}
+
+/// One thing a nursery child is watched on, listed under a subject (an "area")
+/// for one level: Language > "News telling", "Poem recitals".
+///
+/// Per LEVEL because Nursery 2 is not Nursery 1 with the same list. A nursery
+/// card is a list of these with a score and a rating each, not marks out of 100
+/// per subject, so none of this reaches `Assessment` or the results engine.
+model SubjectSkill {
+  id        String  @id @default(cuid())
+  schoolId  String
+  school    School  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  levelId   String
+  level     Level   @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  name  String
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ratings SkillRating[]
+
+  @@unique([levelId, subjectId, name])
+  @@index([schoolId])
+  @@index([subjectId])
+}
+
+/// One child's result on one skill in one term: a score out of 100 and a
+/// rating, either of which may be left blank (blank is "not assessed", never
+/// zero). Written from the skills grid, read by the nursery report card.
+model SkillRating {
+  id        String       @id @default(cuid())
+  schoolId  String
+  school    School       @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  termId    String
+  term      Term         @relation(fields: [termId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     SubjectSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  score Decimal?    @db.Decimal(5, 2)
+  grade SkillGrade?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([termId, studentId, skillId])
+  @@index([schoolId, termId])
+  @@index([studentId]) // the parent portal and the card read one child's ratings
+  @@index([skillId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

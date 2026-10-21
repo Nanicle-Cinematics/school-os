@@ -33,7 +33,7 @@ const LANDING = "/assessments/sheet";
  * exams list, from which a JHS 3 subject teacher enters mock marks; the mock
  * broadsheet and progress behind it are leadership's.
  */
-const ALLOWED = ["/assessments/sheet", "/results/remarks", "/classes", "/attendance", "/mocks"];
+const ALLOWED = ["/assessments/sheet", "/results/remarks", "/results/skills", "/classes", "/attendance", "/mocks"];
 
 /** Everything else reachable from the sidebar or by typing a URL. */
 const FORBIDDEN = [
@@ -44,6 +44,7 @@ const FORBIDDEN = [
   "/staff",
   "/houses",
   "/subjects",
+  "/subjects/skills",
   "/assessments",
   "/results",
   "/results/broadsheet",

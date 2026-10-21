@@ -30,6 +30,8 @@ export type Proforma = {
   subtotal: Prisma.Decimal;
   discountTotal: Prisma.Decimal;
   broughtForward: Prisma.Decimal;
+  /** The term the arrears are owed from, for the line on the bill. */
+  arrearsFrom: string | null;
   total: Prisma.Decimal;
 };
 
@@ -151,7 +153,7 @@ export function ProformaBill({
           <Row
             label="Arrears brought forward"
             value={formatCedis(proforma.broughtForward)}
-            hint="Still owing from the term just ended"
+            hint={proforma.arrearsFrom ? `Still owing at the end of ${proforma.arrearsFrom}` : "Still owing from earlier terms"}
           />
         ) : null}
         <div className="flex items-baseline justify-between border-t border-slate-300 pt-2">

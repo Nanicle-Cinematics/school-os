@@ -86,6 +86,7 @@ export default async function PortalReportCardPage({
           termResult={data.termResult}
           subjectResults={data.subjectResults}
           settings={data.settings}
+          skills={data.skills}
         />
       </div>
     </div>

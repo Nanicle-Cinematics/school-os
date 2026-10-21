@@ -59,7 +59,7 @@ export default async function ProformaPage({ searchParams }: PageProps<"/invoice
     where: { schoolId: auth.schoolId, termId, status: { not: "CANCELLED" } },
   });
 
-  const { term, priced, skipped } = data;
+  const { term, priced, skipped, assumed, graduating } = data;
   const expected = priced.reduce((sum, row) => sum + Number(row.total), 0);
   const arrears = priced.reduce((sum, row) => sum + Number(row.broughtForward), 0);
   const label = classGroup ? `${classGroup.level.name} ${classGroup.name}` : "Every class";
@@ -105,6 +105,24 @@ export default async function ProformaPage({ searchParams }: PageProps<"/invoice
             one home early. Add momo or bank details under Settings → Fees policy.
           </Alert>
         </div>
+      ) : null}
+
+      {/* On screen only: these are things for the office to check before it prints, not for a parent. */}
+      {assumed.length > 0 ? (
+        <div className="print:hidden">
+          <Alert tone="error">
+            {assumed.length} pupil{assumed.length === 1 ? " is" : "s are"} priced at the level they are in now,
+            because the year ended with no decision on whether they move up. If any are being promoted their
+            bill is the wrong level. Decide them under Promotions, then print again:{" "}
+            {assumed.map((s) => `${s.name} (${s.level})`).join(", ")}.
+          </Alert>
+        </div>
+      ) : null}
+      {graduating.length > 0 ? (
+        <p className="text-sm text-slate-500 print:hidden">
+          {graduating.length} pupil{graduating.length === 1 ? " is" : "s are"} finishing school this year and{" "}
+          {graduating.length === 1 ? "has" : "have"} no bill for the next term.
+        </p>
       ) : null}
 
       {/* Printed WITH the run, like the arrears holds on the report cards: the

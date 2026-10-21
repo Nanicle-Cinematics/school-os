@@ -3,7 +3,8 @@ import { LineChart } from "lucide-react";
 import { buttonClass } from "../button-style";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth";
-import { ACADEMIC, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { ACADEMIC, FINANCE, LEADERSHIP, canAccess } from "@/lib/permissions";
+import { getNextTermId } from "@/lib/invoice-data";
 import { getResultsOverview } from "@/lib/results-data";
 import { getTermsForPicker } from "@/lib/assessment-data";
 import { getCurrentTerm } from "@/lib/fee-data";
@@ -49,6 +50,9 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
   }
 
   const overview = await getResultsOverview(termId);
+  // The end-of-term hand-out is the report card AND next term's bill with what is still owing, so the
+  // second one is offered from the screen the first is published from. Money, so FINANCE only.
+  const nextTermId = canAccess(auth.roles, FINANCE) ? await getNextTermId(termId) : null;
   const isLeadership = canAccess(auth.roles, ACADEMIC);
   const term = terms.find((t) => t.id === termId);
 
@@ -64,6 +68,11 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
           // this page but would be turned away from the records.
           canAccess(auth.roles, LEADERSHIP) ? (
             <div className="flex flex-wrap gap-2">
+              {nextTermId ? (
+                <ButtonLink href={`/invoices/proforma?term=${nextTermId}`} variant="secondary">
+                  Next term&rsquo;s bills
+                </ButtonLink>
+              ) : null}
               <ButtonLink href="/results/jhs-broadsheet" variant="secondary">
                 JHS 1–3 broadsheet
               </ButtonLink>
@@ -95,7 +104,8 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
         <span className="font-medium text-slate-900">How this works: </span>
         enter scores against assessments, compute a class to turn them into subject and term
         results, then submit → approve → publish. Publishing freezes positions and makes report
-        cards final.
+        cards final. Nursery classes are rated on skills instead of marked: rate them under Skills
+        &amp; ratings, then publish and print their progress reports here the same way.
       </div>
 
       <Card>
@@ -118,7 +128,8 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
                       {row.enrolled}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
-                      {row.assessments}
+                      {/* A nursery class is rated on skills, so it has no assessments to count. */}
+                      {row.usesSkills ? `${row.rated} rated` : row.assessments}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">
                       {row.computed}
@@ -132,9 +143,27 @@ export default async function ResultsPage({ searchParams }: PageProps<"/results"
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex flex-wrap items-center gap-2">
-                        <ComputeForm termId={termId} classGroupId={row.classGroup.id} />
+                        {row.usesSkills ? (
+                          <Link
+                            href={`/results/skills?term=${termId}&class=${row.classGroup.id}`}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                          >
+                            Skills &amp; ratings
+                          </Link>
+                        ) : (
+                          <ComputeForm termId={termId} classGroupId={row.classGroup.id} />
+                        )}
 
-                        {row.computed > 0 ? (
+                        {row.usesSkills && row.computed > 0 ? (
+                          <Link
+                            href={`/results/print?term=${termId}&class=${row.classGroup.id}`}
+                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"
+                          >
+                            Report cards
+                          </Link>
+                        ) : null}
+
+                        {row.computed > 0 && !row.usesSkills ? (
                           <Link
                             href={`/results/broadsheet?term=${termId}&class=${row.classGroup.id}`}
                             className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50"

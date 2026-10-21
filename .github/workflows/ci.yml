@@ -265,6 +265,12 @@ jobs:
       - name: Arrears carried forward follow the old invoice, not a frozen snapshot
         run: npm run verify:carry-forward
 
+      - name: Advance bill — arrears across a year boundary, and the level a child will be billed at
+        run: npm run verify:proforma
+
+      - name: Nursery skills — what a rating may be, who may enter one, and that it never touches the marks
+        run: npm run verify:skills
+
       - name: Platform-admin two-factor — RFC 6238 vectors, replay, encryption at rest
         run: npm run verify:totp
 

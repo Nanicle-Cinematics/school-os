@@ -131,12 +131,14 @@ export async function deleteSubject(formData: FormData): Promise<void> {
 
   // Grades reference the subject by id; removing it would orphan a published
   // report card. Anything already assessed stays forever.
-  const [assessments, results] = await Promise.all([
+  const [assessments, results, ratings] = await Promise.all([
     prisma.assessment.count({ where: { subjectId: id } }),
     prisma.subjectResult.count({ where: { subjectId: id } }),
+    // A nursery area's skills carry ratings, and deleting the subject would cascade them away.
+    prisma.skillRating.count({ where: { skill: { subjectId: id } } }),
   ]);
 
-  if (assessments > 0 || results > 0) {
+  if (assessments > 0 || results > 0 || ratings > 0) {
     redirect(`/subjects/${id}?error=in-use`);
   }
 

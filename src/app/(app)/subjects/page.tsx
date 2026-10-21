@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { OFFICE } from "@/lib/permissions";
 import { getSubjectList } from "@/lib/subject-data";
 import { PageHeader } from "../ui";
+import { buttonClass } from "../button-style";
 import { BookOpen } from "lucide-react";
 import { DataTable, Row, type Column } from "../primitives";
 import { NewSubjectForm } from "./subject-form";
@@ -35,7 +36,16 @@ export default async function SubjectsPage() {
             ? "No subjects yet."
             : `${subjects.length} subjects · ${core} core, ${subjects.length - core} elective`
         }
-        action={canEdit ? <NewSubjectForm nextOrder={nextOrder} /> : undefined}
+        action={
+          canEdit ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href="/subjects/skills" className={buttonClass("secondary")}>
+                Nursery skills
+              </Link>
+              <NewSubjectForm nextOrder={nextOrder} />
+            </div>
+          ) : undefined
+        }
       />
           <DataTable
             columns={COLUMNS}

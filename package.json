@@ -89,6 +89,8 @@
     "verify:school-icon": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-school-icon.mts",
     "verify:assessment-entry": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-assessment-entry.mts",
     "make:admin:reset-2fa": "node --env-file=.env scripts/reset-platform-2fa.mjs",
+    "verify:skills": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-skills.mts",
+    "verify:proforma": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-proforma.mts",
     "verify:carry-forward": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-carry-forward.mts",
     "verify:invoicing": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-invoicing.mts",
     "verify:mobile-nav": "node --env-file=.env scripts/verify-mobile-nav.mjs",

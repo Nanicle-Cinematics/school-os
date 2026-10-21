@@ -2,6 +2,8 @@ import "server-only";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { countRatedPupils, getSkillCard } from "@/lib/skill-data";
+import { usesSkillCard } from "@/lib/skills";
 
 /**
  * The exact shapes a report card is rendered from.
@@ -104,14 +106,18 @@ export async function getReportCard(termId: string, studentId: string) {
     return null;
   }
 
-  return { termResult, subjectResults, settings };
+  // The nursery's version of the card: skills and ratings in place of marks. Null for every other
+  // level, and decided from the stage the card was already loaded with, so it costs those no query.
+  const skills = await getSkillCard(termId, termResult.classGroup.level, [studentId]);
+
+  return { termResult, subjectResults, settings, skills };
 }
 
 export async function getResultsOverview(termId: string) {
   const classGroups = await prisma.classGroup.findMany({
     orderBy: [{ level: { order: "asc" } }, { name: "asc" }],
     include: {
-      level: { select: { name: true } },
+      level: { select: { name: true, stage: true } },
       formTeacher: { select: { firstName: true, lastName: true } },
       _count: { select: { enrollments: { where: { status: "ACTIVE" } } } },
     },
@@ -131,6 +137,13 @@ export async function getResultsOverview(termId: string) {
 
   const assessmentCount = new Map(assessments.map((row) => [row.classGroupId, row._count]));
 
+  // A nursery class is rated on skills rather than marked, so its progress is how many children have
+  // any rating, not how many assessments exist.
+  const ratedPupils = await countRatedPupils(
+    termId,
+    classGroups.filter((group) => usesSkillCard(group.level.stage)).map((group) => group.id),
+  );
+
   return classGroups.map((classGroup) => {
     const rows = termResults.filter((row) => row.classGroupId === classGroup.id);
     const total = rows.reduce((sum, row) => sum + row._count, 0);
@@ -145,6 +158,8 @@ export async function getResultsOverview(termId: string) {
       classGroup,
       enrolled: classGroup._count.enrollments,
       assessments: assessmentCount.get(classGroup.id) ?? 0,
+      usesSkills: usesSkillCard(classGroup.level.stage),
+      rated: ratedPupils.get(classGroup.id) ?? 0,
       computed: total,
       approved,
       published,
@@ -175,6 +190,12 @@ export async function getClassReportCards(termId: string, classGroupId: string) 
 
   const settings = await prisma.schoolSettings.findFirst();
 
+  // One class is one level, so the skills (and every child's ratings) are read once for the run.
+  const level = termResults[0]?.classGroup.level;
+  const skills = level
+    ? await getSkillCard(termId, level, termResults.map((row) => row.studentId))
+    : null;
+
   const byStudent = new Map<string, ReportCardSubjectResult[]>();
   for (const result of subjectResults) {
     byStudent.set(result.studentId, [...(byStudent.get(result.studentId) ?? []), result]);
@@ -182,6 +203,7 @@ export async function getClassReportCards(termId: string, classGroupId: string) 
 
   return {
     settings,
+    skills,
     cards: termResults.map((termResult) => ({
       termResult,
       subjectResults: byStudent.get(termResult.studentId) ?? [],

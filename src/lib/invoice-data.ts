@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@prisma/client";
-import type { InvoiceStatus } from "@prisma/client";
+import type { InvoiceStatus, PromotionStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PLAN_SELECT, keepingToPlan } from "@/lib/report-access";
 import {
@@ -17,6 +17,7 @@ import {
   priceFromStructure,
   type SkippedStudent,
 } from "@/lib/invoice-engine";
+import { arrearsBefore, levelForNextTerm } from "@/lib/proforma";
 import type { Proforma } from "@/app/(app)/invoices/proforma-bill";
 
 type ProformaRow = Proforma;
@@ -382,6 +383,32 @@ export async function getInvoiceFilterOptions() {
 }
 
 /**
+ * The term that follows `termId`: the next one in its year, or the first of the next year after the
+ * third. One answer for every screen that offers "next term's bills" (Invoices, Results, the report-card
+ * print run), so they cannot disagree about which term that is.
+ */
+export async function getNextTermId(termId: string): Promise<string | null> {
+  const viewing = await prisma.term.findUnique({
+    where: { id: termId },
+    select: { sequence: true, academicYearId: true, academicYear: { select: { startDate: true } } },
+  });
+  if (!viewing) {
+    return null;
+  }
+  const next =
+    (await prisma.term.findFirst({
+      where: { academicYearId: viewing.academicYearId, sequence: viewing.sequence + 1 },
+      select: { id: true },
+    })) ??
+    (await prisma.term.findFirst({
+      where: { sequence: 1, academicYear: { startDate: { gt: viewing.academicYear.startDate } } },
+      orderBy: { academicYear: { startDate: "asc" } },
+      select: { id: true },
+    }));
+  return next?.id ?? null;
+}
+
+/**
  * What a term WOULD cost each pupil, without invoicing anybody.
  *
  * Read-only on purpose: an advance bill is printed in the holidays, weeks
@@ -390,10 +417,16 @@ export async function getInvoiceFilterOptions() {
  * this prices the term and writes nothing.
  *
  * ⚠️ The reads mirror `generateInvoicesForTerm` deliberately — same structures,
- * same discounts, same brought-forward balance from the previous term — and the
- * arithmetic itself is `priceFromStructure`, which the generator now also uses.
- * A pro-forma that quotes a figure the invoice then contradicts is worse than
- * no pro-forma: the parent has the paper, and the office has the argument.
+ * same discounts, same brought-forward balance — and the arithmetic itself is
+ * `priceFromStructure`, which the generator now also uses. A pro-forma that quotes a
+ * figure the invoice then contradicts is worse than no pro-forma: the parent has the
+ * paper, and the office has the argument.
+ *
+ * Two things differ from a bill for the current term, and both come from printing at
+ * the END of a term (see `proforma.ts`): the arrears are the balance of the latest
+ * earlier invoice in the year-then-term chain, including across a year boundary, and
+ * a child is priced at the level they will be in, which at the end of the third term is
+ * not the class they sit in today.
  */
 export async function getProformaForTerm(
   termId: string,
@@ -406,15 +439,24 @@ export async function getProformaForTerm(
   if (!term) {
     return null;
   }
+  const target = { yearStart: term.academicYear.startDate, sequence: term.sequence };
+
+  // The year the school is in today, which decides whether this bill crosses a year boundary.
+  const today = await prisma.academicYear.findFirst({ where: { isCurrent: true }, select: { startDate: true } });
+  const crossesYear = Boolean(today && today.startDate < term.academicYear.startDate);
 
   const students = await prisma.student.findMany({
     where: {
       status: "ACTIVE",
       deletedAt: null,
+      // By the class they sit in TODAY: it is the one the office prints a stack by, whatever they are
+      // billed at below.
       ...(options.classGroupId ? { currentClassGroupId: options.classGroupId } : {}),
     },
     include: {
-      currentClassGroup: { select: { name: true, levelId: true, level: { select: { name: true } } } },
+      currentClassGroup: {
+        select: { name: true, levelId: true, level: { select: { id: true, name: true, order: true } } },
+      },
       discounts: { where: { academicYearId: term.academicYearId }, include: { discount: true } },
       guardians: {
         where: { receivesBills: true },
@@ -425,38 +467,99 @@ export async function getProformaForTerm(
     },
     orderBy: { admissionNo: "asc" },
   });
+  const studentIds = students.map((student) => student.id);
 
   const structures = await prisma.feeStructure.findMany({
     where: { academicYearId: term.academicYearId, isActive: true },
     include: { items: { include: { feeCategory: true } } },
   });
 
-  const previousTerm = await prisma.term.findFirst({
-    where: { academicYearId: term.academicYearId, sequence: term.sequence - 1 },
-  });
-  const previousBalances = new Map<string, Prisma.Decimal>(
-    previousTerm
-      ? (
-          await prisma.invoice.findMany({
-            where: { termId: previousTerm.id, status: { not: "CANCELLED" } },
-            select: { studentId: true, balance: true },
-          })
-        ).map((row) => [row.studentId, row.balance])
-      : [],
+  // Placement in the term's own year, where there is one (the promotion has run, or it is the same year).
+  const placed = new Map(
+    (
+      await prisma.enrollment.findMany({
+        where: { academicYearId: term.academicYearId, status: { not: "WITHDRAWN" }, studentId: { in: studentIds } },
+        select: { studentId: true, classGroup: { select: { name: true, level: { select: { id: true, name: true } } } } },
+      })
+    ).map((row) => [row.studentId, row.classGroup]),
   );
+
+  // The verdict on their last year, for those with no placement yet: the latest third term before this year.
+  const unplaced = studentIds.filter((id) => !placed.has(id));
+  const decisions = new Map<string, { status: PromotionStatus; yearStart: Date }>();
+  if (unplaced.length > 0 && crossesYear) {
+    const rows = await prisma.termResult.findMany({
+      where: {
+        studentId: { in: unplaced },
+        term: { sequence: 3, academicYear: { startDate: { lt: term.academicYear.startDate } } },
+      },
+      select: {
+        studentId: true,
+        promotionStatus: true,
+        term: { select: { academicYear: { select: { startDate: true } } } },
+      },
+    });
+    for (const row of rows) {
+      const start = row.term.academicYear.startDate;
+      const held = decisions.get(row.studentId);
+      if (!held || held.yearStart < start) {
+        decisions.set(row.studentId, { status: row.promotionStatus, yearStart: start });
+      }
+    }
+  }
+
+  const ladder = await prisma.level.findMany({ select: { id: true, name: true, order: true } });
+  const levelName = new Map(ladder.map((level) => [level.id, level.name]));
+
+  const earlier = await prisma.invoice.findMany({
+    where: {
+      status: { not: "CANCELLED" },
+      studentId: { in: studentIds },
+      term: {
+        OR: [
+          { academicYear: { startDate: { lt: term.academicYear.startDate } } },
+          { academicYearId: term.academicYearId, sequence: { lt: term.sequence } },
+        ],
+      },
+    },
+    select: {
+      studentId: true,
+      balance: true,
+      term: { select: { name: true, sequence: true, academicYear: { select: { name: true, startDate: true } } } },
+    },
+  });
+  const owed = arrearsBefore(earlier, target);
 
   const priced: ProformaRow[] = [];
   const skipped: SkippedStudent[] = [];
+  /** Priced at the level they are in now because the year ended with no verdict: the office should look. */
+  const assumed: { admissionNo: string; name: string; level: string }[] = [];
+  /** Finishing school this year: not billed for a term they will not attend. */
+  const graduating: { admissionNo: string; name: string }[] = [];
 
   for (const student of students) {
     const who = {
       admissionNo: student.admissionNo,
       name: `${student.firstName} ${student.lastName}`,
     };
-    const levelId = student.currentClassGroup?.levelId;
-    if (!levelId) {
+    const choice = levelForNextTerm({
+      enrolledLevelId: placed.get(student.id)?.level.id ?? null,
+      currentLevel: student.currentClassGroup?.level ?? null,
+      decision: decisions.get(student.id)?.status ?? null,
+      ladder,
+      crossesYear,
+    });
+    if (choice.kind === "NO_CLASS") {
       skipped.push({ ...who, reason: { kind: "NO_CLASS" } });
       continue;
+    }
+    if (choice.kind === "GRADUATING") {
+      graduating.push(who);
+      continue;
+    }
+    const levelId = choice.levelId;
+    if (choice.kind === "SAME" && choice.assumed) {
+      assumed.push({ ...who, level: levelName.get(levelId) ?? "their level" });
     }
 
     const profile = {
@@ -466,30 +569,37 @@ export async function getProformaForTerm(
     const levelStructures = structures.filter((s) => s.levelId === levelId);
     const structure = chooseFeeStructure(levelStructures, profile, termId);
     if (!structure) {
-      const level = student.currentClassGroup?.level?.name ?? "their level";
       skipped.push({
         ...who,
-        reason: explainNoStructure(levelStructures, profile, termId, level),
+        reason: explainNoStructure(levelStructures, profile, termId, levelName.get(levelId) ?? "their level"),
       });
       continue;
     }
 
+    const arrears = owed.get(student.id);
     const money = priceFromStructure(
       student.schoolId,
       structure,
       student.discounts.map((sd) => sd.discount),
-      previousBalances.get(student.id) ?? new Prisma.Decimal(0),
+      arrears?.amount ?? new Prisma.Decimal(0),
     );
     const link = student.guardians[0]?.guardian ?? null;
+    const placedIn = placed.get(student.id);
 
     priced.push({
       student: {
         firstName: student.firstName,
         lastName: student.lastName,
         admissionNo: student.admissionNo,
-        className: student.currentClassGroup
-          ? `${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
-          : null,
+        // The class they will sit in when it is known; otherwise the level they will be billed at, with
+        // where they are now, since the class itself is not decided until the promotion runs.
+        className: placedIn
+          ? `${placedIn.level.name} ${placedIn.name}`
+          : choice.kind === "PROMOTED"
+            ? `${levelName.get(levelId)} (from ${student.currentClassGroup?.level.name} ${student.currentClassGroup?.name})`
+            : student.currentClassGroup
+              ? `${student.currentClassGroup.level.name} ${student.currentClassGroup.name}`
+              : null,
       },
       guardian: link ? { firstName: link.firstName, lastName: link.lastName, phone: link.phone } : null,
       lines: money.lines.map((l) => ({
@@ -500,9 +610,10 @@ export async function getProformaForTerm(
       subtotal: money.subtotal,
       discountTotal: money.discountTotal,
       broughtForward: money.broughtForward,
+      arrearsFrom: arrears?.from ?? null,
       total: money.total,
     });
   }
 
-  return { term, priced, skipped };
+  return { term, priced, skipped, assumed, graduating };
 }

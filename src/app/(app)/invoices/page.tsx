@@ -10,9 +10,9 @@ import {
   getInvoiceFilterOptions,
   getDebtorAgeing,
   invoicesOnKeptPlans,
+  getNextTermId,
 } from "@/lib/invoice-data";
 import { getCurrentTerm } from "@/lib/fee-data";
-import { prisma } from "@/lib/prisma";
 import { formatCedis } from "@/lib/money";
 import {
   AGE_BUCKETS,
@@ -92,31 +92,7 @@ export default async function InvoicesPage({
    * /settings/terms, and a school correcting last year's dates must not change
    * which term follows which.
    */
-  const viewing = termId
-    ? await prisma.term.findUnique({
-        where: { id: termId },
-        select: {
-          sequence: true,
-          academicYearId: true,
-          academicYear: { select: { startDate: true } },
-        },
-      })
-    : null;
-  const nextTerm = viewing
-    ? ((await prisma.term.findFirst({
-        where: { academicYearId: viewing.academicYearId, sequence: viewing.sequence + 1 },
-        select: { id: true },
-      })) ??
-      (await prisma.term.findFirst({
-        where: {
-          sequence: 1,
-          academicYear: { startDate: { gt: viewing.academicYear.startDate } },
-        },
-        orderBy: { academicYear: { startDate: "asc" } },
-        select: { id: true },
-      })))
-    : null;
-  const nextTermId = nextTerm?.id ?? null;
+  const nextTermId = termId ? await getNextTermId(termId) : null;
 
   const ageing = await getDebtorAgeing(termId);
   const owed = ageing.reduce((sum, row) => sum + row.total, 0);
