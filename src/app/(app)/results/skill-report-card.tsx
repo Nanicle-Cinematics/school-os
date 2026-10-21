@@ -124,10 +124,10 @@ export function SkillReportCard({
         <table className="mt-3 w-full border-collapse text-sm">
           <thead>
             <tr className="bg-brand-800 text-xs uppercase tracking-wide text-white print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
-              <th className="px-2 py-1.5 text-left font-semibold">Area</th>
-              <th className="px-2 py-1.5 text-left font-semibold">Skill</th>
-              <th className="px-2 py-1.5 text-right font-semibold">Score / 100</th>
-              <th className="px-2 py-1.5 text-center font-semibold">Rating</th>
+              <th className="border border-slate-400 px-2 py-1.5 text-left font-semibold">Area</th>
+              <th className="border border-slate-400 px-2 py-1.5 text-left font-semibold">Skill</th>
+              <th className="border border-slate-400 px-2 py-1.5 text-center font-semibold">Score / 100</th>
+              <th className="border border-slate-400 px-2 py-1.5 text-center font-semibold">Rating</th>
             </tr>
           </thead>
           <tbody>
@@ -135,15 +135,15 @@ export function SkillReportCard({
               section.skills.map((skill, index) => {
                 const cell = mine[skill.id];
                 return (
-                  <tr key={skill.id} className="border-b border-slate-200">
+                  <tr key={skill.id}>
                     {index === 0 ? (
-                      <td rowSpan={section.skills.length} className="border-r border-slate-200 px-2 py-1.5 align-top font-medium text-slate-900">
+                      <td rowSpan={section.skills.length} className="border border-slate-400 px-2 py-2 align-top font-medium text-slate-900">
                         {section.subjectName}
                       </td>
                     ) : null}
-                    <td className="px-2 py-1.5 text-slate-900">{skill.name}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums text-slate-700">{cell?.score ?? ""}</td>
-                    <td className="px-2 py-1.5 text-center font-semibold text-slate-900">{cell?.grade ?? ""}</td>
+                    <td className="border border-slate-400 px-2 py-2 text-slate-900">{skill.name}</td>
+                    <td className="border border-slate-400 px-2 py-2 text-center tabular-nums text-slate-700">{cell?.score ?? ""}</td>
+                    <td className="border border-slate-400 px-2 py-2 text-center font-semibold text-slate-900">{cell?.grade ?? ""}</td>
                   </tr>
                 );
               }),
