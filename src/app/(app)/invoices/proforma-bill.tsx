@@ -32,6 +32,8 @@ export type Proforma = {
   broughtForward: Prisma.Decimal;
   /** The term the arrears are owed from, for the line on the bill. */
   arrearsFrom: string | null;
+  /** What the family is asked to bring this term, one per line; empty prints nothing. */
+  itemsToBring: string[];
   total: Prisma.Decimal;
 };
 
@@ -169,6 +171,17 @@ export function ProformaBill({
         It is not an invoice and no payment is overdue. Fees set or changed before the term
         begins will be reflected on the invoice itself.
       </p>
+
+      {proforma.itemsToBring.length > 0 ? (
+        <div className="mt-3 border-t border-slate-200 pt-3">
+          <p className="text-xs uppercase tracking-wide text-slate-500">Please bring</p>
+          <ul className="mt-1 space-y-0.5 text-sm text-slate-700">
+            {proforma.itemsToBring.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {school.settings?.paymentInstructions ? (
         <div className="mt-3 border-t border-slate-200 pt-3">

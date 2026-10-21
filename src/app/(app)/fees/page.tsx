@@ -8,6 +8,7 @@ import { getFeeSetup } from "@/lib/fee-data";
 import { deleteFeeStructure } from "@/lib/fee-actions";
 import { formatCedis } from "@/lib/money";
 import { PageHeader, Card } from "../ui";
+import { buttonClass } from "../button-style";
 import { SubmitButton } from "../submit-button";
 import { StructureForm } from "./structure-form";
 import { FeeItemSection } from "./fee-items";
@@ -47,13 +48,18 @@ export default async function FeesPage() {
         title="Fee structure"
         subtitle={`Termly fees for ${year.name}`}
         action={
-          <StructureForm
-            levels={levels}
-            categories={categories}
-            terms={terms}
-            academicYearId={year.id}
-            pricedLevelIds={[...covered]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/fees/items-to-bring" className={buttonClass("secondary")}>
+              Items to bring
+            </Link>
+            <StructureForm
+              levels={levels}
+              categories={categories}
+              terms={terms}
+              academicYearId={year.id}
+              pricedLevelIds={[...covered]}
+            />
+          </div>
         }
       />
 

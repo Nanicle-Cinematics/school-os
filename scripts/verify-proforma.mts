@@ -14,7 +14,7 @@
  */
 import { readFileSync } from "node:fs";
 import { Prisma } from "@prisma/client";
-import { arrearsBefore, isEarlier, levelForNextTerm, type EarlierInvoice } from "@/lib/proforma";
+import { ITEMS_MAX, ITEM_LENGTH_MAX, arrearsBefore, isEarlier, levelForNextTerm, parseItemsToBring, type EarlierInvoice } from "@/lib/proforma";
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = "") {
@@ -97,6 +97,14 @@ const sameYear = level({ crossesYear: false, decision: null });
 check("within a year nobody is 'assumed': there is no verdict to be waiting for", sameYear.kind === "SAME" && !sameYear.assumed);
 check("no class at all is its own answer", level({ currentLevel: null }).kind === "NO_CLASS");
 
+console.log("\nItems to bring: what a box of lines becomes");
+check("trimmed, blanks dropped, inner spaces squashed", parseItemsToBring("  5 – Toilet   rolls \r\n\n1 – Bar of key soap\n").items.join("|") === "5 – Toilet rolls|1 – Bar of key soap");
+check("a repeat in any case is dropped", parseItemsToBring("Omo\nomo\nOMO").items.length === 1);
+check("a line is cut to what a printed bill holds", parseItemsToBring("x".repeat(300)).items[0].length === ITEM_LENGTH_MAX);
+const crowded = parseItemsToBring(Array.from({ length: ITEMS_MAX + 5 }, (_, i) => `Item ${i}`).join("\n"));
+check("over the cap is reported, not silently cut", crowded.items.length === ITEMS_MAX && crowded.tooMany);
+check("nothing, null and undefined all mean no list", parseItemsToBring("").items.length === 0 && parseItemsToBring(null).items.length === 0 && parseItemsToBring(undefined).items.length === 0);
+
 console.log("\nThe page uses these rules, and nothing else");
 const code = (path: string) =>
   readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -107,6 +115,15 @@ check("and the level from levelForNextTerm", /levelForNextTerm\(/.test(proforma)
 check("it no longer looks for 'the previous term in this year' by itself", !/sequence:\s*term\.sequence\s*-\s*1/.test(proforma));
 check("it still writes nothing", !/\.(create|update|upsert|delete)(Many)?\(/.test(proforma));
 check("the Invoices page asks getNextTermId, so the three screens agree on which term is next", /getNextTermId\(/.test(code("src/app/(app)/invoices/page.tsx")));
+
+const feeActions = code("src/lib/fee-actions.ts");
+const save = feeActions.slice(feeActions.indexOf("export async function saveItemsToBring"));
+check("saving the lists is FINANCE's, and sets the tenant context", /requireRole\(FINANCE\)/.test(save) && /setTenantContext\(auth\.tenant\)/.test(save));
+check("a posted level id is read back before it is written", /ownsLevels\(posted\)/.test(save));
+check("a list over the cap is refused before anything is written", save.indexOf("tooMany") !== -1 && save.indexOf("tooMany") < save.indexOf("tenantTransaction("));
+check("the write is audited", /writeAudit\(/.test(save));
+check("the bill prints the list the child is BILLED at, not the class they are leaving", /bring\.get\(levelId\)/.test(proforma) && !/bring\.get\(student\./.test(proforma));
+check("the advance bill prints it, and a real invoice does not (the school's choice)", /proforma\.itemsToBring/.test(code("src/app/(app)/invoices/proforma-bill.tsx")) && !/itemsToBring/.test(code("src/app/(app)/invoices/invoice-bill.tsx")));
 
 console.log(failures === 0 ? "\nAll good." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

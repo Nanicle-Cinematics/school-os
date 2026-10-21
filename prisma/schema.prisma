@@ -706,6 +706,10 @@ model Level {
   stage    Stage
   order    Int // ordering across the whole ladder: Nursery 1 = -1, Nursery 2 = 0, KG1 = 1 … JHS3 = 11. Consecutive.
 
+  /// What a family is asked to bring each term (toilet rolls, soap), one item a line, printed on the
+  /// advance bill. Per level because Nursery and JHS are not asked for the same things. Blank means none.
+  itemsToBring String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -17,7 +17,7 @@ import {
   priceFromStructure,
   type SkippedStudent,
 } from "@/lib/invoice-engine";
-import { arrearsBefore, levelForNextTerm } from "@/lib/proforma";
+import { arrearsBefore, levelForNextTerm, parseItemsToBring } from "@/lib/proforma";
 import type { Proforma } from "@/app/(app)/invoices/proforma-bill";
 
 type ProformaRow = Proforma;
@@ -508,8 +508,9 @@ export async function getProformaForTerm(
     }
   }
 
-  const ladder = await prisma.level.findMany({ select: { id: true, name: true, order: true } });
+  const ladder = await prisma.level.findMany({ select: { id: true, name: true, order: true, itemsToBring: true } });
   const levelName = new Map(ladder.map((level) => [level.id, level.name]));
+  const bring = new Map(ladder.map((level) => [level.id, parseItemsToBring(level.itemsToBring).items]));
 
   const earlier = await prisma.invoice.findMany({
     where: {
@@ -611,6 +612,8 @@ export async function getProformaForTerm(
       discountTotal: money.discountTotal,
       broughtForward: money.broughtForward,
       arrearsFrom: arrears?.from ?? null,
+      // What a family at the level they will be billed at is asked to bring, not the level they are leaving.
+      itemsToBring: bring.get(levelId) ?? [],
       total: money.total,
     });
   }

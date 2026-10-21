@@ -51,6 +51,7 @@ const FORBIDDEN = [
   "/mocks/progress",
   "/promotions",
   "/fees",
+  "/fees/items-to-bring",
   "/invoices",
   "/payments",
   "/expenses",

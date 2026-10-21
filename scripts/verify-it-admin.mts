@@ -68,6 +68,7 @@ const ALLOWED = [
  */
 const FORBIDDEN = [
   "/fees",
+  "/fees/items-to-bring",
   "/invoices",
   "/payments",
   "/payments/reconcile",
