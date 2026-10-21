@@ -41,7 +41,17 @@ export default async function StaffPage({ searchParams }: PageProps<"/staff">) {
       <PageHeader
         title="Staff"
         subtitle={`${total} on the books · ${teaching} teaching`}
-        action={<NewStaffForm />}
+        action={
+          <div className="flex items-center gap-2">
+            <Link
+              href="/staff/enrolment-form"
+              className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Blank form
+            </Link>
+            <NewStaffForm />
+          </div>
+        }
       />
 
       <form className="flex flex-wrap items-center gap-3">
