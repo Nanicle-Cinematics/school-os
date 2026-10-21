@@ -90,3 +90,6 @@ export const ownsMessageTemplates = (ids: ReadonlyArray<string | null | undefine
 
 export const ownsGradingScales = (ids: ReadonlyArray<string | null | undefined>) =>
   ownsAll(ids, (wanted) => prisma.gradingScale.count({ where: { id: { in: wanted } } }));
+
+export const ownsLevels = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.level.count({ where: { id: { in: wanted } } }));

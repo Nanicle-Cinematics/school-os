@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth, requireRole } from "@/lib/auth";
-import { ACADEMIC } from "@/lib/permissions";
+import { ACADEMIC, FINANCE, canAccess } from "@/lib/permissions";
+import { getNextTermId } from "@/lib/invoice-data";
 import { getClassReportCards, getReportCard } from "@/lib/results-data";
 import { reportHoldsForClass, reportHold } from "@/lib/report-access";
 import { formatCedis } from "@/lib/money";
@@ -98,6 +99,7 @@ export default async function PrintReportCardsPage({
           termResult={single.termResult}
           subjectResults={single.subjectResults}
           settings={single.settings}
+          skills={single.skills}
         />
       </div>
     );
@@ -116,7 +118,7 @@ export default async function PrintReportCardsPage({
     notFound();
   }
 
-  const { cards, settings } = await getClassReportCards(termId, classGroupId);
+  const { cards, settings, skills } = await getClassReportCards(termId, classGroupId);
   const published = includeDrafts
     ? cards
     : cards.filter((card) => card.termResult.status === "PUBLISHED");
@@ -144,6 +146,10 @@ export default async function PrintReportCardsPage({
   const printable = published.filter((card) => !holds.has(card.termResult.studentId));
   const heldCards = published.filter((card) => holds.has(card.termResult.studentId));
 
+  // Next term's bill, with whatever is still owing on the same sheet, is what goes home beside the
+  // report card. It prices money, so only someone who may read money is offered it.
+  const nextTermId = canAccess(auth.roles, FINANCE) ? await getNextTermId(termId) : null;
+
   const label = `${classGroup.level.name} ${classGroup.name}`;
   const termLabel = `${TERM_NAME[term.name] ?? term.name} Term · ${term.academicYear.name}`;
 
@@ -152,10 +158,10 @@ export default async function PrintReportCardsPage({
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div>
           <Link
-            href={`/results/broadsheet?term=${termId}&class=${classGroupId}`}
+            href={skills ? "/results" : `/results/broadsheet?term=${termId}&class=${classGroupId}`}
             className="text-sm text-slate-500 hover:text-slate-900"
           >
-            ← Broadsheet
+            {skills ? "← Results" : "← Broadsheet"}
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-slate-900">
             {label} · {printable.length} report card{printable.length === 1 ? "" : "s"}
@@ -167,6 +173,14 @@ export default async function PrintReportCardsPage({
 
         <div className="flex items-center gap-2">
           <PrintButton label={`Print ${printable.length} card${printable.length === 1 ? "" : "s"}`} />
+          {nextTermId ? (
+            <Link
+              href={`/invoices/proforma?term=${nextTermId}&class=${classGroupId}`}
+              className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Next term&rsquo;s bills for this class
+            </Link>
+          ) : null}
         {unpublished > 0 && !includeDrafts ? (
           <Link
             href={`/results/print?term=${termId}&class=${classGroupId}&drafts=1`}
@@ -238,6 +252,7 @@ export default async function PrintReportCardsPage({
           termResult={card.termResult}
           subjectResults={card.subjectResults}
           settings={settings}
+          skills={skills}
           breakAfter={index < printable.length - 1}
         />
       ))}

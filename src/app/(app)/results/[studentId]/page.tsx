@@ -33,7 +33,7 @@ export default async function ReportCardPage({
     notFound();
   }
 
-  const { termResult, subjectResults, settings } = data;
+  const { termResult, subjectResults, settings, skills } = data;
   const isLeadership = canAccess(auth.roles, ACADEMIC);
   // Staff are shown the card whatever the family owes — the office needs it to
   // have the conversation — but they are told what the parent is seeing.
@@ -80,6 +80,7 @@ export default async function ReportCardPage({
         termResult={termResult}
         subjectResults={subjectResults}
         settings={settings}
+        skills={skills}
       />
 
       {/* Remarks editor — never printed. */}

@@ -724,6 +724,22 @@ const ACTIVITY: Record<
     title: (a) => `Results from earlier records entered for ${count(a.students)} ${plural(a.students, "pupil")}`,
     detail: "Academics",
   },
+  /* The nursery progress report. Phrased by how many children were rated, like marks; the list of
+     skills being edited is setup, so it reads as such rather than as academic work. */
+  "skills.save": {
+    kind: "academic",
+    title: (a) => {
+      const n = count(a.pupils);
+      return `Skill ratings saved for ${n} ${Number(a.pupils) === 1 ? "child" : "children"}`;
+    },
+    detail: "Academics",
+  },
+  "skills.configure": { kind: "academic", title: () => "Nursery skills updated", detail: "Academics" },
+  "skills.area": {
+    kind: "academic",
+    title: (a) => `${text(a.name) ?? "An area"} added to the nursery report`,
+    detail: "Academics",
+  },
   "results.classRemarks": {
     kind: "academic",
     title: (a) => `Conduct and remarks saved for ${count(a.students)} ${plural(a.students, "pupil")}`,

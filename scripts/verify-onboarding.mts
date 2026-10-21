@@ -146,6 +146,8 @@ const ROUTES = [
   "/results",
   "/results/broadsheet",
   "/results/remarks",
+  "/results/skills",
+  "/subjects/skills",
   "/results/print",
   "/promotions",
   "/fees",

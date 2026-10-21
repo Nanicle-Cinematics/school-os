@@ -8,7 +8,7 @@ import { rosterWhere } from "@/lib/class-roster";
  * The pupils on a class's roll in the term's own year — not the class today.
  * See class-roster.ts: a past term's sheet used to list this year's cohort.
  */
-async function termRoster(termId: string, classGroupId: string) {
+export async function termRoster(termId: string, classGroupId: string) {
   const term = await prisma.term.findUnique({ where: { id: termId }, select: { academicYearId: true } });
   if (!term) {
     return [];

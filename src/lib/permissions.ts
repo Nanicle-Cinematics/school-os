@@ -210,6 +210,8 @@ export const NAV: NavSection[] = [
       { href: "/assessments", label: "Assessments", icon: "assessments", roles: ACADEMIC },
       { href: "/results", label: "Results", icon: "results", roles: ACADEMIC },
       { href: "/results/remarks", label: "Conduct & remarks", icon: "remarks", roles: MARKING },
+      // The nursery's mark sheet: a score and a rating per skill, not marks out of 100.
+      { href: "/results/skills", label: "Skills & ratings", icon: "sheet", roles: MARKING },
       // MARKING, so a JHS 3 subject teacher can enter mock marks. The broadsheet,
       // slips and progress behind it are ACADEMIC and refuse a teacher by URL.
       { href: "/mocks", label: "Mock exams", icon: "mocks", roles: MARKING },

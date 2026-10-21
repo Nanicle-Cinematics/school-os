@@ -41,6 +41,8 @@ const FORBIDDEN = [
   "/assessments/sheet",
   "/results",
   "/results/remarks",
+  "/results/skills",
+  "/subjects/skills",
   "/promotions",
   "/fees",
   "/invoices",

@@ -5,6 +5,8 @@ import type {
   ReportCardTermResult,
 } from "@/lib/results-data";
 import { paperWatermark } from "@/lib/paper";
+import type { SkillCardData } from "@/lib/skill-data";
+import { SkillReportCard } from "./skill-report-card";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -30,6 +32,7 @@ export function ReportCard({
   termResult,
   subjectResults,
   settings,
+  skills = null,
   breakAfter = false,
 }: {
   schoolName: string;
@@ -40,8 +43,28 @@ export function ReportCard({
   termResult: ReportCardTermResult;
   subjectResults: ReportCardSubjectResult[];
   settings: ReportCardSettings;
+  /**
+   * Set for a level that reports by skills (nursery): the card is then the school's progress report,
+   * not marks out of 100. `null` for everyone else, which is nearly every card.
+   */
+  skills?: SkillCardData | null;
   breakAfter?: boolean;
 }) {
+  if (skills) {
+    return (
+      <SkillReportCard
+        schoolName={schoolName}
+        schoolMotto={schoolMotto}
+        schoolCrestUrl={schoolCrestUrl}
+        headSignatureUrl={headSignatureUrl}
+        headName={headName}
+        termResult={termResult}
+        skills={skills}
+        breakAfter={breakAfter}
+      />
+    );
+  }
+
   const { student, classGroup, term } = termResult;
   const guardian = student.guardians[0]?.guardian;
 

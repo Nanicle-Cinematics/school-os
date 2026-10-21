@@ -38,6 +38,9 @@ const hits = (re: RegExp, allow: (path: string) => boolean = () => false) =>
 
 const DOCUMENTS = [
   "results/report-card.tsx",
+  // The nursery progress report: the report card's sibling for the levels that are rated on skills, not
+  // marked out of 100. Printed on the same paper, so it carries the same headings and the same rules.
+  "results/skill-report-card.tsx",
   "invoices/invoice-bill.tsx",
   // The fourth, added deliberately. An advance bill is the same animal again —
   // .paper, the shared masthead, its own print rules, handed to a parent in the
@@ -125,6 +128,10 @@ console.log("\nOne set of primitives, not thirty copies");
  */
 const NOT_LISTS = [
   "results/report-card.tsx",
+  "results/skill-report-card.tsx",
+  // MARK ENTRY, for nursery skills: children down, an area's skills across, a score box and three
+  // rating buttons in every cell.
+  "results/skills/skills-grid.tsx",
   "results/cumulative-record.tsx",
   "invoices/invoice-bill.tsx",
   // PRINTED DOCUMENTS, as above: a fee table on a document a parent keeps, not
