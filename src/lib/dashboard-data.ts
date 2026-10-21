@@ -801,6 +801,14 @@ const ACTIVITY: Record<
         : "A staff member was removed",
     detail: "Staff",
   },
+  "guardian.remove": {
+    kind: "people",
+    title: (a) =>
+      Number(a.loginsRemoved) > 0
+        ? "A parent or guardian was removed, and their portal login with them"
+        : "A parent or guardian was removed",
+    detail: "Guardians",
+  },
   "student.import": {
     kind: "people",
     title: (a) => `${count(a.created)} ${plural(a.created, "pupil")} imported`,

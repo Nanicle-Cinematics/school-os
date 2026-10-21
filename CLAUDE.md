@@ -1754,6 +1754,22 @@ among 290), but nothing could find or merge a real one.
   the fixture linked the same parent to both records, so no link was ever moved. Look at what a fixture can reach.
 - Not built: a warning at admission, and a "not a duplicate" memory.
 
+## Removing a guardian
+
+`deleteGuardian` used to set `deletedAt` and nothing else (found 2026-10-21: an IT admin deleted a guardian who had been
+entered twice and the duplicate stayed on the child). Every reader that reaches a guardian THROUGH a child's link (the
+child's page, the Students list, the bill's addressee, the receipt, the report card, the SMS audience) went on showing
+or texting them, and their portal login stayed live. `removeGuardian` (`guardian-removal.ts`) is now the one way:
+it deletes the links, promotes the oldest remaining guardian to primary for a child that lost its primary, ends the
+PARENT login (sessions BEFORE the membership, as `removeStaff` does) and flags the record, which stays because a payment
+or an SMS log may name it. Fixing the readers one by one was the alternative; the next reader written would have
+forgotten. Idempotent, audited as `guardian.remove`.
+
+Migration `20261021153000_remove_links_of_deleted_guardians` does the same for guardians already deleted. It is DATA
+ONLY, so run `migrate.yml action=deploy` AFTER the merge (the code that stops new strays goes first).
+`verify:guardian-removal` runs both the function and the migration's SQL in rolled-back transactions; forced red by
+dropping the promotion (function and migration) and the session delete.
+
 ## The look
 
 The palette lives in ONE place: the `@theme` block in `src/app/globals.css`.
