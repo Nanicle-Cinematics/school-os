@@ -31,7 +31,8 @@ export default async function StaffDetailPage({ params, searchParams }: PageProp
   }
 
   const { staff, year, assignments, subjects, classGroups } = result;
-  const blocked = staff._count.enteredScores > 0 || staff.formClasses.length > 0;
+  // Whether they have entered marks is asked when Remove is pressed (removeStaff), not on every view of this page.
+  const blocked = staff.formClasses.length > 0;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -143,8 +144,8 @@ export default async function StaffDetailPage({ params, searchParams }: PageProp
           </SubmitButton>
           <p className="text-xs text-slate-500">
             {blocked
-              ? "Blocked — they have entered scores or hold a form class."
-              : "Hides them from lists. Nothing is erased."}
+              ? "Blocked — they hold a form class."
+              : "Hides them from lists. Nothing is erased. Someone who has entered scores cannot be removed: set them to Resigned or Retired instead."}
           </p>
         </form>
       </Card>

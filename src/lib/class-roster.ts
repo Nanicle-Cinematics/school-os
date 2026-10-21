@@ -43,6 +43,9 @@ export function rosterWhere(academicYearId: string, classGroupId: string): Prism
  * no mark sheet and no class invoice run, and nothing else says so: the Students page lists them like anyone
  * (it counts the live roll, 290 in one school, against 279 enrolled). The dashboard's attention card and the
  * Students page's "no class" filter both read this, so the number on one is the list behind the other.
+ *
+ * The dashboard card counts the same rule with `countUnplaced` (placement.ts), which is linear in the roll where this
+ * anti-join is quadratic; this stays for the Students filter, which needs a WHERE. `verify:unplaced` keeps them equal.
  */
 export function unplacedWhere(academicYearId: string): Prisma.StudentWhereInput {
   return {

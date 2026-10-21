@@ -2453,9 +2453,26 @@ also running the runner and Postgres, so read the shape and the ratios, not the 
   - **What did NOT need fixing, so nobody re-investigates:** `Score` by assessment, `SubjectResult` by term and pupil
     and `AttendanceEntry` by day are all index scans; the small tables (`ClassGroup`, `Level`, `Term`, `Subject`,
     `LedgerAccount`) are scanned thousands of times a run and cost nothing.
-  - **Still on `_count`, deliberately** (each has its reason in `verify-wide-counts.mts`): the guardian, subject,
-    staff, grading and bill-code pages, and the delete guards. Cheap per call, and several would need an index on
-    `SubjectResult` or `Invoice` that costs the heavy write paths.
+  - **Second round (`scale-queries-2`), measured the same way (database ms per page load at ten schools):** the staff
+    member's page 103 -> 3.6 ms, Settings 72 -> 12 ms, Settings > Grading 58 -> 9.5 ms, the dashboard 108 -> 35-55 ms.
+    Three changes, no schema change. (1) **The staff page stopped counting a member's scores on every view**
+    (`staffRemovalBlockers`, an existence check scoped to the school, asked when Remove is pressed; the action already
+    refused, and the hint under the button no longer claims to know). (2) **Settings pages say "in use" instead of "used
+    by N results"** (`gradingScalesInUse`): a school-scoped `findFirst` that stops at the first row, where the count
+    aggregated every school's `SubjectResult`. A scale nothing has graded scans only that school's results once. The
+    owner chose to drop the number. (3) **The dashboard's "pupils with no class" count is two small reads and a set
+    difference** (`countUnplaced`, placement.ts): as an anti-join Postgres compared every pupil with every enrolment
+    (210,925 comparisons for one school of 650, about 55 ms a load, growing with the SQUARE of the school's roll). It
+    was NOT stale statistics: a full `ANALYZE` left the plan unchanged, because the row-security `OR` leaves the planner
+    with no estimate for the inner side and it picks a nested loop. `unplacedWhere` stays for the Students filter, which
+    needs a WHERE to page through; `verify:unplaced` keeps the two equal. `verify:staff-removal` and the extended
+    `verify:scoped-counts` compare each against the original rule (forced red three ways).
+  - **Measured and left alone** (database ms per load, so nobody re-measures): the guardian page 12, bill codes 9,
+    mocks 5, the staff list 3 and the subjects list and page 15-20. After three years of data the SubjectResult and Score
+    counts would have been roughly 9 times heavier; these are small tables that do not grow like those. **Still on `_count`**
+    (each with its reason in `verify-wide-counts.mts`): guardian, subject and bill-code pages and the delete guards.
+  - **Run-to-run noise on the laptop is about 2x even for unchanged queries** (the Subjects list read 18, 35 and 15 ms
+    on three runs of identical code), so only a change well outside that is a result.
 - ⚠️ **A/B on indexes needs the index REALLY gone.** The first "without indexes" runs had them: a temporary helper's
   `reset` mode fell into the same branch as `create`, so every reset recreated the indexes, and the run printed equal
   timings for "with" and "without". What gave it away was `pg_stat_statements` showing 0.15 ms per query in the run that

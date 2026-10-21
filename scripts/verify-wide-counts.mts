@@ -65,10 +65,7 @@ for (const path of walk(join(root, "src"))) {
 const REMAINING: { file: string; key: string; why: string }[] = [
   { file: "src/lib/guardian-data.ts", key: "payments", why: "one guardian's page, office only; payments are not indexed by guardian" },
   { file: "src/lib/guardian-data.ts", key: "messages", why: "one guardian's page, office only" },
-  { file: "src/lib/settings-data.ts", key: "subjectResults", why: "Settings, a handful of grading scales; SubjectResult has no index on the scale" },
-  { file: "src/lib/grading-data.ts", key: "subjectResults", why: "Settings > Grading, same read" },
   { file: "src/lib/subject-data.ts", key: "subjectResults", why: "one subject's page, office only; SubjectResult has no index on the subject" },
-  { file: "src/lib/staff-data.ts", key: "enteredScores", why: "one staff member's page; Score has no index on who entered it" },
   { file: "src/lib/billcode-data.ts", key: "invoices", why: "Settings > Bill codes, a handful of rows; Invoice has no index on the bill code" },
   { file: "src/lib/billcode-actions.ts", key: "invoices", why: "a delete guard on a click, not a page load" },
   { file: "src/lib/assessment-actions.ts", key: "scores", why: "a delete guard on a click, not a page load" },
@@ -89,7 +86,7 @@ check(`${uses.length} found, and every one is on the remaining list`, strangers.
 console.log("\nThe list only shrinks");
 const stale = REMAINING.filter((entry) => !uses.some((use) => use.file === entry.file && use.key === entry.key));
 check("every entry on it still exists in the source", stale.length === 0, stale.map((e) => `${e.file} (${e.key})`).join(", ") + " — it has been fixed; take it off the list");
-check("and none of the four fixed pages is back on it", !REMAINING.some((e) => ["src/lib/dashboard-data.ts", "src/lib/assessment-data.ts", "src/lib/fee-data.ts", "src/lib/ledger-data.ts"].includes(e.file)));
+check("and none of the fixed pages is back on it", !REMAINING.some((e) => ["src/lib/dashboard-data.ts", "src/lib/assessment-data.ts", "src/lib/fee-data.ts", "src/lib/ledger-data.ts", "src/lib/settings-data.ts", "src/lib/grading-data.ts", "src/lib/staff-data.ts"].includes(e.file)));
 
 console.log(`\n${failures === 0 ? "All checks passed" : `${failures} FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

@@ -12,6 +12,7 @@ import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
 import { nextNumber } from "@/lib/sequences";
 import { normalisePhone } from "@/lib/sms-shared";
 import { ownsClasses, ownsStaff, ownsSubjects } from "@/lib/ownership";
+import { staffRemovalBlockers } from "@/lib/staff-data";
 
 export type StaffState = { error?: string; ok?: string };
 
@@ -178,12 +179,8 @@ export async function removeStaff(formData: FormData): Promise<void> {
     return;
   }
 
-  const [scores, formClasses] = await Promise.all([
-    prisma.score.count({ where: { enteredByStaffId: id } }),
-    prisma.classGroup.count({ where: { formTeacherId: id } }),
-  ]);
-
-  if (scores > 0 || formClasses > 0) {
+  const blockers = await staffRemovalBlockers(auth.schoolId, id);
+  if (blockers.enteredScores || blockers.formClasses) {
     redirect(`/staff/${id}?error=in-use`);
   }
 
