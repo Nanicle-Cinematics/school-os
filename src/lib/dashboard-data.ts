@@ -2,7 +2,7 @@ import "server-only";
 
 import { scoresPerAssessment } from "@/lib/scoped-counts";
 import { prisma } from "@/lib/prisma";
-import { unplacedWhere } from "@/lib/class-roster";
+import { countUnplaced } from "@/lib/placement";
 import type { Role } from "@prisma/client";
 import { canAccess, FINANCE, OFFICE } from "@/lib/permissions";
 
@@ -266,7 +266,9 @@ export async function getAttention(
 
     // 5. Placement. A pupil on the roll with no class this year is on no register and no mark sheet, and nothing
     //    else says so. The same rule filters the Students page, so this number is the list behind it.
-    const unplaced = await prisma.student.count({ where: { schoolId, ...unplacedWhere(term.academicYearId) } });
+    //    Counted in code (placement.ts), not as the anti-join `unplacedWhere` is: that compared every pupil with every
+    //    enrolment, about 55 ms a load at 650 pupils and quadratic in the roll. verify:unplaced keeps the two equal.
+    const unplaced = await countUnplaced(schoolId, term.academicYearId);
     if (unplaced > 0) {
       items.push({
         kind: "placement",

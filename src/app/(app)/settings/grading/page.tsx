@@ -49,7 +49,7 @@ export default async function GradingPage() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400">
                   {covered} band{covered === 1 ? "" : "s"}
-                  {frozen ? ` · ${scale._count.subjectResults} results graded` : ""}
+                  {frozen ? " · in use" : ""}
                 </span>
                 <form action={duplicateScale}>
                   <input type="hidden" name="id" value={scale.id} />
@@ -90,10 +90,9 @@ export default async function GradingPage() {
                   </div>
                 </div>
                 <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-                  Locked — {scale._count.subjectResults} result
-                  {scale._count.subjectResults === 1 ? " has" : "s have"} been graded against these
-                  bands. Moving a boundary now would change what an already-printed report card
-                  claims. Duplicate the scale, edit the copy, and make it the default.
+                  Locked — results have been graded against these bands. Moving a boundary now would
+                  change what an already-printed report card claims. Duplicate the scale, edit the
+                  copy, and make it the default.
                 </p>
               </div>
             ) : (

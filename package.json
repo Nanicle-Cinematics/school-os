@@ -31,6 +31,7 @@
     "verify:rollup": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-rollup.mts",
     "verify:invoice-batch": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-invoice-batch.mts",
     "verify:scoped-counts": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-scoped-counts.mts",
+    "verify:staff-removal": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-staff-removal.mts",
     "verify:wide-counts": "tsx scripts/verify-wide-counts.mts",
     "verify:attendance": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-attendance.mts",
     "verify:mocks": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-mocks.mts",

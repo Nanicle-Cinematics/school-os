@@ -253,7 +253,7 @@ export default async function SettingsPage() {
                     </span>
                   ) : null}
                   <span className="text-xs text-slate-400">
-                    used by {scale._count.subjectResults} results
+                    {scale.inUse ? "in use" : "not used yet"}
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">

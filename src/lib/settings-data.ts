@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { gradingScalesInUse } from "@/lib/scoped-counts";
 
 // Queries are sequential rather than Promise.all — see the note in class-data.ts:
 // the pool holds one connection, so a fan-out only queues and then times out.
@@ -9,13 +10,13 @@ export async function getSettings(schoolId: string) {
   const school = await prisma.school.findUnique({ where: { id: schoolId } });
   const settings = await prisma.schoolSettings.findUnique({ where: { schoolId } });
 
-  const gradingScales = await prisma.gradingScale.findMany({
+  const scaleRows = await prisma.gradingScale.findMany({
     orderBy: { name: "asc" },
-    include: {
-      bands: { orderBy: { minScore: "desc" } },
-      _count: { select: { subjectResults: true } },
-    },
+    include: { bands: { orderBy: { minScore: "desc" } } },
   });
+  // Whether a scale is IN USE, not how many results it graded: see gradingScalesInUse.
+  const used = await gradingScalesInUse(schoolId, scaleRows.map((scale) => scale.id));
+  const gradingScales = scaleRows.map((scale) => ({ ...scale, inUse: used.has(scale.id) }));
 
   const years = await prisma.academicYear.findMany({
     orderBy: { startDate: "desc" },

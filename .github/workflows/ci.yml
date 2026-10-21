@@ -139,6 +139,9 @@ jobs:
       - name: Scoped counts — the dashboard, assessments, fees and chart-of-accounts counts equal Prisma's, and their indexes exist
         run: npm run verify:scoped-counts
 
+      - name: Staff removal — who cannot be removed is asked when Remove is pressed, not counted on every view
+        run: npm run verify:staff-removal
+
       - name: Home-screen label — the school's short name under its icon
         run: npm run verify:home-screen-label
 

@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { StaffStatus } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, type TenantTx } from "@/lib/prisma";
 
 // Queries are sequential rather than Promise.all — see the note in class-data.ts:
 // the pool holds one connection, so a fan-out only queues and then times out.
@@ -48,7 +48,9 @@ export async function getStaffMember(id: string) {
     include: {
       formClasses: { select: { id: true, name: true, level: { select: { name: true } } } },
       memberships: { select: { id: true, role: true, status: true } },
-      _count: { select: { enteredScores: true, teachingAssignments: true } },
+      // Not `enteredScores`: a relation count over Score aggregated every school's marks (about 100 ms at ten schools,
+      // growing with the data) to feed a hint under a button. The action asks when it is pressed: staffRemovalBlockers.
+      _count: { select: { teachingAssignments: true } },
     },
   });
 
@@ -82,4 +84,19 @@ export async function getStaffMember(id: string) {
   });
 
   return { staff, year, assignments, subjects, classGroups };
+}
+
+/**
+ * Why this person cannot be removed from the staff list, if they cannot: they have entered marks (a mark sheet
+ * has to keep naming who entered it) or they form-teach a class. Asked when Remove is pressed, not on every view
+ * of the page. Each is an existence check scoped to the school, through the `schoolId` index, so it costs about
+ * what ONE school holds and never what every school together do.
+ *
+ * `db` is for scripts that must see a transaction's uncommitted rows; the app never passes it.
+ */
+export async function staffRemovalBlockers(schoolId: string, staffId: string, db?: TenantTx) {
+  const client = (db ?? prisma) as unknown as typeof prisma;
+  const scores = await client.score.findFirst({ where: { schoolId, enteredByStaffId: staffId }, select: { id: true } });
+  const formClass = await client.classGroup.findFirst({ where: { schoolId, formTeacherId: staffId }, select: { id: true } });
+  return { enteredScores: scores !== null, formClasses: formClass !== null };
 }

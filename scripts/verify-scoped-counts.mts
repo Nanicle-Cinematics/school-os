@@ -24,7 +24,9 @@
 import { PrismaClient } from "@prisma/client";
 import type { TenantTx } from "@/lib/prisma";
 import { generateInvoicesForTerm } from "@/lib/invoice-engine";
-import { invoiceItemsPerCategory, journalActivityPerAccount, scoresPerAssessment, structureItemsPerCategory } from "@/lib/scoped-counts";
+import { gradingScalesInUse, invoiceItemsPerCategory, journalActivityPerAccount, scoresPerAssessment, structureItemsPerCategory } from "@/lib/scoped-counts";
+import { countUnplaced } from "@/lib/placement";
+import { unplacedWhere } from "@/lib/class-roster";
 import { demoSchool } from "./fixture.mjs";
 
 const db = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
@@ -69,6 +71,73 @@ console.log("\nFee items: priced on structures, billed on invoice lines");
   check(`structure lines for all ${ids.length} fee items`, differ(ids, priced, await structureItemsPerCategory(ids, db as unknown as TenantTx)) === "", differ(ids, priced, await structureItemsPerCategory(ids, db as unknown as TenantTx)));
   check("invoice lines for all of them", differ(ids, billed, await invoiceItemsPerCategory(ids, db as unknown as TenantTx)) === "", differ(ids, billed, await invoiceItemsPerCategory(ids, db as unknown as TenantTx)));
   check("and both have something to count", [...priced.values()].some((n) => n > 0) && [...billed.values()].some((n) => n > 0));
+}
+
+console.log("\nGrading scales in use (an existence check scoped to the school, where the page counted every school's results)");
+try {
+  await db.$transaction(
+    async (tx) => {
+      // The seeded school has graded no results, so plant one: a scale with a result against it, and one without.
+      const used = await tx.gradingScale.create({ data: { schoolId: school.id, name: "Verify: used" } });
+      const unused = await tx.gradingScale.create({ data: { schoolId: school.id, name: "Verify: never used" } });
+      const anyTerm = await tx.term.findFirstOrThrow({ where: { schoolId: school.id } });
+      const anyPupil = await tx.student.findFirstOrThrow({ where: { schoolId: school.id }, select: { id: true } });
+      const anySubject = await tx.subject.findFirstOrThrow({ where: { schoolId: school.id }, select: { id: true } });
+      const anyClass = await tx.classGroup.findFirstOrThrow({ where: { schoolId: school.id }, select: { id: true } });
+      await tx.subjectResult.create({ data: { schoolId: school.id, termId: anyTerm.id, studentId: anyPupil.id, subjectId: anySubject.id, classGroupId: anyClass.id, gradingScaleId: used.id } });
+      const scales = await tx.gradingScale.findMany({ where: { schoolId: school.id }, select: { id: true } });
+      const ids = scales.map((scale) => scale.id);
+      const reference = new Set<string>();
+      for (const id of ids) if ((await tx.subjectResult.count({ where: { gradingScaleId: id } })) > 0) reference.add(id);
+      const got = await gradingScalesInUse(school.id, ids, tx as unknown as TenantTx);
+      check(`the same scales are in use as a count of results says (${ids.length} scales)`, ids.every((id) => reference.has(id) === got.has(id)), `${[...reference].join()} vs ${[...got].join()}`);
+      check("a scale with a result against it IS in use (otherwise this proves nothing)", reference.has(used.id) && got.has(used.id));
+      check("a scale nothing has graded is not in use", !got.has(unused.id) && !reference.has(unused.id));
+      check("asking about no scales asks nothing", (await gradingScalesInUse(school.id, [], tx as unknown as TenantTx)).size === 0);
+      throw new Rollback();
+    },
+    { timeout: 300_000, maxWait: 30_000 },
+  );
+} catch (error) {
+  if (!(error instanceof Rollback)) {
+    console.error(error);
+    failures += 1;
+  }
+}
+
+console.log("\nPupils with no class this year (two small reads and a set difference, where the anti-join compared every pair)");
+try {
+  await db.$transaction(
+    async (tx) => {
+      const year = await tx.academicYear.findFirstOrThrow({ where: { schoolId: school.id, isCurrent: true } });
+      const cls = await tx.classGroup.findFirstOrThrow({ where: { schoolId: school.id }, select: { id: true } });
+      const viaWhere = async () => tx.student.count({ where: { schoolId: school.id, ...unplacedWhere(year.id) } });
+      const viaCode = async () => countUnplaced(school.id, year.id, tx as unknown as TenantTx);
+      check("on the seeded school it equals the rule it replaces", (await viaCode()) === (await viaWhere()), `${await viaCode()} vs ${await viaWhere()}`);
+
+      const mk = (suffix: string, extra: object) =>
+        tx.student.create({ data: { schoolId: school.id, admissionNo: `VSC-${suffix}`, firstName: "Probe", lastName: suffix, gender: "MALE", ...extra } });
+      const before = await viaCode();
+      await mk("NOENROL", {});
+      const withdrawn = await mk("WDENROL", {});
+      await tx.enrollment.create({ data: { schoolId: school.id, studentId: withdrawn.id, academicYearId: year.id, classGroupId: cls.id, status: "WITHDRAWN" } });
+      const placed = await mk("PLACED", {});
+      await tx.enrollment.create({ data: { schoolId: school.id, studentId: placed.id, academicYearId: year.id, classGroupId: cls.id, status: "ACTIVE" } });
+      await mk("DELETED", { deletedAt: new Date() });
+      await mk("GONE", { status: "WITHDRAWN" });
+      check("no enrolment and only a withdrawn one are counted; placed, deleted and withdrawn pupils are not", (await viaCode()) === before + 2, `${before} -> ${await viaCode()}`);
+      check("and it still equals the rule it replaces", (await viaCode()) === (await viaWhere()), `${await viaCode()} vs ${await viaWhere()}`);
+      const otherYear = await tx.academicYear.create({ data: { schoolId: school.id, name: "Verify 1990", startDate: new Date("1990-09-01"), endDate: new Date("1991-07-30"), isCurrent: false } });
+      check("a pupil placed in ANOTHER year is unplaced in this one, as the rule says", (await countUnplaced(school.id, otherYear.id, tx as unknown as TenantTx)) === (await tx.student.count({ where: { schoolId: school.id, ...unplacedWhere(otherYear.id) } })));
+      throw new Rollback();
+    },
+    { timeout: 300_000, maxWait: 30_000 },
+  );
+} catch (error) {
+  if (!(error instanceof Rollback)) {
+    console.error(error);
+    failures += 1;
+  }
 }
 
 console.log("\nJournal lines per account, on a ledger built inside a transaction that is rolled back");

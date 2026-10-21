@@ -83,3 +83,21 @@ export async function journalActivityPerAccount(accountIds: string[], db?: Tenan
   }
   return activity;
 }
+
+/**
+ * Which of a school's grading scales have graded at least one result.
+ *
+ * The Settings pages said "used by 5,432 results" for each scale, a relation count over every school's
+ * `SubjectResult` rows (about 65 ms at ten schools, ten times that after three years). All the pages need is
+ * whether a scale is in use, which locks its bands. So: one existence check per scale, scoped to THIS school
+ * through the `schoolId` index, so it costs what one school holds and stops at the first row it finds. A scale
+ * nothing has graded scans that school's results once, which is the rare case.
+ */
+export async function gradingScalesInUse(schoolId: string, scaleIds: string[], db?: TenantTx): Promise<Set<string>> {
+  const inUse = new Set<string>();
+  for (const id of new Set(scaleIds)) {
+    const row = await client(db).subjectResult.findFirst({ where: { schoolId, gradingScaleId: id }, select: { id: true } });
+    if (row) inUse.add(id);
+  }
+  return inUse;
+}
