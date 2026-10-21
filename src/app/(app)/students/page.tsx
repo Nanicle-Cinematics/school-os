@@ -80,6 +80,12 @@ export default async function StudentsPage({ searchParams }: PageProps<"/student
                 </Link>
               ) : null}
               <Link
+                href="/students/enrolment-form"
+                className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Blank form
+              </Link>
+              <Link
                 href="/students/import"
                 className="rounded-card border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
