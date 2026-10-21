@@ -151,6 +151,7 @@ const ROUTES = [
   "/results/print",
   "/promotions",
   "/fees",
+  "/fees/items-to-bring",
   "/invoices",
   "/invoices/print",
   "/payments",

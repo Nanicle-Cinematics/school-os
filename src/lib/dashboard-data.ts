@@ -734,6 +734,11 @@ const ACTIVITY: Record<
     },
     detail: "Academics",
   },
+  "fees.itemsToBring": {
+    kind: "admin",
+    title: (a) => `Items to bring updated for ${count(a.levels)} ${plural(a.levels, "level")}`,
+    detail: "Setup",
+  },
   "skills.configure": { kind: "academic", title: () => "Nursery skills updated", detail: "Academics" },
   "skills.area": {
     kind: "academic",

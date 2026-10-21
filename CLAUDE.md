@@ -1107,7 +1107,14 @@ about which term is next. It is the sheet to hand home beside the report card at
 
 `verify:proforma` (pure, in CI) walks every case and was forced red by restoring each old behaviour.
 Not done: a payment already on account is not netted off the "Expected total" (it is applied on the real
-invoice, as before); and the form's "items to bring" list is not on the bill.
+invoice, as before).
+
+**Items to bring (2026-10-22).** The school's paper form lists what a family brings each term (toilet rolls, soap,
+Omo, Dettol). It is `Level.itemsToBring`, one item a line, set per LEVEL on `/fees/items-to-bring` (FINANCE, linked
+from Fee structure) and printed under "Please bring" on the ADVANCE bill only; a real invoice does not carry it
+(the school's choice). It prints the list of the level the child is BILLED at (the class they move into), not the
+one they are leaving. `parseItemsToBring` (pure, in `proforma.ts`) caps it at 20 lines of 80 characters, and a list
+over the cap is refused rather than cut. The migration is a single nullable column (additive: run it BEFORE the merge).
 
 ## The register, and the day nobody marked it
 

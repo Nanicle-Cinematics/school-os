@@ -123,3 +123,26 @@ export function levelForNextTerm(args: {
   const decided = args.decision === "REPEATED";
   return { kind: "SAME", levelId: current.id, assumed: args.crossesYear && !decided };
 }
+
+/** A level's list is for a parent to read off a sheet, not a catalogue: this many lines, this long. */
+export const ITEMS_MAX = 20;
+export const ITEM_LENGTH_MAX = 80;
+
+/**
+ * The lines of a level's "items to bring" box as the items printed on the bill: trimmed, blanks dropped,
+ * inner spacing squashed, each cut to a printable length, a repeat (in any case) dropped. `tooMany` says the
+ * cap cut it off, so the action can refuse rather than silently lose the end of a list.
+ */
+export function parseItemsToBring(text: string | null | undefined) {
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const line of (text ?? "").split(/\r?\n/)) {
+    const item = line.replace(/\s+/g, " ").trim().slice(0, ITEM_LENGTH_MAX);
+    if (!item || seen.has(item.toLowerCase())) {
+      continue;
+    }
+    seen.add(item.toLowerCase());
+    items.push(item);
+  }
+  return { items: items.slice(0, ITEMS_MAX), tooMany: items.length > ITEMS_MAX };
+}

@@ -9,6 +9,8 @@ import { FINANCE } from "@/lib/permissions";
 import { tenantTransaction, prisma } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
 import { writeAudit } from "@/lib/audit";
+import { ITEMS_MAX, parseItemsToBring } from "@/lib/proforma";
+import { ownsLevels } from "@/lib/ownership";
 
 const MAX_FEE = new Prisma.Decimal("9999999.99");
 
@@ -402,4 +404,56 @@ export async function deleteFeeStructure(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/fees");
+}
+
+/**
+ * Save what each level's families are asked to bring (toilet rolls, soap, Omo), printed on the advance bill.
+ *
+ * The screen posts `items:<levelId>` for every level, one item a line. A level's box left blank clears its
+ * list. Levels are read through the tenant client and a posted id that is not one of this school's is ignored
+ * (ownsLevels), so a forged key cannot write another school's level. A box over the cap is refused, naming the
+ * level, and nothing is saved: cutting the end of a list off quietly would print a bill missing items.
+ */
+export async function saveItemsToBring(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const auth = await requireRole(FINANCE);
+  setTenantContext(auth.tenant);
+
+  const levels = await prisma.level.findMany({ select: { id: true, name: true, itemsToBring: true } });
+  const posted = [...formData.keys()].filter((key) => key.startsWith("items:")).map((key) => key.slice("items:".length));
+  if (!(await ownsLevels(posted))) {
+    return { error: "A level in that form was not found in this school." };
+  }
+
+  const changes: { id: string; value: string | null }[] = [];
+  for (const level of levels) {
+    if (!posted.includes(level.id)) continue;
+    const { items, tooMany } = parseItemsToBring(String(formData.get(`items:${level.id}`) ?? ""));
+    if (tooMany) {
+      return { error: `${level.name} can list at most ${ITEMS_MAX} items. Nothing was saved.` };
+    }
+    const value = items.length > 0 ? items.join("\n") : null;
+    if ((level.itemsToBring ?? null) !== value) {
+      changes.push({ id: level.id, value });
+    }
+  }
+  if (changes.length === 0) {
+    return { ok: "Nothing to change." };
+  }
+
+  await tenantTransaction(auth.schoolId, async (tx) => {
+    for (const change of changes) {
+      await tx.level.update({ where: { id: change.id }, data: { itemsToBring: change.value } });
+    }
+    await writeAudit(tx, {
+      schoolId: auth.schoolId,
+      actorUserId: auth.userId,
+      action: "fees.itemsToBring",
+      entity: "School",
+      entityId: auth.schoolId,
+      after: { levels: changes.length },
+    });
+  });
+
+  revalidatePath("/fees/items-to-bring");
+  return { ok: `Saved the list for ${changes.length} level${changes.length === 1 ? "" : "s"}.` };
 }
