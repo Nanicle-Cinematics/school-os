@@ -69,6 +69,11 @@ export function ProformaBill({
 }) {
   const { student, guardian } = proforma;
   const payable = proforma.subtotal.sub(proforma.discountTotal);
+  // Four columns do not fit a 390px phone: the headers ran together ("AMOUNTDISCOUNT"), a dash touched the figure
+  // beside it, and with a discount the Payable column was clipped by the card. So below `sm` the Discount column is
+  // never shown, and a discount is written under the item it reduces instead. Print is A4 (wider than `sm`), so a
+  // printed bill keeps its four columns.
+  const discountCol = "hidden sm:table-cell";
 
   return (
     <article
@@ -88,7 +93,7 @@ export function ProformaBill({
             {TERM_NAME[term.name] ?? term.name} Term · {term.academicYear.name}
           </p>
         </div>
-        <div className="text-right text-xs">
+        <div className="text-xs sm:text-right">
           <p className="font-semibold uppercase tracking-wide text-accent-700">Not yet invoiced</p>
           <p className="text-slate-600">Term begins {dateFmt.format(term.startDate)}</p>
         </div>
@@ -126,22 +131,29 @@ export function ProformaBill({
         <thead>
           <tr className="border-b border-slate-300 text-xs uppercase tracking-wide text-slate-600">
             <th className="pb-1.5 text-left font-medium">Item</th>
-            <th className="pb-1.5 text-right font-medium">Amount</th>
-            <th className="pb-1.5 text-right font-medium">Discount</th>
-            <th className="pb-1.5 text-right font-medium">Payable</th>
+            <th className="pb-1.5 pl-3 text-right font-medium">Amount</th>
+            <th className={`pb-1.5 pl-3 text-right font-medium ${discountCol}`}>Discount</th>
+            <th className="pb-1.5 pl-3 text-right font-medium">Payable</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {proforma.lines.map((line) => (
             <tr key={line.description}>
-              <td className="py-1.5">{line.description}</td>
-              <td className="py-1.5 text-right tabular-nums text-slate-600">
+              <td className="py-1.5">
+                {line.description}
+                {Number(line.discount) > 0 ? (
+                  <span className="block text-xs text-slate-500 sm:hidden">
+                    Less {formatCedis(line.discount)} discount
+                  </span>
+                ) : null}
+              </td>
+              <td className="py-1.5 pl-3 text-right tabular-nums text-slate-600">
                 {formatCedis(line.amount)}
               </td>
-              <td className="py-1.5 text-right tabular-nums text-slate-600">
+              <td className={`py-1.5 pl-3 text-right tabular-nums text-slate-600 ${discountCol}`}>
                 {Number(line.discount) > 0 ? `−${formatCedis(line.discount)}` : "—"}
               </td>
-              <td className="py-1.5 text-right tabular-nums font-medium">
+              <td className="py-1.5 pl-3 text-right tabular-nums font-medium">
                 {formatCedis(line.amount.sub(line.discount))}
               </td>
             </tr>
@@ -202,7 +214,7 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
     <div className="flex items-baseline justify-between">
       <span className="text-slate-600">
         {label}
-        {hint ? <span className="ml-2 text-xs text-slate-500">{hint}</span> : null}
+        {hint ? <span className="block text-xs text-slate-500">{hint}</span> : null}
       </span>
       <span className="tabular-nums">{value}</span>
     </div>
