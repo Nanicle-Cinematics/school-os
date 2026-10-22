@@ -682,6 +682,12 @@ const ACTIVITY: Record<
     title: (a) => `SMS sent to ${count(a.recipients)} ${plural(a.recipients, "recipient")}`,
     detail: "Messages",
   },
+  "campaign.schedule": {
+    kind: "message",
+    title: (a) => `SMS to ${count(a.recipients)} ${plural(a.recipients, "recipient")} held for five minutes`,
+    detail: "Messages",
+  },
+  "campaign.cancel": { kind: "message", title: () => "A held SMS campaign was cancelled", detail: "Messages" },
   "results.compute": { kind: "academic", title: () => "Results computed for a class", detail: "Academics" },
   /**
    * The payload carries the status and how many pupils it touched, and this

@@ -145,6 +145,9 @@ jobs:
       - name: Guardian removal — deleting a guardian takes them off the child, ends their login, and the clean-up migration repairs old strays
         run: npm run verify:guardian-removal
 
+      - name: Held messages — a held SMS sends nothing until released, Cancel and release cannot both win, and the scheduled endpoint refuses a stranger
+        run: npm run verify:message-hold
+
       - name: Home-screen label — the school's short name under its icon
         run: npm run verify:home-screen-label
 

@@ -1,0 +1,41 @@
+name: Release scheduled messages
+
+# The safety net for held SMS campaigns. A campaign held for five minutes is released by its own page at exactly
+# 5:00 while that page is open; this job sends whatever is left because the tab was closed or the phone locked.
+#
+# GitHub's scheduler is best-effort, not exact: a run can start several minutes late, so a message whose page was
+# closed goes out within about 5 to 15 minutes of its time, never lost. That is the price of not having a
+# background process on Vercel Hobby (its cron is once a day). Move this to a Vercel cron when the plan allows.
+#
+# Needs two repository secrets: PROD_APP_URL (e.g. https://www.schoolosafrica.com, no trailing slash) and
+# CRON_SECRET (the same value as the CRON_SECRET environment variable on Vercel). Without them it skips rather
+# than fails, as the production audit does.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-scheduled-messages
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release held campaigns
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Call the release endpoint
+        env:
+          APP_URL: ${{ secrets.PROD_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "PROD_APP_URL or CRON_SECRET is not set - skipping."
+            exit 0
+          fi
+          # -f makes an HTTP error fail the job, so a wrong secret or a 503 shows up red rather than green.
+          curl -fsS --max-time 300 -X POST -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/messages"
+          echo

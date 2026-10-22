@@ -2234,10 +2234,13 @@ enum AudienceType {
 
 enum CampaignStatus {
   DRAFT
+  /// Held for a few minutes so it can still be cancelled (see `message-hold.ts`). Nothing has gone to the gateway.
   SCHEDULED
   SENDING
   SENT
   FAILED
+  /// Cancelled while it was still held. Its messages are CANCELLED too and cost nothing.
+  CANCELLED
 }
 
 enum DeliveryStatus {
@@ -2245,6 +2248,8 @@ enum DeliveryStatus {
   SENT
   DELIVERED
   FAILED
+  /// Never sent: its campaign was cancelled while it was held.
+  CANCELLED
 }
 
 model MessageTemplate {
