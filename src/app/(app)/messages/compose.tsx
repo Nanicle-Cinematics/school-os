@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useCallback, useState } from "react";
 import { previewCampaign, sendCampaign, type PreviewState, type SendState } from "@/lib/message-actions";
 import { MERGE_FIELDS } from "@/lib/sms-shared";
+import { HOLD_MINUTES } from "@/lib/message-hold";
 import { SubmitButton } from "../submit-button";
 import { Alert, Field, inputClass } from "../ui";
 
@@ -36,6 +37,16 @@ export function Compose({
 }) {
   const [preview, previewAction] = useActionState<PreviewState, FormData>(previewCampaign, {});
   const [send, sendAction] = useActionState<SendState, FormData>(sendCampaign, {});
+  // A second button rather than a tick-box: React resets a form's controlled checkboxes when an action returns
+  // (CLAUDE.md), so a "hold" tick would untick itself after a refusal while a label that follows it still said
+  // otherwise. A button carries no state to reset. The same action does both; this one just says "hold".
+  const holdAction = useCallback(
+    (formData: FormData) => {
+      formData.set("hold", "on");
+      return sendAction(formData);
+    },
+    [sendAction],
+  );
 
   const [audience, setAudience] = useState<string>("ALL_PARENTS");
   const [body, setBody] = useState("");
@@ -183,7 +194,14 @@ export function Compose({
           <SubmitButton formAction={sendAction} pendingLabel="Sending…">
             Send now
           </SubmitButton>
+          <SubmitButton formAction={holdAction} variant="secondary" pendingLabel="Scheduling…">
+            Send in {HOLD_MINUTES} min
+          </SubmitButton>
         </div>
+        <p className="text-xs text-slate-500">
+          &ldquo;Send in {HOLD_MINUTES} min&rdquo; holds the message so you can cancel it from the campaign page before it
+          goes. Once a text has been sent it cannot be taken back.
+        </p>
       </form>
 
       {preview.error ? (

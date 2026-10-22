@@ -253,7 +253,7 @@ export async function getCampaign(id: string) {
 
 export async function getMessageStats() {
   const [total, sent, failed, cost] = await Promise.all([
-    prisma.message.count(),
+    prisma.message.count({ where: { status: { not: "CANCELLED" } } }),
     prisma.message.count({ where: { status: { in: ["SENT", "DELIVERED"] } } }),
     prisma.message.count({ where: { status: "FAILED" } }),
     prisma.message.aggregate({ _sum: { cost: true } }),

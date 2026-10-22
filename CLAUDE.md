@@ -1649,6 +1649,35 @@ prisma.ts, a tenant-scoped query without one is refused outright. It sits outsid
 RLS (there is no school to scope it by), and every query in `password-reset.ts` goes
 through `withBypass` for the same reason.
 
+## A message can be held for five minutes, and cancelled
+
+A text cannot be recalled once the gateway has it, so "unsend" only exists BEFORE it is sent. **"Send in 5 min"** on the
+compose form saves the campaign as `SCHEDULED` with a release time (`message-hold.ts`, `HOLD_MINUTES`), sends nothing,
+and opens the campaign page, which shows a countdown and a **Cancel sending** button. "Send now" is unchanged.
+It is a second BUTTON, not a tick-box: a controlled checkbox is reset by React when the action returns (see the mark
+sheet), and a label that followed it would then lie.
+
+- **States:** `SCHEDULED -> SENDING -> SENT | FAILED`, or `SCHEDULED -> CANCELLED`. `cancelHeldCampaign` and
+  `releaseHeldCampaign` (`message-dispatch.ts`) both update `where status = SCHEDULED`, so exactly one commits and the
+  other finds count 0. Neither reads the status first. `verify:message-hold` races them five times.
+- **Cancelled messages** are `CANCELLED` at cost 0, not deleted: the log still says who would have been texted. The
+  spend figure (a sum of cost), the message total and the **daily cap** all leave them out, and a cancelled campaign
+  does not trip the 2-minute duplicate check (cancel, fix, press Send again is the point).
+- **Release happens in two places.** The campaign page counts down and calls `releaseCampaignNow` at zero (the server
+  checks ITS clock and answers "early" with how long to wait, so a fast browser clock cannot send early). If the tab is
+  closed, `POST /api/cron/messages` is the net, called every five minutes by
+  `.github/workflows/release-scheduled-messages.yml`. **GitHub's scheduler is best-effort, so a message whose page was
+  closed goes out about 5 to 15 minutes after its time, never lost.** It is a GitHub job and not a Vercel cron because
+  Vercel Hobby crons run once a day and a per-minute one FAILS THE DEPLOY. Move it to a Vercel cron when the Pro plan is
+  bought (about 4 Nov 2026).
+- **`CRON_SECRET` must be set in BOTH places** (the Vercel environment and a GitHub repository secret of the same name,
+  plus `PROD_APP_URL`). The endpoint answers 503 until it is set and checks the secret (constant time) BEFORE touching the
+  database; the workflow skips, rather than fails, when its secrets are missing, so **nothing warns you that held messages
+  are not being released by the net**. Check once after setting them: `gh workflow run release-scheduled-messages.yml`.
+- **The school's switches are read at RELEASE time:** SMS turned off during the hold cancels it ("off means off"), and a
+  school whose subscription lapsed to read-only has its held campaign cancelled by the job.
+- The migration is two enum values (`CANCELLED` on `CampaignStatus` and `DeliveryStatus`): additive, run it BEFORE the merge.
+
 ## The SMS gateway
 
 `sendSms` DRY-RUNS unless `SMS_PROVIDER` and `SMS_API_KEY` are both set where the

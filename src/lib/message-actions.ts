@@ -8,11 +8,12 @@ import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction } from "@/lib/prisma";
 import { resolveAudience, type AudienceFilter } from "@/lib/message-data";
-import { renderTemplate, countSegments, estimateCost, sendSms, pupilFieldsUsed, RATE_PER_SEGMENT } from "@/lib/sms";
+import { renderTemplate, countSegments, estimateCost, pupilFieldsUsed, RATE_PER_SEGMENT } from "@/lib/sms";
 import { writeAudit } from "@/lib/audit";
 import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 import { ownsMessageTemplates } from "@/lib/ownership";
-import { createLimiter } from "@/lib/concurrency";
+import { cancelHeldCampaign, dispatchQueued, releaseHeldCampaign, type ReleaseResult } from "@/lib/message-dispatch";
+import { releaseAt } from "@/lib/message-hold";
 
 export type PreviewState = {
   error?: string;
@@ -142,6 +143,8 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
   const audienceType = readAudience(formData);
   const templateId = String(formData.get("templateId") ?? "");
   const confirmed = formData.get("confirm") === "on";
+  // "Hold for five minutes": save it, send nothing, and let the school cancel until the hold runs out.
+  const hold = formData.get("hold") === "on";
 
   if (!body) {
     return { error: "Write the message first." };
@@ -199,7 +202,8 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const sentToday = await prisma.message.count({
-    where: { schoolId: auth.schoolId, channel: "SMS", createdAt: { gte: since } },
+    // A cancelled campaign never reached the gateway, so it must not eat the day's allowance.
+    where: { schoolId: auth.schoolId, channel: "SMS", createdAt: { gte: since }, status: { not: "CANCELLED" } },
   });
   if (sentToday + recipients.length > MAX_MESSAGES_PER_DAY) {
     return {
@@ -212,6 +216,8 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
       schoolId: auth.schoolId,
       body,
       audienceType,
+      // Not a cancelled one: cancelling and pressing Send again, to fix a mistake, is the point of Cancel.
+      status: { not: "CANCELLED" },
       createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
     },
     select: { id: true },
@@ -230,7 +236,8 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
           body,
           audienceType,
           audienceFilter: filter as unknown as Prisma.InputJsonValue,
-          status: "SENDING",
+          status: hold ? "SCHEDULED" : "SENDING",
+          scheduledAt: hold ? releaseAt(new Date()) : null,
           totalRecipients: recipients.length,
           estimatedCost: new Prisma.Decimal(estimateCost(body, recipients.length).toFixed(2)),
           createdByUserId: auth.userId,
@@ -258,98 +265,82 @@ export async function sendCampaign(_prev: SendState, formData: FormData): Promis
         }),
       });
 
-      await writeAudit(tx, {
-        schoolId: auth.schoolId,
-        actorUserId: auth.userId,
-        action: "campaign.send",
-        entity: "MessageCampaign",
-        entityId: campaign.id,
-        after: { name, audienceType, recipients: recipients.length },
-      });
+      // Two literal actions, not one chosen by a ternary: `verify:activity` finds audited actions by reading
+      // `action: "…"` out of the source, and an action it cannot see is an action nobody checks has a phrase.
+      if (hold) {
+        await writeAudit(tx, {
+          schoolId: auth.schoolId,
+          actorUserId: auth.userId,
+          action: "campaign.schedule",
+          entity: "MessageCampaign",
+          entityId: campaign.id,
+          after: { name, audienceType, recipients: recipients.length },
+        });
+      } else {
+        await writeAudit(tx, {
+          schoolId: auth.schoolId,
+          actorUserId: auth.userId,
+          action: "campaign.send",
+          entity: "MessageCampaign",
+          entityId: campaign.id,
+          after: { name, audienceType, recipients: recipients.length },
+        });
+      }
 
       return campaign.id;
     },
     { timeout: 120_000, maxWait: 30_000 },
   );
 
-  await dispatchQueued(campaignId, auth.schoolId, settings?.smsSenderId ?? null);
+  // A held campaign sends nothing here: the page counts down and releases it, and the scheduled job is the net.
+  if (!hold) {
+    await dispatchQueued(campaignId, auth.schoolId, settings?.smsSenderId ?? null);
+  }
 
   revalidatePath("/messages");
   redirect(`/messages/${campaignId}`);
 }
 
+export type HoldState = { error?: string; ok?: string };
+
 /**
- * Push queued messages to the gateway and record what happened to each.
- * Runs outside the write transaction; with no credentials configured every
- * message is marked SENT with a dry-run reference and nothing leaves the
- * building.
+ * Cancel a campaign that is still being held.
+ *
+ * It only works while the campaign is SCHEDULED, and says plainly when it is too late: a text that has gone to
+ * the gateway cannot be taken back, and "cancelled" on a campaign that already sent would be a lie.
  */
-async function dispatchQueued(campaignId: string, schoolId: string, senderId: string | null) {
-  const queued = await prisma.message.findMany({
-    where: { campaignId, status: "QUEUED" },
-    select: { id: true, toPhone: true, body: true, provider: true },
-  });
+export async function cancelCampaign(_prev: HoldState, formData: FormData): Promise<HoldState> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext(auth.tenant);
 
-  let sent = 0;
-  let failed = 0;
-  let dryRun = false;
-
-  // A few at a time, not one by one: a class of 600 at ~1s each would outlive the
-  // function. Bounded, so the gateway is not hit with the whole list at once.
-  const BATCH = 10;
-  // The gateway calls overlap ten at a time, but each outcome is a database write, and
-  // under RLS every write is a transaction holding one of the app role's FOUR connections
-  // for several round trips. Ten at once filled the whole pool, so everything else on the
-  // instance queued behind a campaign and, on a slow link, the tail outlasted the pool's 10s
-  // checkout timeout (P2024). Three writes at a time leaves a connection spare. Each message
-  // still gets its own update, because providerRef is the gateway's own reference for it
-  // and no single updateMany can set a different one per row.
-  const recordOutcome = createLimiter(3);
-  for (let i = 0; i < queued.length; i += BATCH) {
-    await Promise.all(
-      queued.slice(i, i + BATCH).map(async (message) => {
-        if (!message.toPhone) {
-          failed += 1;
-          return;
-        }
-        const result = await sendSms(message.toPhone, message.body, {
-          provider: message.provider,
-          senderId,
-        });
-        dryRun = dryRun || result.dryRun;
-
-        await recordOutcome(() =>
-          prisma.message.update({
-            where: { id: message.id },
-            data: {
-              status: result.ok ? "SENT" : "FAILED",
-              providerRef: result.providerRef ?? null,
-              error: result.error ?? (result.dryRun ? "Dry run — no gateway configured" : null),
-              sentAt: result.ok ? new Date() : null,
-            },
-          }),
-        );
-
-        if (result.ok) {
-          sent += 1;
-        } else {
-          failed += 1;
-        }
-      }),
-    );
+  const campaignId = String(formData.get("campaignId") ?? "");
+  if (!campaignId) {
+    return { error: "Missing campaign." };
   }
 
-  await prisma.messageCampaign.update({
-    where: { id: campaignId },
-    data: {
-      status: failed > 0 && sent === 0 ? "FAILED" : "SENT",
-      sentAt: new Date(),
-      sentCount: sent,
-      failedCount: failed,
-    },
-  });
+  const cancelled = await cancelHeldCampaign(auth.schoolId, campaignId, "Cancelled before sending", auth.userId);
+  revalidatePath("/messages");
+  revalidatePath(`/messages/${campaignId}`);
+  if (!cancelled) {
+    return { error: "Too late to cancel: it has already started sending, or was already cancelled." };
+  }
+  return { ok: "Cancelled. Nobody was texted." };
+}
 
-  return { sent, failed, dryRun, schoolId };
+/**
+ * Release a held campaign whose time is up. Called by the campaign page when its countdown reaches zero.
+ *
+ * The server decides, not the page: a browser clock a few seconds fast reaches zero early, and gets "early" with
+ * how long to wait rather than sending ahead of time. Idempotent, so two tabs, or the page and the scheduled job
+ * at once, send it once.
+ */
+export async function releaseCampaignNow(campaignId: string): Promise<ReleaseResult> {
+  const auth = await requireRole(OFFICE);
+  setTenantContext(auth.tenant);
+  const result = await releaseHeldCampaign(auth.schoolId, campaignId, auth.userId);
+  revalidatePath("/messages");
+  revalidatePath(`/messages/${campaignId}`);
+  return result;
 }
 
 export type TemplatesState = { error?: string; ok?: string };

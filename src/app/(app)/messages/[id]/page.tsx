@@ -8,6 +8,7 @@ import { OFFICE } from "@/lib/permissions";
 import { getCampaign } from "@/lib/message-data";
 import { formatCedis } from "@/lib/money";
 import { Card, StatusBadge } from "../../ui";
+import { HeldBanner } from "./held-banner";
 
 const COLUMNS: Column[] = [
   { label: "To" },
@@ -58,9 +59,13 @@ export default async function CampaignPage({
             </h1>
             <p className="mt-0.5 text-sm text-slate-500">
               {campaign.createdBy?.name
-                ? `Sent by ${campaign.createdBy.name} · `
+                ? `${campaign.status === "SCHEDULED" ? "Held by" : campaign.status === "CANCELLED" ? "Cancelled · created by" : "Sent by"} ${campaign.createdBy.name} · `
                 : ""}
-              {dateFmt.format(campaign.sentAt ?? campaign.createdAt)}
+              {dateFmt.format(
+                campaign.status === "SCHEDULED" && campaign.scheduledAt
+                  ? campaign.scheduledAt
+                  : (campaign.sentAt ?? campaign.createdAt),
+              )}
             </p>
           </div>
           <StatusBadge status={campaign.status} />
@@ -69,6 +74,22 @@ export default async function CampaignPage({
         <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
           {campaign.body}
         </p>
+
+        {campaign.status === "SCHEDULED" && campaign.scheduledAt ? (
+          <div className="mt-3">
+            <HeldBanner
+              campaignId={campaign.id}
+              scheduledAt={campaign.scheduledAt.toISOString()}
+              recipients={campaign.totalRecipients}
+            />
+          </div>
+        ) : null}
+        {campaign.status === "CANCELLED" ? (
+          <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            <span className="font-medium">Cancelled.</span> This was held and cancelled before it sent, so nobody was
+            texted and nothing was charged. The log below shows who would have been.
+          </p>
+        ) : null}
 
         {dryRun ? (
           <p className="mt-3 rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-ink">
@@ -101,8 +122,13 @@ export default async function CampaignPage({
         />
         <StatCard
           label="Estimated cost"
+          // A cancelled campaign never reached the gateway, so the estimate is not a cost: it says so.
           value={
-            campaign.estimatedCost ? formatCedis(campaign.estimatedCost) : "—"
+            campaign.status === "CANCELLED"
+              ? formatCedis(0)
+              : campaign.estimatedCost
+                ? formatCedis(campaign.estimatedCost)
+                : "—"
           }
           icon={Wallet}
         />
