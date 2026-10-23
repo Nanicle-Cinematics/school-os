@@ -4,6 +4,27 @@ import type { NextConfig } from "next";
 // script-src carries a nonce. The remaining headers here are static.
 
 const nextConfig: NextConfig = {
+  /**
+   * What Vercel packages into each function, trimmed.
+   *
+   * Next traces every file a route might load and ships all of it. For Prisma that meant ~57 MB of
+   * `@prisma/client/runtime/*.wasm-base64.*` (the query engine and compiler compiled to WebAssembly, once per
+   * database: CockroachDB, MySQL, SQL Server, SQLite, PostgreSQL, each as .js and .mjs), in every one of ~90
+   * routes. This app uses PostgreSQL through the native library engine, which loads `runtime/library.js` and
+   * the engine binary and nothing else. Checked 2026-10-23 two ways: real queries (a read, a count and an
+   * interactive transaction) load only `default.js`, `index.js` and `runtime/library.js`, and a production
+   * build with these files physically removed from node_modules served 24 database-backed pages without error.
+   * Those files were about two thirds of every bundle, and every deployment stores a copy.
+   *
+   * `sharp` ships a WebAssembly fallback build (`@img/sharp-wasm32`, 9 MB) for platforms with no native
+   * binary; Vercel's Linux has one.
+   */
+  outputFileTracingExcludes: {
+    "/*": [
+      "./node_modules/@prisma/client/runtime/*.wasm-base64.*",
+      "./node_modules/@img/sharp-wasm32/**",
+    ],
+  },
   experimental: {
     serverActions: {
       // Default is 1MB, and it is ONE global cap shared by every Server
