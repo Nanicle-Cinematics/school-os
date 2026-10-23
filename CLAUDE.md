@@ -35,6 +35,18 @@ payroll. Single-campus by design — there is no `Branch` model.
   that merely MENTIONS it counts). A skipped build is not an error, and the "Vercel" check on a PR
   will say so.
 
+- **Each deployment stores its own copy of the server bundle, so its size is what fills the 10 GB (2026-10-23).**
+  A production build showed every one of ~90 routes packaging **83 MB**, two thirds of it `@prisma/client/runtime/*.wasm-base64.*`
+  (Prisma's engine compiled to WebAssembly once per database: CockroachDB, MySQL, SQL Server, SQLite, PostgreSQL). This app uses
+  PostgreSQL through the native library engine, which loads only `default.js`, `index.js` and `runtime/library.js` plus the engine
+  binary (checked with real queries, and by serving 24 pages from a production build with those files physically removed from
+  `node_modules`). `outputFileTracingExcludes` in `next.config.ts` leaves them out, and the spare WebAssembly build of `sharp`
+  too: a typical route fell to **30 MB** and the unique files across all routes from 117 MB to 54 MB (local macOS build; Vercel's
+  Linux will differ a little). **If Prisma is upgraded or the engine type changes, re-check that nothing needs those files**
+  (`engineType = "client"` or a driver adapter DOES load them, so the exclusion must go first). Left: the PostgreSQL engine
+  (~20 MB, in every database route) and sharp's native library (~19 MB, in two routes). Retention is the other half: the
+  project keeps deployments **7 days** (Settings, Build and Deployment), which took Functions Storage from over 10 GB to
+  about 300 MB; the live deployment and the last three production ones are always kept. Growth was about 0.4 GB a day at 30 days.
 - **Prisma is pinned to v6.** Bare `npx prisma …` pulls v7, which rejects the
   `url = env("DATABASE_URL")` datasource syntax (P1012). Always go through the
   npm scripts (`npm run db:push`) or the local binary
