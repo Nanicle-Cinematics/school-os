@@ -286,6 +286,9 @@ jobs:
       - name: Score limits — a mark may not exceed its total, and who may record one
         run: npm run verify:score-limits
 
+      - name: Uploads — a declared file type must be on the allowlist, not merely found on an object
+        run: npm run verify:uploads
+
       - name: Public routes — what an unauthenticated route may spend, and that every one is inside it
         run: npm run verify:public-routes
 

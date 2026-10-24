@@ -26,7 +26,8 @@ export async function readAttachment(value: FormDataEntryValue | null): Promise<
   if (!(value instanceof File) || value.size === 0) {
     return { ok: false, error: "No file" };
   }
-  if (!ACCEPTED_ATTACHMENTS[value.type]) {
+  // hasOwn, not a bare lookup: "constructor" and "toString" are found on any object.
+  if (!Object.hasOwn(ACCEPTED_ATTACHMENTS, value.type)) {
     return {
       ok: false,
       error: `That is a ${value.type || "unknown"} file. Attach a photo (PNG, JPEG, HEIC) or a PDF.`,
