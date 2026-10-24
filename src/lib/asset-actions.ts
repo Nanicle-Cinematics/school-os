@@ -54,7 +54,8 @@ export async function uploadSchoolAsset(
   if (!(file instanceof File) || file.size === 0) {
     return { error: "Choose a file first." };
   }
-  if (!ACCEPTED[file.type]) {
+  // hasOwn, not a bare lookup: "constructor" and "toString" are found on any object.
+  if (!Object.hasOwn(ACCEPTED, file.type)) {
     return { error: `That is a ${file.type || "unknown"} file. Use a PNG, JPEG or WebP.` };
   }
   if (file.size > MAX_BYTES) {
