@@ -96,12 +96,14 @@ export async function setGatewayEnabled(_prev: GatewayState, formData: FormData)
     return { ok: "Online payments are off." };
   }
 
+  // Spelt out as two literals so verify:activity, which reads `action: "…"`, can see both.
+  const audit = enable ? { action: "gateway.enable" } : { action: "gateway.disable" };
   await tenantTransaction(auth.schoolId, async (tx) => {
     await tx.paymentGateway.update({ where: { schoolId: auth.schoolId }, data: { enabled: enable } });
     await writeAudit(tx, {
       schoolId: auth.schoolId,
       actorUserId: auth.userId,
-      action: enable ? "gateway.enable" : "gateway.disable",
+      ...audit,
       entity: "PaymentGateway",
       entityId: auth.schoolId,
     });

@@ -123,7 +123,7 @@ async function settle(schoolId: string, reference: string, deps: SettleDeps): Pr
         actorUserId: null,
         providerRef: reference,
         providerStatus: "success",
-        auditAction: "payment.online",
+        action: "payment.online",
       });
 
       await tx.onlinePayment.update({

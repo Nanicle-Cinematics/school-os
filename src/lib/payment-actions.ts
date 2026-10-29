@@ -92,7 +92,7 @@ export async function recordPayment(
         note: note || null,
         paidAt,
         actorUserId: auth.userId,
-        auditAction: "payment.record",
+        action: "payment.record",
         slip: upload.ok ? (t) => storeAttachment(t, auth.schoolId, auth.userId, upload) : undefined,
         beforeBooking: async (t) => {
           // A transaction id is unique to the school, whoever it was recorded against,

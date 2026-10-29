@@ -42,7 +42,7 @@ export type BookPaymentInput = {
   providerRef?: string | null;
   providerStatus?: string | null;
   /** "payment.record" for the office; "payment.online" for Paystack. Each needs a phrase on the dashboard. */
-  auditAction: string;
+  action: string;
   /** Stored before the pupil is read, as the original did: the bursar's slip photo. */
   slip?: (tx: TenantTx) => Promise<string | null>;
   /** The caller's own refusals (duplicate reference, double press). Throw to refuse; nothing is written yet. */
@@ -140,7 +140,7 @@ export async function bookPayment(tx: TenantTx, input: BookPaymentInput): Promis
   await writeAudit(tx, {
     schoolId,
     actorUserId: input.actorUserId,
-    action: input.auditAction,
+    action: input.action,
     entity: "Payment",
     entityId: payment.id,
     after: {
