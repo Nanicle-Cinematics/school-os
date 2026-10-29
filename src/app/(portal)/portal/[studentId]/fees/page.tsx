@@ -4,7 +4,10 @@ import { paymentSource } from "@/lib/payment-labels";
 import { getChildHeader, getChildFinance } from "@/lib/portal-data";
 import { formatCedis } from "@/lib/money";
 import { termLabel } from "@/lib/academic-year";
+import { prisma } from "@/lib/prisma";
 import { ChildHeader } from "../../child-header";
+import { ConfirmReturn } from "./confirm-return";
+import { PayNow } from "./pay-now";
 
 export const metadata = { title: "School fees · School OS" };
 
@@ -14,9 +17,13 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
-export default async function ChildFeesPage({ params }: PageProps<"/portal/[studentId]/fees">) {
+export default async function ChildFeesPage({
+  params,
+  searchParams,
+}: PageProps<"/portal/[studentId]/fees">) {
   const { studentId } = await params;
-  await requireMyChild(studentId);
+  const { ref } = await searchParams;
+  const ctx = await requireMyChild(studentId);
 
   const child = await getChildHeader(studentId);
   if (!child) notFound();
@@ -24,9 +31,20 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
   const { invoices, payments, outstanding, paidTotal } = await getChildFinance(studentId);
   const owing = Number(outstanding) > 0;
 
+  // Offered only when the school has switched it on and can still take writes (a lapsed school is
+  // read-only, and a payment started now could not be recorded under the usual rules).
+  const gateway = await prisma.paymentGateway.findUnique({
+    where: { schoolId: ctx.schoolId },
+    select: { enabled: true, secretKeyEnc: true },
+  });
+  const canPayOnline = owing && Boolean(gateway?.enabled && gateway.secretKeyEnc) && !ctx.tenant.readOnly;
+  const returned = typeof ref === "string" && /^SOS-[0-9A-F]{24}$/.test(ref) ? ref : null;
+
   return (
     <div className="space-y-6">
       <ChildHeader child={child} />
+
+      {returned ? <ConfirmReturn studentId={studentId} reference={returned} /> : null}
 
       <div className="rounded-card border border-hairline bg-surface shadow-card p-5">
         <p className="text-sm font-semibold text-slate-600">Outstanding</p>
@@ -45,6 +63,8 @@ export default async function ChildFeesPage({ params }: PageProps<"/portal/[stud
               }`}
         </p>
       </div>
+
+      {canPayOnline ? <PayNow studentId={studentId} owing={Number(outstanding).toFixed(2)} /> : null}
 
       <section>
         <h2 className="font-heading text-section text-slate-900">Bills</h2>
