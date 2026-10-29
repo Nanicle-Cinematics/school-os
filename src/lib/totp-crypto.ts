@@ -15,7 +15,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
  * Fails CLOSED: with no key, enrolling or verifying throws rather than quietly
  * storing a secret unprotected.
  */
-function key(): Buffer {
+export function key(): Buffer {
   const raw = process.env.TOTP_ENCRYPTION_KEY;
   if (!raw) {
     throw new Error(

@@ -1690,6 +1690,52 @@ sheet), and a label that followed it would then lie.
   school whose subscription lapsed to read-only has its held campaign cancelled by the job.
 - The migration is two enum values (`CANCELLED` on `CampaignStatus` and `DeliveryStatus`): additive, run it BEFORE the merge.
 
+## Parents can pay online (Paystack, 2026-10-27)
+
+A parent taps **Pay with mobile money or card** on a child's fees page (`/portal/[studentId]/fees`) and pays on
+Paystack's own page; the payment is booked as a normal receipt without the office touching it. Added because every
+Ghanaian competitor advertises it and a school's first question is whether a parent can pay from their phone.
+
+- **Each school uses its OWN Paystack account** (the owner's decision): Nanicle never holds the money. The school pastes
+  its **secret key** at `/settings/online-payments` (LEADERSHIP only, the IT admin is kept out of the money), where it is
+  checked against Paystack, encrypted (`gateway-crypto.ts`: AES-256-GCM under an HKDF subkey of `TOTP_ENCRYPTION_KEY`, so
+  no new env var; rotating that key makes every stored Paystack key unreadable) and never shown again, returned, or written
+  to the audit trail. It lives in its own table, `PaymentGateway`, so an `include` elsewhere cannot carry it into a page.
+  A saved key starts switched OFF.
+- **One way to book money.** `bookPayment` (`payment-booking.ts`) is the allocate / ledger / audit sequence that used to be
+  inline in `recordPayment`; the office form and the webhook both call it. Do not write a second copy.
+- **`OnlinePayment` is one checkout attempt**, created with OUR amount BEFORE the parent leaves. Nothing is believed
+  afterwards: `settleOnlinePayment(schoolId, reference)` takes only a reference, asks Paystack (with the school's key) what
+  became of it, and books only if reference, amount (in pesewas, exactly) and currency (GHS) match OUR row. A mismatch is
+  not booked: it stays PENDING with `problem` written for a person to read. `abandoned` is WAITING, never failed (it is what
+  an unpaid transaction reads); FAILED is not terminal, since a parent can retry inside one checkout.
+- **Idempotent by construction.** Paystack retries webhooks and a parent refreshes. The booking and the flip to PAID share one
+  transaction under an advisory lock on the reference, and the row is re-read under the lock. Forced red: without the lock and
+  the re-check two concurrent settles returned `booked+booked`.
+- **Two ways in, one function.** The webhook (`/api/paystack/webhook/[schoolId]`, no session, HMAC-SHA512 over the RAW body
+  under that school's key; a bad signature and a school with no key give the same 401; budgeted by `publicLookup`; only the
+  reference is read from the body) and the page the parent returns to (`confirmOnlinePayment`, which polls for about 30s
+  because MoMo confirms after the parent approves a prompt). The second is the net for a school that never pasted the webhook
+  address into Paystack: a missed webhook delays a receipt, it does not lose one. 503 asks Paystack to retry; 200 means done.
+- **A lapsed (read-only) school still has a payment RECORDED** (the settlement context sets no `readOnly`, the money has
+  already moved), but cannot START one (`startCheckout` refuses).
+- **The amount a parent may pay is capped at what is owing**, read on the server (`getChildFinance`), never trusted from the
+  page. A child is reached only through `requireMyChild`.
+- **Paystack's fee is the school's** by default (taken from what it receives). Passing it on to the parent is not built.
+  Paystack needs an email; a parent with none gets `parent-<id>@parents.schoolosafrica.com` (never mailed by us).
+  ⚠️ That domain must be one Nanicle controls or is happy to leave unrouted.
+- **Not built:** passing the fee on, refunds (reverse the payment in the office and refund in Paystack by hand), a parent-facing
+  history of failed attempts, Hubtel as a second gateway.
+- **Shipping it:** the migration (`online_payments`: two new tables and an enum) is additive, so run `migrate.yml action=deploy`
+  BEFORE the merge, then `npm run db:rls` and, on production, `migrate.yml action=rls` (the tables are unprotected until then,
+  and `audit:rls` goes red). `TOTP_ENCRYPTION_KEY` must already exist in the deployment (it does, for the platform admin). `APP_URL`
+  must be the real address, because it builds Paystack's callback.
+- **Guards:** `verify:paystack` (pure, in CI: 90 checks, forced red three ways) and `verify:online-payments` (database, plus the
+  real webhook route over HTTP when a server is up; in CI after the app starts; forced red by removing the lock and by removing the
+  amount check). The database half COMMITS (the settle path does) and removes its rows on the owner connection in `finally`;
+  it leaves the receipt counter moved on, which only skips a number. It could only be tested with a fake Paystack: nothing here has
+  talked to the real one yet. **Do that with a Paystack TEST key before the first school turns it on.**
+
 ## The SMS gateway
 
 `sendSms` DRY-RUNS unless `SMS_PROVIDER` and `SMS_API_KEY` are both set where the

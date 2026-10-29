@@ -292,6 +292,9 @@ jobs:
       - name: Public routes — what an unauthenticated route may spend, and that every one is inside it
         run: npm run verify:public-routes
 
+      - name: Online payments — the key, the pesewas, the webhook signature, what Paystack's answers mean, and the shape of the code
+        run: npm run verify:paystack
+
       - name: Load-test guard — the load test refuses a target that is dev, production or unnamed
         run: npm run verify:load-guard
 
@@ -479,6 +482,19 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:export:route
+
+      # The settlement path with Paystack's answer faked: a confirmed payment books once, a replay or two
+      # at once book once, and money that is not what was asked for books nothing. The HTTP half posts
+      # to the real webhook route, which is why it runs here, after the app is up. The key is the same
+      # fixed test key the app was started with, because the script encrypts a fake Paystack key under
+      # it and the server has to be able to read it back.
+      - name: Online payments — a webhook books once, and only what was asked for, through the real route
+        env:
+          TOTP_ENCRYPTION_KEY: "Y2ktdG90cC1rZXktbm90LWEtcmVhbC1zZWNyZXQteHg="
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:online-payments
 
       - name: Sign-in upgrades a password hash to the current cost, through the real form
         env:

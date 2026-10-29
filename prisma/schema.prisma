@@ -135,6 +135,8 @@ model School {
   discounts                Discount[]
   studentDiscounts         StudentDiscount[]
   payments                 Payment[]
+  paymentGateway           PaymentGateway?
+  onlinePayments           OnlinePayment[]
   paymentAllocations       PaymentAllocation[]
   expenseCategories        ExpenseCategory[]
   expenses                 Expense[]
@@ -915,6 +917,7 @@ model Student {
   skillRatings   SkillRating[]
   invoices       Invoice[]
   payments       Payment[]
+  onlinePayments OnlinePayment[]
   discounts      StudentDiscount[]
   messages       Message[]
 
@@ -947,10 +950,11 @@ model Guardian {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  students    StudentGuardian[]
-  memberships Membership[]
-  payments    Payment[]
-  messages    Message[]
+  students       StudentGuardian[]
+  memberships    Membership[]
+  payments       Payment[]
+  onlinePayments OnlinePayment[]
+  messages       Message[]
 
   @@index([schoolId])
   @@index([schoolId, phone])
@@ -1946,9 +1950,8 @@ model Payment {
   reference   String? // momo transaction id, bank slip no, cheque no
   bankSlipUrl String?
 
-  // Reserved for a future Paystack integration. Every MVP payment is recorded
-  // by the bursar, so these stay null until online parent payment ships —
-  // present now purely to avoid a migration then.
+  // Set when a parent paid online (Paystack): the checkout reference and the
+  // gateway's own word for the outcome. Null for everything the office records.
   providerRef    String?
   providerStatus String?
 
@@ -1967,11 +1970,73 @@ model Payment {
 
   allocations   PaymentAllocation[]
   statementLine StatementLine?
+  onlinePayment OnlinePayment?
 
   @@unique([schoolId, receiptNo])
   @@index([schoolId, paidAt])
   @@index([schoolId, studentId])
   @@index([studentId]) // (schoolId, studentId) cannot serve a query that names only the pupil
+}
+
+// A school's own Paystack account, so the money goes straight to the school and
+// Nanicle never holds it. The secret key is encrypted (gateway-crypto.ts) and is
+// never sent back to a browser; `secretKeyEnc` is read only by the code that
+// calls Paystack or checks a webhook's signature. A separate table, not a column
+// on SchoolSettings, so an `include` or a bare findUnique elsewhere cannot carry
+// it into a page by accident.
+model PaymentGateway {
+  id       String @id @default(cuid())
+  schoolId String @unique
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  provider     String  @default("PAYSTACK")
+  enabled      Boolean @default(false)
+  secretKeyEnc String?
+  // "test" or "live", read off the key's prefix when it was saved.
+  mode         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum OnlinePaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+// One attempt by a parent to pay a child's fees online. The row exists BEFORE the
+// parent leaves for Paystack (the amount is fixed here, on our side), and the
+// money is booked only when Paystack confirms it: `paymentId` is set in the same
+// transaction that creates the Payment, and the conditional PENDING -> PAID flip
+// is what makes a replayed webhook book nothing twice.
+model OnlinePayment {
+  id         String    @id @default(cuid())
+  schoolId   String
+  school     School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardianId String?
+  guardian   Guardian? @relation(fields: [guardianId], references: [id], onDelete: SetNull)
+
+  // Ours, not Paystack's: generated here and sent as the transaction reference.
+  reference String
+  amount    Decimal             @db.Decimal(12, 2)
+  status    OnlinePaymentStatus @default(PENDING)
+  // "mobile_money" or "card", as Paystack reports it once paid.
+  channel   String?
+  // Why a PENDING row was not booked, when Paystack's answer did not match ours.
+  problem   String?
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  paidAt    DateTime?
+
+  @@unique([schoolId, reference])
+  @@index([schoolId, createdAt])
+  @@index([studentId])
 }
 
 // A payment can settle several invoices (this term plus arrears).

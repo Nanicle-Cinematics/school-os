@@ -499,6 +499,20 @@ const ACTIVITY: Record<
     detail: "Receipt issued",
   },
   "payment.reverse": { kind: "money", title: () => "A payment was reversed", detail: "Money returned or corrected" },
+  "payment.online": {
+    kind: "money",
+    title: (a) => `Online payment of ${money(a.amount)} received`,
+    detail: "Paid by a parent through Paystack",
+  },
+  "payment.online.unbooked": {
+    kind: "money",
+    title: () => "An online payment was taken but could not be recorded",
+    detail: "Check Paystack and record it by hand",
+  },
+  "gateway.save": { kind: "admin", title: () => "A Paystack key was saved", detail: "Online payments" },
+  "gateway.enable": { kind: "admin", title: () => "Online payments were switched on", detail: "Online payments" },
+  "gateway.disable": { kind: "admin", title: () => "Online payments were switched off", detail: "Online payments" },
+  "gateway.remove": { kind: "admin", title: () => "The Paystack key was removed", detail: "Online payments" },
   "expense.record": {
     kind: "money",
     title: (a) => `Expense of ${money(a.amount)} recorded`,

@@ -4,7 +4,7 @@ import { DataTable, Row, type Column } from "../primitives";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { OFFICE } from "@/lib/permissions";
+import { LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { getSettings, getYearUsage } from "@/lib/settings-data";
 import { setCurrentTerm } from "@/lib/settings-actions";
 import { deleteAcademicYear } from "@/lib/term-actions";
@@ -292,6 +292,22 @@ export default async function SettingsPage() {
           }}
         />
       </Card>
+
+      {canAccess(auth.roles, LEADERSHIP) ? (
+        <Card
+          title="Online payments"
+          action={
+            <Link href="/settings/online-payments" className="text-sm text-slate-500 hover:text-slate-900">
+              Set up →
+            </Link>
+          }
+        >
+          <p className="p-4 text-sm text-slate-600">
+            Let parents pay fees from their phone, with mobile money or card, into the school&apos;s own
+            Paystack account.
+          </p>
+        </Card>
+      ) : null}
 
       <Card
         title="Messaging"

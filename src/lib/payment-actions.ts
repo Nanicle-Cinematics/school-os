@@ -2,26 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Prisma } from "@prisma/client";
+import { Prisma, type MomoNetwork, type PaymentMethod } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
 import { setTenantContext } from "@/lib/tenant-context";
 import { FINANCE } from "@/lib/permissions";
-import { prisma, tenantTransaction } from "@/lib/prisma";
+import { tenantTransaction } from "@/lib/prisma";
 import { parseAmount } from "@/lib/money";
-import { nextNumber, takenProbes } from "@/lib/sequences";
-import { allocateFifo, netOutstanding, recalcInvoice, syncCarriedForward } from "@/lib/invoice-engine";
-import {
-  cashAccountIdForMethod,
-  findJournalEntryForSource,
-  getCoreAccounts,
-  postJournalEntry,
-  reverseJournalEntry,
-} from "@/lib/ledger-engine";
+import { recalcInvoice, syncCarriedForward } from "@/lib/invoice-engine";
+import { bookPayment, sendReceiptSms } from "@/lib/payment-booking";
+import { findJournalEntryForSource, reverseJournalEntry } from "@/lib/ledger-engine";
 import { writeAudit } from "@/lib/audit";
 import { readAttachment, storeAttachment } from "@/lib/attachments";
-import { queueTransactionalSms, type TextOutcome } from "@/lib/transactional-sms";
-import { TRANSACTIONAL } from "@/lib/message-defaults";
-import { normalisePhone } from "@/lib/sms";
 
 export type PaymentState = { error?: string; ok?: string; duplicate?: boolean };
 
@@ -90,147 +81,54 @@ export async function recordPayment(
   let receiptNo = "";
 
   try {
-    receiptNo = await tenantTransaction(auth.schoolId, async (tx) => {
-      // Serialise payments for one student: two at once would both read the same
-      // open balances and both allocate to them. Released at commit.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"payment:" + studentId}))`;
-
-      const bankSlipUrl = upload.ok
-        ? await storeAttachment(tx, auth.schoolId, auth.userId, upload)
-        : null;
-
-      const student = await tx.student.findUnique({
-        where: { id: studentId },
-        include: {
-          guardians: { where: { isPrimary: true }, take: 1 },
-          invoices: {
-            where: { balance: { gt: 0 }, status: { not: "CANCELLED" } },
-            orderBy: { issueDate: "asc" },
-            select: { id: true, balance: true },
-          },
-        },
-      });
-
-      if (!student) {
-        throw new Error("STUDENT_NOT_FOUND");
-      }
-
-      // A transaction id is unique to the school, whoever it was recorded against,
-      // and a second payment with it is never legitimate: no override.
-      if (method === "MOBILE_MONEY" && reference) {
-        const sameReference = await tx.payment.findFirst({
-          where: { status: "CONFIRMED", method: "MOBILE_MONEY", reference },
-          select: { receiptNo: true },
-        });
-        if (sameReference) {
-          throw new Error(`REFERENCE:${sameReference.receiptNo}`);
-        }
-      }
-
-      // Same student, amount and method moments ago is far more often a double
-      // press than a second payment — but two identical fees paid back to back
-      // do happen, so the office can confirm it is deliberate.
-      if (!allowDuplicate) {
-        const recent = await tx.payment.findFirst({
-          where: {
-            studentId,
-            amount,
-            method: method as "CASH",
-            status: "CONFIRMED",
-            createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
-          },
-          select: { receiptNo: true },
-        });
-        if (recent) {
-          throw new Error(`DUPLICATE:${recent.receiptNo}`);
-        }
-      }
-
-      const receipt = await nextNumber(
-        tx,
-        auth.schoolId,
-        "RECEIPT",
-        takenProbes.receipt(tx, auth.schoolId),
-      );
-
-      const payment = await tx.payment.create({
-        data: {
-          schoolId: auth.schoolId,
-          studentId,
-          guardianId: student.guardians[0]?.guardianId ?? null,
-          receiptNo: receipt,
-          amount,
-          method: method as "CASH",
-          momoNetwork: method === "MOBILE_MONEY" && momoNetwork ? (momoNetwork as "MTN") : null,
-          bankSlipUrl,
-          reference: reference || null,
-          note: note || null,
-          status: "CONFIRMED",
-          paidAt,
-          recordedByUserId: auth.userId,
-        },
-      });
-
-      // Oldest invoice first — arrears clear before the current term.
-      const allocations = allocateFifo(student.invoices, amount);
-      for (const allocation of allocations) {
-        await tx.paymentAllocation.create({
-          data: {
-            schoolId: auth.schoolId,
-            paymentId: payment.id,
-            invoiceId: allocation.invoiceId,
-            amount: allocation.amount,
-          },
-        });
-        await recalcInvoice(tx, allocation.invoiceId);
-      }
-
-      // Paying off an old invoice shrinks what the newer ones carry forward.
-      await syncCarriedForward(tx, studentId);
-
-      const allocated = allocations.reduce(
-        (acc, a) => acc.add(a.amount),
-        new Prisma.Decimal(0),
-      );
-
-      // Dr the account the method lands in / Cr Accounts Receivable, for the
-      // FULL amount received — not just what was allocated. An overpayment
-      // still reduced what the family is short by; this app has no separate
-      // "customer deposit" liability to park the unallocated slice in.
-      const core = await getCoreAccounts(tx, auth.schoolId);
-      const cashLikeAccountId = cashAccountIdForMethod(core, payment.method);
-      if (cashLikeAccountId && core.receivableAccountId) {
-        await postJournalEntry(tx, auth.schoolId, {
-          sourceType: "PAYMENT",
-          sourceId: payment.id,
-          memo: `Receipt ${receipt}`,
-          actorUserId: auth.userId,
-          lines: [
-            { accountId: cashLikeAccountId, debit: amount },
-            { accountId: core.receivableAccountId, credit: amount },
-          ],
-        });
-      }
-
-      await writeAudit(tx, {
+    const booked = await tenantTransaction(auth.schoolId, (tx) =>
+      bookPayment(tx, {
         schoolId: auth.schoolId,
+        studentId,
+        amount,
+        method: method as PaymentMethod,
+        momoNetwork: momoNetwork ? (momoNetwork as MomoNetwork) : null,
+        reference: reference || null,
+        note: note || null,
+        paidAt,
         actorUserId: auth.userId,
-        action: "payment.record",
-        entity: "Payment",
-        entityId: payment.id,
-        after: {
-          receiptNo: receipt,
-          amount: amount.toString(),
-          method,
-          allocated: allocated.toString(),
-          // Overpayment stays on the payment as unallocated credit rather than
-          // being silently dropped — it belongs to the next invoice.
-          unallocated: amount.sub(allocated).toString(),
-        },
-      });
+        auditAction: "payment.record",
+        slip: upload.ok ? (t) => storeAttachment(t, auth.schoolId, auth.userId, upload) : undefined,
+        beforeBooking: async (t) => {
+          // A transaction id is unique to the school, whoever it was recorded against,
+          // and a second payment with it is never legitimate: no override.
+          if (method === "MOBILE_MONEY" && reference) {
+            const sameReference = await t.payment.findFirst({
+              where: { status: "CONFIRMED", method: "MOBILE_MONEY", reference },
+              select: { receiptNo: true },
+            });
+            if (sameReference) {
+              throw new Error(`REFERENCE:${sameReference.receiptNo}`);
+            }
+          }
 
-      return receipt;
-    });
+          // Same student, amount and method moments ago is far more often a double
+          // press than a second payment — but two identical fees paid back to back
+          // do happen, so the office can confirm it is deliberate.
+          if (!allowDuplicate) {
+            const recent = await t.payment.findFirst({
+              where: {
+                studentId,
+                amount,
+                method: method as PaymentMethod,
+                status: "CONFIRMED",
+                createdAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) },
+              },
+              select: { receiptNo: true },
+            });
+            if (recent) {
+              throw new Error(`DUPLICATE:${recent.receiptNo}`);
+            }
+          }
+        },
+      }),
+    );
+    receiptNo = booked.receiptNo;
   } catch (error) {
     if (error instanceof Error && error.message === "STUDENT_NOT_FOUND") {
       return { error: "That student no longer exists." };
@@ -249,60 +147,13 @@ export async function recordPayment(
     throw error;
   }
 
-  // Best-effort receipt SMS, after the money is safely committed. Failure here
-  // must never affect the payment, so queueTransactionalSms swallows its own
-  // errors and no-ops unless SMS is switched on.
-  const receiptDetails = await prisma.payment.findFirst({
-    where: { schoolId: auth.schoolId, receiptNo },
-    include: {
-      guardian: { select: { id: true, firstName: true, lastName: true, phone: true } },
-      student: {
-        select: {
-          firstName: true,
-          lastName: true,
-          invoices: {
-            where: { status: { not: "CANCELLED" } },
-            select: { total: true, broughtForward: true },
-          },
-          payments: {
-            where: { reversedAt: null, status: "CONFIRMED" },
-            select: { amount: true },
-          },
-        },
-      },
-    },
+  // Best-effort receipt SMS, after the money is safely committed.
+  const texted = await sendReceiptSms({
+    schoolId: auth.schoolId,
+    schoolName: auth.schoolName,
+    receiptNo,
+    amount,
   });
-
-  // Who the receipt went to, or why it did not go — shown under the receipt
-  // number, because a text that never left is as silent to the office as it is
-  // to the parent.
-  let texted: TextOutcome | "noGuardian" = "noGuardian";
-  if (receiptDetails?.guardian) {
-    /**
-     * ⚠️ NOT a sum of invoice balances. Each term's invoice carries the last
-     * one's unpaid balance forward, so summing counted the same arrears once per
-     * term and told a parent with last term's debt that they owed far more than
-     * they did — in a text headed "we have received". netOutstanding is the
-     * figure the debtor messages and the parent portal already use.
-     */
-    const balance = netOutstanding(receiptDetails.student.invoices, receiptDetails.student.payments);
-    texted = await queueTransactionalSms({
-      schoolId: auth.schoolId,
-      templateName: TRANSACTIONAL.paymentReceived,
-      gate: "notifyOnPayment",
-      toPhone: normalisePhone(receiptDetails.guardian.phone),
-      studentId: receiptDetails.studentId,
-      guardianId: receiptDetails.guardian.id,
-      context: {
-        school_name: auth.schoolName,
-        guardian_name: `${receiptDetails.guardian.firstName} ${receiptDetails.guardian.lastName}`,
-        student_name: `${receiptDetails.student.firstName} ${receiptDetails.student.lastName}`,
-        amount: amount.toFixed(2),
-        balance: balance.toFixed(2),
-        receipt_no: receiptNo,
-      },
-    });
-  }
 
   revalidatePath("/payments");
   revalidatePath("/invoices");
