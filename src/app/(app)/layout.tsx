@@ -3,13 +3,14 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { requireAuth } from "@/lib/auth";
-import { navFor, roleLabel } from "@/lib/permissions";
+import { ATTENDANCE, canAccess, navFor, roleLabel } from "@/lib/permissions";
 import { canSearch } from "@/lib/search-data";
 import { schoolIconUrls, schoolManifestUrl } from "@/lib/manifest-data";
 import { homeScreenLabel } from "@/lib/home-screen-label";
 import { ThemeToggle } from "../theme-toggle";
 import { SkinPicker } from "../skin-picker";
-import { logout } from "@/lib/auth-actions";
+import { SignOutButton } from "../sign-out-button";
+import { OfflineSync } from "../offline-sync";
 import { prisma } from "@/lib/prisma";
 import { Sidebar, MobileNav, SectionTint, type RailTerm } from "./nav";
 
@@ -166,17 +167,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             ) : null}
             <SkinPicker className="print:hidden" />
             <ThemeToggle className="print:hidden" />
-            <form action={logout}>
-              <button
-                type="submit"
-                /* whitespace-nowrap: at 390px the header ran out of room and
-                   broke the label across two lines as "Sign / out", which reads
-                   as a squashed page rather than a button. */
-                className="whitespace-nowrap rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-              >
-                Sign out
-              </button>
-            </form>
+            {/* whitespace-nowrap: at 390px the header ran out of room and
+                broke the label across two lines as "Sign / out", which reads
+                as a squashed page rather than a button. */}
+            <SignOutButton className="whitespace-nowrap rounded-full border border-hairline px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100" />
           </div>
         </header>
 
@@ -200,6 +194,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <main className="min-w-0 flex-1 space-y-1 p-4 lg:px-7 lg:py-6 print:p-0">
           <SectionTint>{children}</SectionTint>
         </main>
+        {/* Sends registers a teacher took with no signal, once there is one. */}
+        <OfflineSync
+          enabled={canAccess(auth.roles, ATTENDANCE)}
+          who={{ userId: auth.userId, schoolId: auth.schoolId }}
+        />
       </div>
     </div>
   );

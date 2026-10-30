@@ -180,6 +180,8 @@ export default async function AttendancePage({ searchParams }: PageProps<"/atten
                 ) : null}
                 <RegisterForm
                   classGroupId={classGroupId}
+                  classLabel={heading}
+                  who={{ userId: auth.userId, schoolId: auth.schoolId }}
                   date={dateValue}
                   taken={register.taken}
                   boys={register.boys.map((row) => ({

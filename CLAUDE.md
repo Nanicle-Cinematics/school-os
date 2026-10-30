@@ -1178,6 +1178,75 @@ day it meant to mark. And a plain `action={fn}` form carries `$ACTION_ID`, while
 one driven by `useActionState` carries `$ACTION_REF_n` plus encrypted bound args
 instead, so matching on `$ACTION_ID` excludes exactly the forms that matter.
 
+## Taking the register with no signal (2026-10-30)
+
+A form teacher can mark the register on a phone that has lost its signal; it is kept on the phone and sent
+when the phone is online again. Added because a school's day does not stop for the network, and a register
+that fails to save on a bad morning is a register on paper again. Attendance only; the mark sheet is not
+offline (see "Not built").
+
+- **What the phone holds** (`offline-register.ts` for the rules, `offline-store.ts` for IndexedDB): the class
+  list (name, admission number, gender) of the classes the teacher opened while online, and the marks being
+  typed. `OfflineRoll` is good for **7 days** and deleted unused; an `OfflineEntry` is a `draft` (typed, never
+  sent), `queued` (Save pressed with no signal; sent when online) or `failed` (the server refused it, with
+  its words). Unsent work is never pruned; an abandoned draft is after a week.
+- **Whose it is** (the school chose their own phones): `adoptOwner` runs whenever a signed-in page opens and
+  WIPES everything if the last person to use the phone was someone else or at another school; **Sign out
+  wipes** (`SignOutButton`). A session that merely expires never signs out, so it is the first check that
+  protects the next person. ⚠️ The class list is protected only by the phone's own lock while it is there: the
+  offline page opens without signing in (it cannot ask a server). That was the cost of "works with no
+  signal" and is names and admission numbers only: no phones, fees or marks.
+- **The service worker now caches ONE page, and that is the whole exception to "static assets only"**
+  (`public/sw.js`, `CACHE` is `school-os-v3`). `/attendance-offline` renders NOTHING about anyone: it sits
+  outside both layouts, reads no session or database and prints no school or person, so the cached copy is
+  the same bytes for every school. It is answered **network-first** (never stale when online; the lesson of
+  the manifest) and is the fallback for `/attendance` (network failure or 10 s) and `/login` (failure only,
+  the installed app's start page), for full-page loads only. The offline page's "open the full Attendance page" link carries `?online=1`, which
+  tells the worker this person will wait for the network (only a failure hands over): without it a cold or slow
+  server hands the full page back to the offline one for ever. Found by `verify:offline-browser`, whose first
+  request after restarting the server took over 10 s. Do not widen this to another page, and do not let
+  that page read tenant data: it would be a cached report card by another name. `verify:offline-register`
+  fails on both (it counts `cache.put`, `caches.match` and the paths, and greps the page for auth, prisma and
+  school names), and `verify:offline-browser` checks the cached HTML names no school and no child.
+- **Priming** (`offline-prime.ts`): the online page fetches `/attendance-offline` and the build files it names
+  once per session, but only once the service worker is IN CHARGE of the page. On the very first visit the
+  worker registers after the page loads, so a fetch made at once goes past it and caches nothing.
+- **Sending** (`POST /api/attendance/sync`, a ROUTE and not the `saveRegister` action, because a queued
+  register outlives deployments and an action id baked into an old page would not): one result per register,
+  so a refused day does not stop the others. `requireRole(ATTENDANCE)` then `saveRegisterFor`
+  (`register-save.ts`), which is the same function the online form uses, so *form teacher of the class or the
+  office, a date inside a term, children on the roll* are enforced once. A signed-out caller is redirected;
+  the phone reads that as "sign in again" and keeps the queue (`OfflineSync` says so). Content type must be
+  JSON and `Sec-Fetch-Site` same-origin.
+- ⚠️ **A phone speaks only for the children it listed** (`scope: "listed"`; the online form is `"all"`). A
+  register taken offline was marked against a roll downloaded earlier; treating its silence about a child who
+  joined since as "unmarked" would delete a mark the office made. Only the children the phone sent are
+  touched (a blank means *clear that one*), and one no longer in the class is left out and reported.
+  Conflicts follow the school's choice: **the phone's version wins** for the children it names, as re-marking
+  does today; the audit row carries `offline: true` and `markedAt`, so a late arrival is not mistaken for a
+  register taken at the time it was written. `saveRegisterFor` also reads the class back through the tenant
+  client (`ownsClasses`): an AttendanceDay for another school's class would claim that class's (class, day)
+  slot for good.
+- ⚠️ **The form calls the action itself and not through `useActionState`'s dispatch.** A request that fails
+  inside a form action surfaces as a render error the component cannot catch, and the register would be lost
+  at exactly the moment this exists for. The form still carries `action={formAction}` so its server-rendered
+  fallback (the hidden action fields the HTTP guards post to) is unchanged. A save that gets no answer in
+  20 s is kept on the phone too; sending it again later is harmless because a register is the same whichever
+  copy arrives. "Saved" is never claimed for what is only on the phone.
+- **Editing a register already queued keeps it queued** (the teacher pressed Save; later taps are corrections),
+  and `applyResults` leaves alone an entry edited WHILE its post was in flight (a newer `updatedAt`), or marks
+  the server never saw would be dropped.
+- **Not built:** offline for the mark sheet, remarks or anything else (those write scores and a lost or doubled
+  one changes a child's result; a separate decision); a way for the office to see who has registers waiting on
+  a phone; reviewing a conflict instead of letting the phone win (the school chose the simple rule); pushing the
+  roll to the phone before the teacher has ever opened the page there (the first morning needs a signal).
+- **Guards:** `verify:offline-register` (pure, in CI, forced red five ways), `verify:offline-sync` (the route
+  against the database as the office, the form teacher, another teacher and a stranger; forced red by making
+  the route speak for the whole roll and by removing the form-teacher rule) and `verify:offline-browser`
+  (a real Chrome against the BUILT app, which it starts and stops itself: the server is stopped to take the
+  signal from the service worker as well as the page, because CDP's offline switch covers only the page). No
+  database change, so no migration and no `db:rls`.
+
 ## A class teacher sees three screens
 
 A teacher signs in to do a small, fixed job — enter the term's marks for the
@@ -2136,7 +2205,8 @@ faces are in its screenshots. The admin rule is the same lesson `marketing.tsx`
 learnt: their header carries a "Nanicle console" button no customer will ever
 see.
 
-⚠️ **The service worker caches `/_next/static/` and NOTHING else.** Two separate
+⚠️ **The service worker caches `/_next/static/` and ONE data-free page (`/attendance-offline`, see
+"Taking the register with no signal") and NOTHING else.** Two separate
 reasons, and both were learnt the hard way:
 
 - **No page navigations.** Every screen is a signed-in, tenant-scoped read — a
