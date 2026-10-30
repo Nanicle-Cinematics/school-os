@@ -292,6 +292,9 @@ jobs:
       - name: Public routes — what an unauthenticated route may spend, and that every one is inside it
         run: npm run verify:public-routes
 
+      - name: Offline register — what a phone may send, what it keeps, and what the service worker may cache
+        run: npm run verify:offline-register
+
       - name: Online payments — the key, the pesewas, the webhook signature, what Paystack's answers mean, and the shape of the code
         run: npm run verify:paystack
 
@@ -418,6 +421,16 @@ jobs:
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:attendance
 
+      # The route a phone posts its queued registers to. After the app starts
+      # for the same reason as attendance, and it WRITES two days in the seeded
+      # school's Basic 5 and removes them (and their audit rows) again.
+      - name: Offline register — the sync route, as a form teacher, another teacher and a stranger
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:offline-sync
+
       # Mock exams for the BECE year. Here, after the app starts, for the same
       # reason as attendance: the sheet's guards (assigned teacher, marks out of
       # 100, a closed mock is final) live behind requireRole in "use server"
@@ -454,6 +467,17 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:grid-browser
+
+      # A register taken with the server gone, in a real Chrome. It starts the BUILT app itself on port
+      # 3101 (the service worker registers in production only) and stops it to take the signal away from
+      # the worker as well as the page, so it needs the same environment the app above was started with.
+      # It writes one day of the seeded school's Basic 5 and two logins, and removes them.
+      - name: Offline register — a real browser, the server stopped, the register kept and then sent
+        env:
+          TOTP_ENCRYPTION_KEY: "Y2ktdG90cC1rZXktbm90LWEtcmVhbC1zZWNyZXQteHg="
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+        run: npm run verify:offline-browser
 
       - name: Onboarding — every screen a day-one school opens
         env:
