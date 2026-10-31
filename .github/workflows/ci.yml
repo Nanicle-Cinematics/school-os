@@ -292,6 +292,9 @@ jobs:
       - name: Public routes — what an unauthenticated route may spend, and that every one is inside it
         run: npm run verify:public-routes
 
+      - name: Timetable — the day, a double lesson, who is in two places, and the code around them
+        run: npm run verify:timetable
+
       - name: Offline register — what a phone may send, what it keeps, and what the service worker may cache
         run: npm run verify:offline-register
 
@@ -420,6 +423,16 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:attendance
+
+      # The timetable's routes and pages. After the app starts for the same reason as attendance: the head-only
+      # gate, the teacher clash and the double lesson live behind requireRole in routes. It WRITES a school
+      # day, lessons and two teaching assignments in the seeded school, and removes them again.
+      - name: Timetable — the routes, as the head, a teacher and a stranger
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:timetable-route
 
       # The route a phone posts its queued registers to. After the app starts
       # for the same reason as attendance, and it WRITES two days in the seeded

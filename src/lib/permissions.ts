@@ -124,6 +124,20 @@ export const CLASS_REGISTER: Role[] = [...OFFICE, "TEACHER"];
  */
 export const ATTENDANCE: Role[] = [...OFFICE, "TEACHER"];
 
+/**
+ * The timetable. The head builds it; the office reads the whole school's; a
+ * teacher reads only their own week.
+ *
+ * This is the FOURTH place a plain teacher is let in (after the mark sheet, the
+ * remarks and the register), and the narrowest: it is read-only and the page
+ * shows a teacher-only login their own lessons and nothing else. The role list
+ * is the outer door; the page does the narrowing, in the data layer
+ * (`getTeacherWeek` is handed the session's staff id and never one from the
+ * request). `verify:teacher` asks for the screens by URL.
+ */
+export const TIMETABLE_VIEW: Role[] = [...OFFICE, "TEACHER"];
+export const TIMETABLE_EDIT: Role[] = LEADERSHIP;
+
 export type NavItem = {
   href: string;
   label: string;
@@ -136,6 +150,7 @@ export type NavItem = {
 
 export type NavIcon =
   | "dashboard"
+  | "timetable"
   | "mocks"
   | "export"
   | "students"
@@ -205,6 +220,7 @@ export const NAV: NavSection[] = [
     items: [
       { href: "/classes", label: "Classes", icon: "classes", roles: CLASS_REGISTER },
       { href: "/attendance", label: "Attendance", icon: "attendance", roles: ATTENDANCE },
+      { href: "/timetable", label: "Timetable", icon: "timetable", roles: TIMETABLE_VIEW },
       { href: "/subjects", label: "Subjects", icon: "subjects", roles: OFFICE },
       { href: "/assessments/sheet", label: "Mark sheet", icon: "sheet", roles: MARKING },
       { href: "/assessments", label: "Assessments", icon: "assessments", roles: ACADEMIC },

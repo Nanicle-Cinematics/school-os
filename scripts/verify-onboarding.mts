@@ -140,6 +140,8 @@ const ROUTES = [
   "/staff",
   "/houses",
   "/classes",
+  "/timetable",
+  "/timetable/periods",
   "/subjects",
   "/assessments/sheet",
   "/assessments",

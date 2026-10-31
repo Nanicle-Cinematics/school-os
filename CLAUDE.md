@@ -1247,13 +1247,65 @@ offline (see "Not built").
   signal from the service worker as well as the page, because CDP's offline switch covers only the page). No
   database change, so no migration and no `db:rls`.
 
+## The timetable (2026-10-31)
+
+`/timetable`: who teaches which class what, and when. The head builds it, the office reads the whole school's, and a
+teacher reads their own week. Added because a school's first question after "can parents pay" is "can I print the
+timetable". Defaults chosen on the owner's behalf (asked, answered "use your defaults"): **the same periods every
+weekday, double lessons supported, manual placement with conflict checks** (no auto-generation).
+
+- **Two tables, no teacher on either.** `TimetablePeriod` is the school day (periods and breaks, `HH:MM` text, unique on
+  `(school, order)`); `TimetableSlot` is *class, subject, weekday 1-5, period, year*, unique on
+  `(class, year, weekday, period)`. ⚠️ **A lesson stores no teacher, on purpose.** Its teacher is whoever holds the
+  `TeachingAssignment` for that class and subject this year, worked out when the timetable is READ (`teachersFor`). A
+  teacher copied onto the slot would go stale the day an assignment changed and nothing would say so: the timetable
+  would go on sending the old teacher to the class. (The repo's rule: never persist a value that changes by itself.)
+  `Restrict` on the period, so a period with lessons cannot be deleted from under them.
+- **Because the teacher is not stored, a clash is not a unique index.** It is refused when a lesson is placed
+  (`findTeacherClash`, in `placeLesson`, in one transaction under `pg_advisory_xact_lock` per school and year, so two
+  heads cannot each see a free teacher) and **shown again on every read** (`clashes`): the clash an assignment edit makes
+  AFTER the lessons were placed is the one that matters, and no write refused it. The class page marks the cell, the head's
+  `/timetable` carries a school-wide banner, and the teacher view shows both lessons in one cell. `verify:timetable-route`
+  makes exactly that edit and looks.
+- **Placing a lesson is a JSON route, not a form action** (`POST /api/timetable/slot`, and `/api/timetable/periods` for the
+  school day): a form resets its fields when its action returns, and the first refused lesson ("that teacher is already in
+  Basic 6") would wipe the thirty other choices. Each cell answers for itself and is only changed on screen once the server
+  has said yes (`class-grid.tsx`); the school-day form keeps its rows in state for the same reason. Both are
+  `requireRole(TIMETABLE_EDIT)` = `LEADERSHIP`, JSON only, same-origin only.
+- **What is refused, and before anything is written:** a class that is not this school's (`ownsClasses`), a subject the
+  class's **level** does not offer (`LevelSubject`, or a KG class gets Mathematics), a break, a period that is not this
+  school's, a weekend, the teacher in two classes. A **double** fills this period and the very next row, and only if that
+  row is a lesson (never across a break); it is all or nothing, so a double whose second period clashes writes neither.
+  Only the **current academic year** is edited.
+- **A teacher is let into a FOURTH screen** (`TIMETABLE_VIEW` = office + TEACHER), the narrowest of them: read-only, and a
+  teacher-only login is shown their own week from the SESSION's staff id (`getTeacherWeek(auth.staffId)`); a `?staff=`
+  in the URL is ignored. The office's teacher picker only offers teachers with an assignment this year (`getTeacherOptions`).
+  `verify:teacher` / `verify:parent` / `verify:it-admin` / `verify:onboarding` list the routes.
+- **A school is provisioned with a school day** (`standardDayRows`: seven lessons, two breaks, 08:00 to 13:50), a starting
+  point the head edits at `/timetable/periods`, as with the calendar and the fee items; a school created before this gets a
+  "Use the standard school day" button and nothing else is touched. A period holding lessons can be neither removed nor
+  turned into a break (it says how many lessons are in the way), and an edit keeps a period's id so its lessons stay with it;
+  orders are parked out of range first because `(school, order)` is unique and not deferrable.
+- **Not built:** timetable generation, per-subject lessons-per-week targets (the line under the grid shows counts, with
+  nothing to compare them to), different days for different weekdays, rooms, a parent's view of their child's class,
+  substitutions, and attendance per period.
+- **Shipping it:** the migration (`timetable`: two tables) is additive, so run `migrate.yml action=deploy` BEFORE the merge,
+  then `npm run db:rls` and, on production, `migrate.yml action=rls` after it (the tables are unprotected until then and
+  `audit:rls` goes red).
+- **Guards:** `verify:timetable` (pure plus the shape of the code, in CI, forced red seven ways, two of which first PASSED
+  because a check matched a substring of the sabotage: `pg_advisory_xact_lock_none` and `if (false && period.isBreak)`;
+  pin the whole statement) and `verify:timetable-route` (the routes and pages against the database as the head, a teacher
+  and a stranger; picks its teacher from the real assignments because the demo school rotates five teachers over every class;
+  **refuses to start when the school already has a school day**, since it could not tell its rows from yours). The week
+  grids are named non-lists in `verify:design`.
+
 ## A class teacher sees three screens
 
 A teacher signs in to do a small, fixed job — enter the term's marks for the
 subjects they teach, write the conduct and remark for their class, and take the
 daily register — so `TEACHER` appears on exactly three routes,
 `/assessments/sheet`, `/results/remarks` and `/attendance`, plus a read-only
-`/classes`, and nowhere else. That is the whole mechanism: `requireRole` then
+`/classes` (and, since 2026-10-31, their own read-only week at `/timetable`), and nowhere else. That is the whole mechanism: `requireRole` then
 refuses every other page without a separate list of prohibitions to keep in step
 with the app.
 

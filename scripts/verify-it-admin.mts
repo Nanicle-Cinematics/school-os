@@ -43,6 +43,7 @@ const ALLOWED = [
   "/houses",
   "/classes",
   "/attendance",
+  "/timetable",
   "/subjects",
   "/assessments",
   "/results",

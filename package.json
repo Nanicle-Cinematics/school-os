@@ -76,6 +76,8 @@
     "verify:owner-env": "tsx scripts/verify-owner-env.mts",
     "verify:ges-baseline": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-ges-baseline.mts",
     "verify:public-routes": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-public-routes.mts",
+    "verify:timetable": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-timetable.mts",
+    "verify:timetable-route": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-timetable-route.mts",
     "verify:offline-register": "NODE_OPTIONS=--conditions=react-server tsx scripts/verify-offline-register.mts",
     "verify:offline-browser": "node --env-file=.env scripts/verify-offline-browser.mjs",
     "verify:offline-sync": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/verify-offline-sync.mts",

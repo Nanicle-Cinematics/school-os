@@ -36,6 +36,8 @@ const FORBIDDEN = [
   "/staff",
   "/classes",
   "/attendance",
+  "/timetable",
+  "/timetable/periods",
   "/subjects",
   "/assessments",
   "/assessments/sheet",
