@@ -114,6 +114,8 @@ model School {
   staff               Staff[]
   enrollments         Enrollment[]
   teachingAssignments TeachingAssignment[]
+  timetablePeriods    TimetablePeriod[]
+  timetableSlots      TimetableSlot[]
 
   gradingScales  GradingScale[]
   gradeBands     GradeBand[]
@@ -658,6 +660,7 @@ model AcademicYear {
   enrollments         Enrollment[]
   feeStructures       FeeStructure[]
   teachingAssignments TeachingAssignment[]
+  timetableSlots      TimetableSlot[]
   studentDiscounts    StudentDiscount[]
   mockExams           MockExam[]
 
@@ -749,6 +752,7 @@ model ClassGroup {
   subjectResults      SubjectResult[]
   termResults         TermResult[]
   teachingAssignments TeachingAssignment[]
+  timetableSlots      TimetableSlot[]
 
   attendanceDays AttendanceDay[]
 
@@ -772,6 +776,7 @@ model Subject {
   assessments         Assessment[]
   subjectResults      SubjectResult[]
   teachingAssignments TeachingAssignment[]
+  timetableSlots      TimetableSlot[]
   mockScores          MockScore[]
   skills              SubjectSkill[]
 
@@ -1095,6 +1100,71 @@ model TeachingAssignment {
   @@unique([academicYearId, staffId, subjectId, classGroupId])
   @@index([schoolId, academicYearId])
   @@index([staffId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIMETABLE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One stretch of the school day, the same every weekday. A break is a period
+/// with `isBreak` set: it takes a place in the day so the grid reads in order,
+/// and it can never be given a lesson.
+model TimetablePeriod {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  /// Position in the day (1, 2, 3 …), breaks included.
+  order     Int
+  /// "Period 1", "Break", "Lunch".
+  label     String
+  /// HH:MM on the school's own clock. Text, not a timestamp: a lesson time has
+  /// no date and no timezone, and a DateTime would invent both.
+  startTime String
+  endTime   String
+  isBreak   Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  slots TimetableSlot[]
+
+  @@unique([schoolId, order])
+  @@index([schoolId])
+}
+
+/// One class being taught one subject in one period on one weekday, for one
+/// academic year.
+///
+/// There is deliberately NO teacher here. The teacher of a lesson is whoever
+/// holds the TeachingAssignment for that class and subject in that year, read
+/// when the timetable is read. A teacher copied onto the slot would go stale the
+/// day an assignment is changed, and nothing would tell anyone: the timetable
+/// would go on sending the old teacher to the class. Double-booking is checked
+/// when a lesson is placed and shown again on every read.
+model TimetableSlot {
+  id             String          @id @default(cuid())
+  schoolId       String
+  school         School          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  academicYearId String
+  academicYear   AcademicYear    @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classGroupId   String
+  classGroup     ClassGroup      @relation(fields: [classGroupId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  /// Restrict: a period with lessons in it cannot be deleted from under them.
+  periodId       String
+  period         TimetablePeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+
+  /// 1 = Monday … 5 = Friday.
+  weekday Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([classGroupId, academicYearId, weekday, periodId])
+  @@index([schoolId, academicYearId])
+  @@index([periodId])
+  @@index([subjectId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

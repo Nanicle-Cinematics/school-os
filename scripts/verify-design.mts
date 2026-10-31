@@ -158,6 +158,12 @@ const NOT_LISTS = [
   "results/records/classes/placement-form.tsx",
   "results/records/records-form.tsx",
   "dashboard/collections-chart.tsx",
+  // THE TIMETABLE. A MATRIX (weekdays across, the school day down, and a cell that can hold two
+  // lessons) and, for a head, an input grid with a select in every cell. The school-day page is a
+  // TABULAR FORM: one editable row per period, saved together.
+  "timetable/class-grid.tsx",
+  "timetable/week-grid.tsx",
+  "timetable/periods-form.tsx",
 ];
 
 const rawTables = hits(/<table\b/, (path) =>

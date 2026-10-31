@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   CalendarCheck,
+  CalendarClock,
   ArrowUpRight,
   Banknote,
   BookOpen,
@@ -65,6 +66,7 @@ const GLYPH: Record<NavIcon, LucideIcon> = {
   remarks: MessageSquare,
   promotions: ArrowUpRight,
   attendance: CalendarCheck,
+  timetable: CalendarClock,
   fees: Receipt,
   invoices: FileText,
   payments: Banknote,

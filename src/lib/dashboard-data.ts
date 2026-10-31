@@ -513,6 +513,19 @@ const ACTIVITY: Record<
   "gateway.enable": { kind: "admin", title: () => "Online payments were switched on", detail: "Online payments" },
   "gateway.disable": { kind: "admin", title: () => "Online payments were switched off", detail: "Online payments" },
   "gateway.remove": { kind: "admin", title: () => "The Paystack key was removed", detail: "Online payments" },
+  /* A lesson placed or cleared is one of dozens a head makes in a sitting, so the
+     feed names the class and the subject rather than saying "timetable changed". */
+  "timetable.slot": {
+    kind: "academic",
+    title: (a) => {
+      const who = text(a.class) ?? "A class";
+      return a.cleared
+        ? `${who}: a lesson was taken off the timetable`
+        : `${who}: ${text(a.subject) ?? "a lesson"} was put on the timetable`;
+    },
+    detail: "Timetable",
+  },
+  "timetable.periods": { kind: "admin", title: () => "The school day's periods were changed", detail: "Timetable" },
   "expense.record": {
     kind: "money",
     title: (a) => `Expense of ${money(a.amount)} recorded`,

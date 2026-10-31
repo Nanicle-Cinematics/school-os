@@ -11,6 +11,7 @@ import { applyDefaultMessageTemplates } from "@/lib/message-defaults";
 import { schoolYearFor, splitIntoTerms } from "@/lib/academic-year";
 import { PLANS, TRIAL_DAYS, nextDueDate } from "@/lib/subscription";
 import { applyDefaultAssessmentTemplate } from "@/lib/assessment-templates";
+import { standardDayRows } from "@/lib/timetable-periods";
 
 /**
  * Everything a school is handed on day one.
@@ -155,6 +156,12 @@ export async function provisionSchool(tx: TenantTx, input: ProvisionInput) {
   // NAME, so a school with no templates does not send a broken receipt — it
   // sends nothing, and says nothing about it.
   await applyDefaultMessageTemplates(tx, school.id);
+
+  // And on a SCHOOL DAY, so /timetable opens on a grid and not a request to go
+  // and build one. Seven lessons and two breaks: a starting point the head
+  // corrects, exactly as the calendar and the fee items are. One bulk insert
+  // (provisioning stays batched), idempotent on (school, order).
+  await tx.timetablePeriod.createMany({ data: standardDayRows(school.id), skipDuplicates: true });
 
   /**
    * And on a CALENDAR, which everything else hangs off.
