@@ -298,6 +298,9 @@ jobs:
       - name: Admissions — the pipeline, the places, the public form's limits, and the code around them
         run: npm run verify:admissions
 
+      - name: Payroll — PAYE and SSNIT to the pesewa, loans, the ledger entry, and the code around them
+        run: npm run verify:payroll
+
       - name: Offline register — what a phone may send, what it keeps, and what the service worker may cache
         run: npm run verify:offline-register
 
@@ -446,6 +449,16 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:admissions-route
+
+      # Payroll, against the real app. After the app starts because the pages sit behind requireRole. It builds
+      # its own staff, rates and accounts in the seeded school, works two months out, approves, reopens and pays
+      # them, and removes everything it made (and the payroll account choices it set).
+      - name: Payroll — a month worked out, approved, reopened and paid, as the head, an accountant and a stranger
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:payroll-route
 
       # The route a phone posts its queued registers to. After the app starts
       # for the same reason as attendance, and it WRITES two days in the seeded

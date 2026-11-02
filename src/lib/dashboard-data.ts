@@ -3,6 +3,7 @@ import "server-only";
 import { scoresPerAssessment } from "@/lib/scoped-counts";
 import { prisma } from "@/lib/prisma";
 import { countUnplaced } from "@/lib/placement";
+import { periodLabel } from "@/lib/payroll-rules";
 import type { Role } from "@prisma/client";
 import { canAccess, FINANCE, OFFICE } from "@/lib/permissions";
 
@@ -874,6 +875,20 @@ const ACTIVITY: Record<
     },
     detail: "Admissions",
   },
+  /* Payroll phrases name the month and what happened, never a person or an amount: the feed is read more widely than payroll is. */
+  "payroll.setup": { kind: "money", title: () => "Payroll was set up", detail: "Payroll" },
+  "payroll.accounts": { kind: "money", title: () => "The accounts payroll posts to were chosen", detail: "Payroll" },
+  "payroll.rates": { kind: "money", title: () => "Payroll tax and SSNIT rates were changed", detail: "Payroll" },
+  "payroll.rates.confirm": { kind: "money", title: () => "Payroll tax and SSNIT rates were confirmed", detail: "Payroll" },
+  "payroll.rates.delete": { kind: "money", title: () => "A set of payroll rates was removed", detail: "Payroll" },
+  "payroll.staffPay": { kind: "money", title: () => "A member of staff's pay record was changed", detail: "Payroll" },
+  "payroll.item": { kind: "money", title: () => "A staff allowance or deduction was changed", detail: "Payroll" },
+  "payroll.create": { kind: "money", title: (a) => `Payroll for ${payrollMonth(a.period)} was worked out`, detail: "Payroll" },
+  "payroll.recalculate": { kind: "money", title: () => "A payroll run was worked out again", detail: "Payroll" },
+  "payroll.approve": { kind: "money", title: (a) => `Payroll for ${payrollMonth(a.period)} was approved`, detail: "Payroll" },
+  "payroll.reopen": { kind: "money", title: () => "An approved payroll run was reopened", detail: "Payroll" },
+  "payroll.pay": { kind: "money", title: () => "A payroll run was marked paid", detail: "Payroll" },
+  "payroll.delete": { kind: "money", title: (a) => `The draft payroll for ${payrollMonth(a.period)} was deleted`, detail: "Payroll" },
   "application.delete": {
     kind: "people",
     title: (a) => `${text(a.name) ?? "An application"}: the application was deleted`,
@@ -1007,6 +1022,12 @@ function count(value: unknown) {
 function plural(value: unknown, word: string) {
   return Number(value) === 1 ? word : `${word}s`;
 }
+/** "2026-11" as "November 2026"; a missing or odd value reads as "a month" and never breaks the feed. */
+function payrollMonth(value: unknown) {
+  const m = typeof value === "string" ? /^(\d{4})-(\d{1,2})$/.exec(value) : null;
+  return m ? periodLabel(Number(m[1]), Number(m[2])) : "a month";
+}
+
 /** A name out of untyped audit JSON, or null so the caller can phrase around it. */
 function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;

@@ -148,6 +148,17 @@ export const TIMETABLE_EDIT: Role[] = LEADERSHIP;
 export const ADMISSIONS: Role[] = OFFICE;
 export const ADMISSIONS_FORM: Role[] = LEADERSHIP;
 
+/**
+ * Payroll: what the school pays each person.
+ *
+ * FINANCE reads it and prepares it (pay records, a draft run, the accounts it posts to); LEADERSHIP alone approves a
+ * run, marks it paid, reopens it, and sets or confirms the statutory rates. The one who works the month out is not
+ * the one who releases it. NOT `OFFICE`: a registrar or the IT admin has never needed to see what colleagues earn,
+ * and a teacher sees three screens and this is not one of them.
+ */
+export const PAYROLL: Role[] = FINANCE;
+export const PAYROLL_APPROVE: Role[] = LEADERSHIP;
+
 export type NavItem = {
   href: string;
   label: string;
@@ -180,6 +191,7 @@ export type NavIcon =
   | "invoices"
   | "payments"
   | "expenses"
+  | "payroll"
   | "debtors"
   | "creditors"
   | "billCodes"
@@ -254,6 +266,7 @@ export const NAV: NavSection[] = [
       { href: "/invoices", label: "Invoices", icon: "invoices", roles: FINANCE },
       { href: "/payments", label: "Payments", icon: "payments", roles: FINANCE },
       { href: "/expenses", label: "Expenses", icon: "expenses", roles: FINANCE },
+      { href: "/payroll", label: "Payroll", icon: "payroll", roles: PAYROLL },
       { href: "/debtors", label: "Debtors", icon: "debtors", roles: FINANCE },
       { href: "/creditors", label: "Creditors", icon: "creditors", roles: FINANCE },
       {

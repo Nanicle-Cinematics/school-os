@@ -22,7 +22,7 @@ Shipping Phases 1–3 plus SMS:
 
 Plus **attendance** — a daily register per class, feeding the report card.
 
-Not modelled yet: library, boarding, transport, health, payroll. Single-campus by design — there is no `Branch` model.
+Not modelled yet: library, boarding, transport, health. Single-campus by design — there is no `Branch` model.
 
 ## Gotchas
 
@@ -1362,6 +1362,65 @@ against `if (false && …)` because it matched a fragment: pin the whole stateme
 form and the pipeline against the app and database; builds its own level, class and later year, opens the form for the run and
 restores it, removes everything it made). `/admissions` is listed in `verify-teacher`, `verify-parent`, `verify-it-admin` and
 `verify-onboarding`.
+
+## Payroll (2026-11-02)
+
+`/payroll`: what each member of staff is paid, with PAYE and SSNIT worked out, a payslip for each, and the entry for the
+accounts. Choices made with the owner: **PAYE and SSNIT calculated from rates the school can edit, basic salary plus allowances
+plus deductions (loans and advances), everyone on a monthly salary, and an approved run posts a journal.**
+
+⚠️ **The statutory figures are a STARTING POINT that someone must confirm, and the app will not approve a run until they have.**
+The PAYE bands changed on 1 September 2026 (Income Tax (Amendment) Act, 2026): the first GH¢588 a month untaxed, then 5% (next
+80), 10% (next 100), 17.5% (next 2,900), 25% (next 16,000), 30% (next 30,332) and 35% above GH¢50,000, as read from the GRA's
+PAYE page. SSNIT is 5.5% from the employee and 13% from the employer on BASIC salary, to a GH¢69,000 ceiling. Published sources
+DISAGREE on how Tier 2 is split between employee and employer and whether the ceiling caps it; this app uses Tier 2 only to
+divide the remittance, and the accountant should confirm it. Nobody checked the gazetted Act itself.
+
+- **Rates are data, not code.** `PayrollRateSet` (per school, effective-dated, the bands as validated JSON read through `readBands`).
+  `STARTING_RATES` in `payroll-rules.ts` is the one place the numbers appear, and `verify:payroll` fails on a rate written anywhere
+  else in the arithmetic. A school gets the set from "Set up payroll" on `/payroll/setup`, **unconfirmed**. A run uses the latest set
+  that took effect on or before its month, and **a set a run has used is frozen** (the next change is a new set with a later date);
+  editing an unused one takes back its confirmation. Confirming is the head's (`PAYROLL_APPROVE`).
+- **The order of the arithmetic is the law**, in `computePayslip` (pure, integer PESEWAS, no float near a salary): SSNIT on BASIC only
+  (capped), employee SSNIT comes off taxable pay BEFORE tax, PAYE band by band rounded once (half up), deductions last and never take
+  pay below zero (a deduction pay cannot cover is cut short and the payslip says so; what is still owed stays on the loan).
+  `verify:payroll` checks every figure against constants worked by hand, not against the code, and was forced red eleven ways.
+- **A payslip is FROZEN when it is worked out**, name, SSNIT number and TIN beside it, so a slip reprinted next year reads what was
+  paid. A run is approved on the numbers it holds, so approving first works the month out AGAIN from today's records and refuses if
+  they no longer agree (a salary edited after the run was calculated must not be paid at the old figure unseen); an edit and its
+  reversal agree again. It also refuses newer rates than the run was worked on. The run page shows "out of date" for a draft.
+- **A loan's balance is DERIVED, never stored**: principal less the lines of APPROVED and PAID runs (`payslipLine.groupBy`). Reopening a
+  run puts its instalment back. A deduction with no principal goes on until stopped.
+- **Salary is in its own tables**, `StaffPay` and `StaffPayItem`, and never a column on `Staff`: `getSessionUser` and a dozen loaders
+  include staff rows, and a salary must not ride along. `verify:payroll` fails if anything outside payroll touches those tables.
+- **Who**: `PAYROLL = FINANCE` (leadership and the accountant) reads and prepares: pay records, a draft run, the accounts it posts to.
+  `PAYROLL_APPROVE = LEADERSHIP` approves, marks paid, reopens, and sets or confirms the rates, so the person who works the month out
+  is not the one who releases it. NOT the registrar, the IT admin or a teacher: nobody else has needed to see what colleagues earn.
+- **The ledger** (`payrollEntry`, pure): one entry on approval, `PAYROLL`: debit salaries (gross PLUS the employer's SSNIT), credit PAYE,
+  SSNIT (both shares), staff advances recovered, and net pay owed. Marking paid posts `PAYROLL_PAYMENT`: debit net pay payable, credit the
+  cash, bank or mobile-money account for the method. Best-effort like every posting here: an unmapped account approves the run and says
+  it was NOT posted. The five accounts are made and mapped by "Set up payroll" (`PAY_*` codes; `ledger-defaults` is untouched so its
+  counts stand). Reopening an approved run reverses its entry (`Reversal: ` memo, so a reversal is never mistaken for a live posting); a
+  PAID run is final.
+- **The audit trail carries no salary, figure or name**, only the month and counts (the trail is read more widely than payroll is), and
+  the activity feed's phrases name a month, never a person. Both are pinned.
+- **Concurrency**: every step of a run takes `payroll:<runId>` and moves status by a conditional update; `verify:payroll-route` races two
+  approvals and gets exactly one entry.
+
+**Not built:** bonuses and overtime (one-off pay with their own tax treatment), non-resident and casual-worker withholding rates,
+pay by hours or days, tax reliefs beyond SSNIT, a payslip to the member of staff (a teacher sees three screens; the office prints
+them), remitting PAYE and SSNIT as ledger payments (record those as expenses today), the SSNIT portal's upload format, end-of-service
+benefits, a second run in one month, and any run for a month before the first set of rates.
+
+**Shipping it:** the migration (`payroll`: six tables, two enums, two `JournalSourceType` values, five columns on `SchoolSettings`)
+is additive, so run `migrate.yml action=deploy` BEFORE the merge, then `npm run db:rls` and, on production, `migrate.yml action=rls` after
+it (the tables are unprotected until then and `audit:rls` goes red).
+
+**Guards:** `verify:payroll` (pure plus the shape of the code, in CI) and `verify:payroll-route` (against the app and database: two months
+worked out to the pesewa, approve, reopen, pay, a loan across runs, newer rates, two approvals at once, the screens as the head, an
+accountant and a stranger; builds its own staff, rates and accounts in the demo school, refuses to start where the school holds payroll
+data that is not its own, and `-- --clean` removes what a killed run left). `/payroll` is listed in `verify-teacher`, `verify-parent`,
+`verify-it-admin` and `verify-onboarding`.
 
 ## A class teacher sees three screens
 
