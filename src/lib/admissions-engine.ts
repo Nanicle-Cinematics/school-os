@@ -97,14 +97,16 @@ export async function createApplication(
       data: { ...input, schoolId: actor.schoolId, reference, source },
       select: { id: true, reference: true },
     });
-    await writeAudit(tx, {
+    // Two literal writes, not a ternary: verify:activity finds actions by their `action: "…"` text.
+    const audit = {
       schoolId: actor.schoolId,
       actorUserId: actor.userId,
-      action: source === "ONLINE" ? "application.submit" : "application.create",
       entity: "Application",
       entityId: application.id,
       after: { reference, name: `${input.firstName} ${input.lastName}`, source },
-    });
+    };
+    if (source === "ONLINE") await writeAudit(tx, { ...audit, action: "application.submit" });
+    else await writeAudit(tx, { ...audit, action: "application.create" });
     return application;
   });
 
