@@ -22,8 +22,7 @@ Shipping Phases 1–3 plus SMS:
 
 Plus **attendance** — a daily register per class, feeding the report card.
 
-Not modelled yet: timetable, admissions, library, boarding, transport, health,
-payroll. Single-campus by design — there is no `Branch` model.
+Not modelled yet: library, boarding, transport, health, payroll. Single-campus by design — there is no `Branch` model.
 
 ## Gotchas
 
@@ -1298,6 +1297,71 @@ weekday, double lessons supported, manual placement with conflict checks** (no a
   and a stranger; picks its teacher from the real assignments because the demo school rotates five teachers over every class;
   **refuses to start when the school already has a school day**, since it could not tell its rows from yours). The week
   grids are named non-lists in `verify:design`.
+
+## Admissions (2026-11-01)
+
+`/admissions`: a child who has asked for a place, from first enquiry to a pupil on the roll. Choices made with the owner:
+**office entry plus a public form, the pipeline Applied → Test or interview → Offered → Accepted → Admitted (with Waiting list,
+Not offered and Withdrawn), no fee and no uploads yet, and every application names a level and a year of entry.**
+
+- **An application is its own table, not a `Student` with status `APPLICANT`.** An applicant must not take an admission number,
+  count against the plan's pupil cap or turn up in a class list, and most are never admitted. (`APPLICANT` stays in the enum for
+  the office's hand-entered pupils; nothing here writes it, and `verify:admissions` fails if something does.) `Application.studentId`
+  is set when the child is admitted, and an admitted application can no longer be edited, tested or deleted.
+- **The rules are pure** (`admissions-rules.ts`): `canMove` is a table of all 64 moves, pinned. Nothing moves to ADMITTED by hand;
+  admitting is the only door, and only from ACCEPTED. A refused or withdrawn application reopens, and only to APPLIED. Recording a
+  test moves an APPLIED application to TESTING by itself and nothing further.
+- **Places are counted per level and year** (`seatsFor`, `loadSeats`): the capacity of the level's classes, minus pupils enrolled
+  that year, minus places promised (OFFERED, ACCEPTED, and admitted children of a year that has not started, who have no enrolment
+  to count). ⚠️ A level is limited only if EVERY class under it has a capacity; one class with no limit makes the whole level
+  unlimited, because a total built from the others would turn away an offer the school could keep. An offer that finds no place is
+  refused, with the arithmetic and "put them on the waiting list"; moving an accepted child back to offered is never refused for
+  the place it already holds. Offers and moves that spend a place take an advisory lock on (school, level, year) first, so the last
+  place cannot be promised twice (`verify:admissions-route` races two offers for one place).
+- **Admitting reuses the office's admission** (`student-admission.ts`, `admitPupil`), which `admitStudent` now also calls: the
+  admission number, the plan cap, the guardian matched by phone, the enrolment and the `student.admit` audit row are one function.
+  `verify:platform` and `verify:admissions` both fail if a third copy appears. The application is marked ADMITTED in the same
+  transaction (`afterCreate`), with a status guard, so two simultaneous admits make one pupil. A child starting in the CURRENT
+  year is placed in a class (it must be in the level applied for, and not full) and becomes ACTIVE; a child starting in a LATER
+  year is admitted without a class (status ADMITTED) and still counted against that year's places until the office places them.
+  Parent-supplied health notes become the pupil's `medicalNotes`.
+- **Lateness is derived**: an offer's `offerExpiresOn` is a date, and `offerLapsed` says whether it has passed when the page is
+  read. A stored "expired" would stay false for ever, because nothing runs when a date passes.
+- **A duplicate is a hint, never a refusal.** `lookAlikes` (same name and either the same birthday or a parent's phone in common)
+  marks a row on the office's list and warns on the child's page. The public form NEVER says an application for a named child
+  already exists: that would let anyone ask whether a child is applying.
+
+**The public form** (`/apply/<school slug>`, `POST /api/apply/<slug>`) is the one place a stranger can write a row.
+
+- Off until the head switches it on (`SchoolSettings.applicationsOpen`, `applicationsNote`; leadership only, from `/admissions`).
+  A closed form, an unknown slug and a school that has lapsed to read-only all answer the SAME 404 with the same words, so it
+  cannot be used to ask which schools exist or have admissions on.
+- Everything that touches the database runs inside `publicLookup`'s budget (see "Public means the budget is the only defence").
+  JSON only, same-origin only, a body cap, all checked before any query. The page and the route both go through it, and the page
+  shows a plain "busy" screen when it is turned away. `robots` says noindex (a school shares the link by text and QR).
+- **Spam, three ways:** a hidden field (`website`): a script that fills it is told it worked (reference `APP-0000`), nothing is
+  saved or counted; eight applications an hour per address (`takeAttempt`, a family with four children still gets through); and
+  150 online applications per school per day, so a flood fills a bucket rather than the table. ⚠️ The daily ceiling is also a
+  lever: someone can burn a school's day. It is a flood guard for the table, not for the school's inbox.
+- The form posts JSON itself and clears nothing until the school has said yes: a form action resets its fields when it returns,
+  and a refusal over one bad phone number must not wipe what a parent typed on a phone. The office's form echoes `values` back.
+- Class and year are read back through the tenant client (`ownsLevels`, `ownsAcademicYears`, `ownsClasses`) before they are written.
+
+**Not built:** an SMS or email to the parent (a reference is shown on screen only) and an alert to the office when an online
+application arrives (the list is where it shows; adding a rule to "Needs your attention" would cost the dashboard another query
+and `verify:attention` another case); the application fee through Paystack; uploads (birth certificate, report, photo);
+interview scheduling; a parent checking their application's status; "not a duplicate" memory; moving an admitted-later child into
+a class when their year begins (they sit as ADMITTED until the office uses the existing enrol form); a QR code of the link.
+
+**Shipping it:** the migration (`admissions`: two enums, `Application`, two columns on `SchoolSettings`) is additive, so run
+`migrate.yml action=deploy` BEFORE the merge, then `npm run db:rls` and, on production, `migrate.yml action=rls` after it (the
+table is unprotected until then and `audit:rls` goes red).
+
+**Guards:** `verify:admissions` (pure plus the shape of the code, in CI, forced red seven ways; the honeypot check first passed
+against `if (false && …)` because it matched a fragment: pin the whole statement) and `verify:admissions-route` (the public
+form and the pipeline against the app and database; builds its own level, class and later year, opens the form for the run and
+restores it, removes everything it made). `/admissions` is listed in `verify-teacher`, `verify-parent`, `verify-it-admin` and
+`verify-onboarding`.
 
 ## A class teacher sees three screens
 

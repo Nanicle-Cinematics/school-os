@@ -93,3 +93,6 @@ export const ownsGradingScales = (ids: ReadonlyArray<string | null | undefined>)
 
 export const ownsLevels = (ids: ReadonlyArray<string | null | undefined>) =>
   ownsAll(ids, (wanted) => prisma.level.count({ where: { id: { in: wanted } } }));
+
+export const ownsAcademicYears = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.academicYear.count({ where: { id: { in: wanted } } }));

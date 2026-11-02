@@ -835,6 +835,55 @@ const ACTIVITY: Record<
   "assessment.delete": { kind: "academic", title: () => "An assessment was deleted", detail: "Academics" },
   "component.delete": { kind: "academic", title: () => "An assessment component was removed", detail: "Settings" },
   "student.admit": { kind: "people", title: () => "A pupil was admitted", detail: "Students" },
+  /* An application names the child and what happened to it, so the feed reads as a sequence a head can follow. */
+  "application.create": {
+    kind: "people",
+    title: (a) => `${text(a.name) ?? "A child"} was recorded as an applicant`,
+    detail: "Admissions",
+  },
+  "application.submit": {
+    kind: "people",
+    title: (a) => `${text(a.name) ?? "A child"} applied online`,
+    detail: "Admissions",
+  },
+  "application.update": {
+    kind: "people",
+    title: (a) => `${text(a.name) ?? "An application"}: the application was changed`,
+    detail: "Admissions",
+  },
+  "application.test": {
+    kind: "people",
+    title: (a) => `${text(a.name) ?? "An applicant"}: a test or interview result was recorded`,
+    detail: "Admissions",
+  },
+  "application.move": {
+    kind: "people",
+    title: (a) => {
+      const name = text(a.name) ?? "An application";
+      const step = text(a.status);
+      const words: Record<string, string> = {
+        APPLIED: "was reopened",
+        TESTING: "was sent for the test or interview",
+        WAITLISTED: "was put on the waiting list",
+        OFFERED: "was offered a place",
+        ACCEPTED: "accepted the place",
+        REJECTED: "was not offered a place",
+        WITHDRAWN: "withdrew the application",
+      };
+      return `${name} ${(step && words[step]) ?? "moved on"}`;
+    },
+    detail: "Admissions",
+  },
+  "application.delete": {
+    kind: "people",
+    title: (a) => `${text(a.name) ?? "An application"}: the application was deleted`,
+    detail: "Admissions",
+  },
+  "application.form": {
+    kind: "admin",
+    title: (a) => (a.open ? "The online application form was opened" : "The online application form was closed"),
+    detail: "Admissions",
+  },
   "student.enrol": { kind: "people", title: () => "A pupil was placed in a class", detail: "Students" },
   "student.withdraw": { kind: "people", title: () => "A pupil was withdrawn", detail: "Students" },
   "class.delete": { kind: "admin", title: () => "A class was removed", detail: "Classes" },

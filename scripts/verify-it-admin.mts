@@ -44,6 +44,7 @@ const ALLOWED = [
   "/classes",
   "/attendance",
   "/timetable",
+  "/admissions",
   "/subjects",
   "/assessments",
   "/results",
