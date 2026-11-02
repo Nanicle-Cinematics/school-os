@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   CalendarCheck,
   CalendarClock,
+  ClipboardList,
   ArrowUpRight,
   Banknote,
   BookOpen,
@@ -54,6 +55,7 @@ import type { NavHue, NavIcon, NavSection } from "@/lib/permissions";
 const GLYPH: Record<NavIcon, LucideIcon> = {
   dashboard: LayoutGrid,
   students: Users,
+  admissions: ClipboardList,
   guardians: Heart,
   staff: Briefcase,
   houses: Home,

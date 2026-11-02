@@ -295,6 +295,9 @@ jobs:
       - name: Timetable — the day, a double lesson, who is in two places, and the code around them
         run: npm run verify:timetable
 
+      - name: Admissions — the pipeline, the places, the public form's limits, and the code around them
+        run: npm run verify:admissions
+
       - name: Offline register — what a phone may send, what it keeps, and what the service worker may cache
         run: npm run verify:offline-register
 
@@ -433,6 +436,16 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:timetable-route
+
+      # Admissions, against the real app. After the app starts because the public form is a route and the
+      # office's screens sit behind requireRole. It builds its own level, class and year in the seeded school,
+      # opens the public form for the run, and removes everything it made (and restores the switch).
+      - name: Admissions — the public form and the pipeline, as the head, a teacher and a stranger
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:admissions-route
 
       # The route a phone posts its queued registers to. After the app starts
       # for the same reason as attendance, and it WRITES two days in the seeded

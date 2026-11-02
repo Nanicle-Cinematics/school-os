@@ -116,6 +116,7 @@ model School {
   teachingAssignments TeachingAssignment[]
   timetablePeriods    TimetablePeriod[]
   timetableSlots      TimetableSlot[]
+  applications        Application[]
 
   gradingScales  GradingScale[]
   gradeBands     GradeBand[]
@@ -348,8 +349,13 @@ model SchoolSettings {
   // Report card
   showClassPosition   Boolean @default(true)
   showSubjectPosition Boolean @default(true)
-  showAggregate       Boolean @default(true) // BECE-style best-6 aggregate
-  aggregateSubjects   Int     @default(6)
+
+  // Admissions. The public application form is OFF until the school switches it on; the note is shown
+  // above it (test dates, what to bring). Both are written from /admissions and read by the public page.
+  applicationsOpen  Boolean @default(false)
+  applicationsNote  String?
+  showAggregate     Boolean @default(true) // BECE-style best-6 aggregate
+  aggregateSubjects Int     @default(6)
 
   /// The year mark, as a percentage of the marks available across all three
   /// terms, below which a child repeats the class instead of moving up.
@@ -663,6 +669,7 @@ model AcademicYear {
   timetableSlots      TimetableSlot[]
   studentDiscounts    StudentDiscount[]
   mockExams           MockExam[]
+  applications        Application[]
 
   @@unique([schoolId, name])
   @@index([schoolId])
@@ -723,6 +730,7 @@ model Level {
   feeStructures FeeStructure[]
   mockExams     MockExam[]
   subjectSkills SubjectSkill[]
+  applications  Application[]
 
   @@unique([schoolId, code])
   @@index([schoolId])
@@ -928,6 +936,7 @@ model Student {
 
   attendanceEntries AttendanceEntry[]
   mockScores        MockScore[]
+  application       Application?
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, status])
@@ -1078,6 +1087,85 @@ enum EnrollmentStatus {
   COMPLETED
   REPEATED
   WITHDRAWN
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMISSIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Where an application stands. APPLIED is the first look, TESTING is the entrance test or interview,
+/// OFFERED holds a seat, ACCEPTED is the family saying yes, ADMITTED is a pupil on the roll. WAITLISTED,
+/// REJECTED and WITHDRAWN (the family's own decision) end it, and an ended one can be reopened.
+enum ApplicationStatus {
+  APPLIED
+  TESTING
+  WAITLISTED
+  OFFERED
+  ACCEPTED
+  ADMITTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ApplicationSource {
+  OFFICE
+  ONLINE
+}
+
+/// A child who has applied and is not a pupil yet. Deliberately NOT a Student with status APPLICANT:
+/// an applicant must not take an admission number, count against the plan's pupil cap, or turn up in a
+/// class list, and most applicants are never admitted. The pupil record is created by admitting.
+model Application {
+  id        String            @id @default(cuid())
+  schoolId  String
+  school    School            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  /// APP-0001, from the school's own sequence. What a family quotes on the phone.
+  reference String
+  source    ApplicationSource @default(OFFICE)
+  status    ApplicationStatus @default(APPLIED)
+
+  // The child
+  firstName      String
+  middleName     String?
+  lastName       String
+  gender         Gender
+  dateOfBirth    DateTime?
+  previousSchool String?
+  /// Health or anything else the school should know. Becomes the pupil's medical notes on admission.
+  notes          String?
+
+  // The family
+  guardianName         String
+  guardianPhone        String
+  guardianEmail        String?
+  guardianRelationship GuardianRelationship @default(GUARDIAN)
+
+  // What they are applying for
+  levelId        String
+  level          Level        @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+
+  // The entrance test or interview. A blank score is "not marked", never zero.
+  testedOn  DateTime?
+  testScore Decimal?  @db.Decimal(5, 2)
+  testNotes String?
+
+  /// The date an offer lapses. Stored as a date; whether it HAS lapsed is worked out when read.
+  offerExpiresOn DateTime?
+  decisionNote   String?
+  decidedAt      DateTime?
+
+  /// Set when the application is admitted: the pupil it became.
+  studentId String?  @unique
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, reference])
+  @@index([schoolId, status])
+  @@index([schoolId, levelId, academicYearId])
 }
 
 // Teacher X teaches Subject Y to Class Z this year. Drives "my classes" in the

@@ -142,6 +142,8 @@ const ROUTES = [
   "/classes",
   "/timetable",
   "/timetable/periods",
+  "/admissions",
+  "/admissions/new",
   "/subjects",
   "/assessments/sheet",
   "/assessments",

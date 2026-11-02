@@ -10,7 +10,8 @@ export type SequenceKey =
   | "VOUCHER"
   | "BILL"
   | "BILLPMT"
-  | "JOURNAL";
+  | "JOURNAL"
+  | "APPLICATION";
 
 const DEFAULTS: Record<SequenceKey, { prefix: string; padding: number }> = {
   ADMISSION: { prefix: "ADM/", padding: 4 },
@@ -21,6 +22,7 @@ const DEFAULTS: Record<SequenceKey, { prefix: string; padding: number }> = {
   BILL: { prefix: "BILL-", padding: 5 },
   BILLPMT: { prefix: "BPV-", padding: 5 },
   JOURNAL: { prefix: "JE-", padding: 6 },
+  APPLICATION: { prefix: "APP-", padding: 4 },
 };
 
 type Tx = TenantTx;
@@ -145,4 +147,6 @@ export const takenProbes = {
     (await tx.vendorPayment.count({ where: { schoolId, paymentNo } })) > 0,
   journal: (tx: Tx, schoolId: string) => async (entryNo: string) =>
     (await tx.journalEntry.count({ where: { schoolId, entryNo } })) > 0,
+  application: (tx: Tx, schoolId: string) => async (reference: string) =>
+    (await tx.application.count({ where: { schoolId, reference } })) > 0,
 };

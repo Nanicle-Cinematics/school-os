@@ -138,6 +138,16 @@ export const ATTENDANCE: Role[] = [...OFFICE, "TEACHER"];
 export const TIMETABLE_VIEW: Role[] = [...OFFICE, "TEACHER"];
 export const TIMETABLE_EDIT: Role[] = LEADERSHIP;
 
+/**
+ * Admissions: who applies, who is offered a place, who becomes a pupil.
+ *
+ * The office, because admitting a child is already the office's job (`admitStudent`) and a second, narrower
+ * list for the same act would only invite the two to disagree. Switching the PUBLIC application form on
+ * or off, and writing the note above it, is leadership's: it is the school's face to strangers.
+ */
+export const ADMISSIONS: Role[] = OFFICE;
+export const ADMISSIONS_FORM: Role[] = LEADERSHIP;
+
 export type NavItem = {
   href: string;
   label: string;
@@ -154,6 +164,7 @@ export type NavIcon =
   | "mocks"
   | "export"
   | "students"
+  | "admissions"
   | "guardians"
   | "staff"
   | "houses"
@@ -209,6 +220,7 @@ export const NAV: NavSection[] = [
     hue: "people",
     items: [
       { href: "/students", label: "Students", icon: "students", roles: OFFICE },
+      { href: "/admissions", label: "Admissions", icon: "admissions", roles: ADMISSIONS },
       { href: "/guardians", label: "Guardians", icon: "guardians", roles: OFFICE },
       { href: "/staff", label: "Staff", icon: "staff", roles: OFFICE },
       { href: "/houses", label: "Houses", icon: "houses", roles: OFFICE },

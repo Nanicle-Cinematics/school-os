@@ -4,23 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Gender, GuardianRelationship, Residency, StudentStatus } from "@prisma/client";
 import { requireRole } from "@/lib/auth";
-import { admissionBlocked } from "@/lib/capacity";
 import { setTenantContext } from "@/lib/tenant-context";
 import { OFFICE } from "@/lib/permissions";
 import { prisma, tenantTransaction, type TenantTx } from "@/lib/prisma";
-import { nextNumber, takenProbes } from "@/lib/sequences";
+import { admitPupil, mismatchMessage } from "@/lib/student-admission";
 import { writeAudit } from "@/lib/audit";
 import { sameGuardian } from "@/lib/guardian-match";
 import { normalisePhone } from "@/lib/sms-shared";
 import { ownsClasses, ownsHouses, ownsProgrammes, ownsStudents } from "@/lib/ownership";
-
-function mismatchMessage(phone: string, onFile: string) {
-  return (
-    `${phone} is already on file for ${onFile}, which is not the name you entered. ` +
-    `If that is the same person, enter the name as it is on file; if not, check the number — ` +
-    `a wrong digit would give another family access to this child's fees and results.`
-  );
-}
 
 export type StudentState = { error?: string; ok?: string };
 
@@ -169,114 +160,20 @@ export async function admitStudent(
   }
 
   const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
-  // Admitting straight into a class is the normal path; without a current year
-  // there is no roster to join, and a student with a class but no enrolment
-  // would be invisible to invoicing and score entry.
-  if (classGroupId && !year) {
-    return {
-      error: "No academic year is marked current, so nobody can be placed in a class yet.",
-    };
-  }
-
-  // Checked before the transaction opens: a refusal should cost a count, not a
-  // rolled-back write and an admission number burnt out of the sequence.
-  const full = await admissionBlocked(auth.schoolId, 1);
-  if (full) {
-    return { error: full };
-  }
-
-  let admissionNo: string;
-  try {
-  admissionNo = await tenantTransaction(auth.schoolId, async (tx: TenantTx) => {
-    const allocated = await nextNumber(
-      tx,
-      auth.schoolId,
-      "ADMISSION",
-      takenProbes.admission(tx, auth.schoolId),
-    );
-
-    const student = await tx.student.create({
-      data: {
-        schoolId: auth.schoolId,
-        admissionNo: allocated,
-        ...profile,
-        status,
-        admissionDate: optionalDate(formData.get("admissionDate")) ?? new Date(),
-        currentClassGroupId: classGroupId || null,
-      },
-    });
-
-    if (classGroupId && year) {
-      await tx.enrollment.create({
-        data: {
-          schoolId: auth.schoolId,
-          studentId: student.id,
-          academicYearId: year.id,
-          classGroupId,
-          status: "ACTIVE",
-        },
-      });
-    }
-
-    if (guardian) {
-      // Siblings share a parent: match on the normalised phone so a family of
-      // four does not become four copies of the same mother.
-      const wanted = normalisePhone(guardian.phone);
-      const candidates = await tx.guardian.findMany({
-        where: { deletedAt: null },
-        select: { id: true, phone: true, firstName: true, lastName: true },
-      });
-      const existing = candidates.find((c) => normalisePhone(c.phone) === wanted);
-      if (
-        existing &&
-        !sameGuardian(`${guardian.firstName} ${guardian.lastName}`, `${existing.firstName} ${existing.lastName}`)
-      ) {
-        throw new Error(`GUARDIAN_MISMATCH:${existing.firstName} ${existing.lastName}`);
-      }
-
-      const guardianId =
-        existing?.id ??
-        (
-          await tx.guardian.create({
-            data: {
-              schoolId: auth.schoolId,
-              firstName: guardian.firstName,
-              lastName: guardian.lastName,
-              phone: guardian.phone,
-            },
-          })
-        ).id;
-
-      await tx.studentGuardian.create({
-        data: {
-          schoolId: auth.schoolId,
-          studentId: student.id,
-          guardianId,
-          relationship: guardian.relationship,
-          isPrimary: true,
-          receivesBills: guardian.receivesBills,
-          receivesReports: guardian.receivesReports,
-        },
-      });
-    }
-
-    await writeAudit(tx, {
-      schoolId: auth.schoolId,
-      actorUserId: auth.userId,
-      action: "student.admit",
-      entity: "Student",
-      entityId: student.id,
-      after: { admissionNo: allocated, classGroupId: classGroupId || null, status },
-    });
-
-    return allocated;
+  const outcome = await admitPupil({
+    schoolId: auth.schoolId,
+    actorUserId: auth.userId,
+    profile,
+    status,
+    admissionDate: optionalDate(formData.get("admissionDate")),
+    classGroupId,
+    yearId: year?.id ?? null,
+    guardian,
   });
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("GUARDIAN_MISMATCH:") && guardian) {
-      return { error: mismatchMessage(guardian.phone, error.message.slice(18)) };
-    }
-    throw error;
+  if (!outcome.ok) {
+    return { error: outcome.error };
   }
+  const admissionNo = outcome.admissionNo;
 
   revalidatePath("/students");
   revalidatePath("/dashboard");
