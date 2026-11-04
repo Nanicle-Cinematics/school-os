@@ -117,6 +117,12 @@ model School {
   timetablePeriods    TimetablePeriod[]
   timetableSlots      TimetableSlot[]
   applications        Application[]
+  payrollRateSets     PayrollRateSet[]
+  staffPay            StaffPay[]
+  staffPayItems       StaffPayItem[]
+  payrollRuns         PayrollRun[]
+  payslips            Payslip[]
+  payslipLines        PayslipLine[]
 
   gradingScales  GradingScale[]
   gradeBands     GradeBand[]
@@ -398,6 +404,14 @@ model SchoolSettings {
   momoAccountId       String?
   receivableAccountId String?
   payableAccountId    String?
+
+  /// Where a payroll run posts: the salaries expense, what is owed to GRA and SSNIT, staff advances recovered,
+  /// and net pay owed to staff. Plain ids like the five above, checked by `ownsAccounts` before they are written.
+  payrollSalaryAccountId   String?
+  payrollPayeAccountId     String?
+  payrollSsnitAccountId    String?
+  payrollNetPayAccountId   String?
+  payrollAdvancesAccountId String?
 
   // SMS
   smsProvider           SmsProvider?
@@ -1049,6 +1063,11 @@ model Staff {
   enteredScores       Score[]              @relation("ScoreEnteredBy")
   subjectResults      SubjectResult[]
   messages            Message[]
+
+  // Pay lives in its own tables, never on Staff: a salary must not ride into every query that includes a staff row.
+  pay      StaffPay?
+  payItems StaffPayItem[]
+  payslips Payslip[]
 
   registersTaken AttendanceDay[] @relation("RegisterTakenBy")
 
@@ -1777,6 +1796,8 @@ enum JournalSourceType {
   EXPENSE
   VENDOR_BILL
   VENDOR_PAYMENT
+  PAYROLL
+  PAYROLL_PAYMENT
 }
 
 /**
@@ -2563,4 +2584,180 @@ model Message {
   @@index([schoolId, status])
   @@index([schoolId, createdAt])
   @@index([campaignId])
+}
+
+/// ───────────────────────────────── Payroll ─────────────────────────────────
+
+enum PayrollStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+enum PayItemKind {
+  ALLOWANCE
+  DEDUCTION
+}
+
+/// The statutory rates a month is worked out on, effective from a date. A school's own copy, because the bands
+/// change by Act of Parliament (they did on 1 September 2026) and a change must not need a deploy. A set that a
+/// run has used is frozen; the next change is a new set with a later date.
+model PayrollRateSet {
+  id            String   @id @default(cuid())
+  schoolId      String
+  school        School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  label         String
+  effectiveFrom DateTime @db.Date
+
+  /// Percent of basic salary, to two places (5.5 means 5.5%).
+  ssnitEmployeePercent Decimal @db.Decimal(5, 2)
+  ssnitEmployerPercent Decimal @db.Decimal(5, 2)
+  /// The part of the TOTAL contribution that goes to the Tier 2 trustee, for the remittance split only.
+  ssnitTier2Percent    Decimal @db.Decimal(5, 2)
+  /// Basic salary above this earns no further contribution.
+  ssnitMaxInsurable    Decimal @db.Decimal(12, 2)
+
+  /// Monthly PAYE bands, lowest first: [{ "width": 588, "rate": 0 }, ..., { "width": null, "rate": 35 }]. Read through
+  /// `readBands` in payroll-rules.ts, never trusted as typed.
+  taxBands Json
+
+  /// Set when a person has checked the rates against GRA and SSNIT. A run cannot be approved on an unconfirmed set.
+  confirmedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  runs PayrollRun[]
+
+  @@unique([schoolId, effectiveFrom])
+  @@index([schoolId])
+}
+
+/// What a member of staff is paid each month. Its own table so salary never rides along with a Staff row.
+model StaffPay {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staffId  String @unique
+  staff    Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  basicSalary  Decimal @db.Decimal(12, 2)
+  /// Some staff do not contribute (not enrolled, past retirement age). Off means no SSNIT either side.
+  ssnitApplies Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
+}
+
+/// A recurring allowance, or a deduction such as a salary advance. A deduction with a `principal` stops when that
+/// much has been taken; one without runs until it is switched off. What is still owed is DERIVED from the payslip
+/// lines of approved runs, never stored, so reopening a run puts it back.
+model StaffPayItem {
+  id        String      @id @default(cuid())
+  schoolId  String
+  school    School      @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  staffId   String
+  staff     Staff       @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  kind      PayItemKind
+  name      String
+  /// A month's allowance, or one instalment of a deduction.
+  amount    Decimal     @db.Decimal(12, 2)
+  /// Allowances only: counts toward taxable pay.
+  taxable   Boolean     @default(true)
+  /// Deductions only: the whole sum owed.
+  principal Decimal?    @db.Decimal(12, 2)
+  active    Boolean     @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines PayslipLine[]
+
+  @@index([schoolId, staffId])
+}
+
+model PayrollRun {
+  id          String         @id @default(cuid())
+  schoolId    String
+  school      School         @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  periodYear  Int
+  periodMonth Int
+  status      PayrollStatus  @default(DRAFT)
+  rateSetId   String
+  rateSet     PayrollRateSet @relation(fields: [rateSetId], references: [id], onDelete: Restrict)
+  note        String?
+
+  approvedAt DateTime?
+  paidOn     DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payslips Payslip[]
+
+  @@unique([schoolId, periodYear, periodMonth])
+  @@index([schoolId])
+}
+
+/// One person's pay for one run, with everything worked out and frozen: a payslip reprinted next year must read what
+/// was paid, whatever the rates, the salary or the person's details say by then.
+model Payslip {
+  id       String     @id @default(cuid())
+  schoolId String
+  school   School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  runId    String
+  run      PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  staffId  String
+  staff    Staff      @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  staffNo     String
+  name        String
+  designation String?
+  ssnitNumber String?
+  tin         String?
+
+  basic         Decimal @db.Decimal(12, 2)
+  allowances    Decimal @db.Decimal(12, 2)
+  gross         Decimal @db.Decimal(12, 2)
+  ssnitBase     Decimal @db.Decimal(12, 2)
+  ssnitEmployee Decimal @db.Decimal(12, 2)
+  ssnitEmployer Decimal @db.Decimal(12, 2)
+  ssnitTier2    Decimal @db.Decimal(12, 2)
+  taxableIncome Decimal @db.Decimal(12, 2)
+  chargeable    Decimal @db.Decimal(12, 2)
+  paye          Decimal @db.Decimal(12, 2)
+  deductions    Decimal @db.Decimal(12, 2)
+  net           Decimal @db.Decimal(12, 2)
+  /// What the calculation had to say about this person, one sentence a line.
+  warnings      String?
+
+  createdAt DateTime @default(now())
+
+  lines PayslipLine[]
+
+  @@unique([runId, staffId])
+  @@index([schoolId])
+  @@index([staffId])
+}
+
+model PayslipLine {
+  id        String        @id @default(cuid())
+  schoolId  String
+  school    School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  payslipId String
+  payslip   Payslip       @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  /// SetNull: removing an item must not take the history of what it deducted.
+  payItemId String?
+  payItem   StaffPayItem? @relation(fields: [payItemId], references: [id], onDelete: SetNull)
+  kind      PayItemKind
+  name      String
+  /// What was actually applied this month (an instalment can be cut short).
+  amount    Decimal       @db.Decimal(12, 2)
+  taxable   Boolean       @default(true)
+
+  @@index([schoolId])
+  @@index([payItemId])
+  @@index([payslipId])
 }

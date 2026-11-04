@@ -75,6 +75,9 @@ const FORBIDDEN = [
   "/payments",
   "/payments/reconcile",
   "/expenses",
+  "/payroll",
+  "/payroll/people",
+  "/payroll/setup",
   "/admin",
 ];
 

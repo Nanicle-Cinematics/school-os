@@ -48,6 +48,9 @@ const DOCUMENTS = [
   // "PRO-FORMA · ADVANCE BILL" and "NOT YET INVOICED" are what stop a parent
   // filing it as a real invoice, or paying it twice when the real one arrives.
   "invoices/proforma-bill.tsx",
+  // A payslip is a printed document handed to the person it is about: .paper, the school's masthead and its own
+  // print rules, one A4 sheet each. "Not yet approved" is red on purpose, as the advance bill's heading shouts.
+  "payroll/payslip-sheet.tsx",
   // Added deliberately, as the note below asks. A payment receipt is the same
   // animal as the bill: .paper, its own masthead, its own print rules, and it
   // is handed across a counter, signed and stamped. "PAYMENT RECEIPT" is the
@@ -137,6 +140,8 @@ const NOT_LISTS = [
   // PRINTED DOCUMENTS, as above: a fee table on a document a parent keeps, not
   // a list on a screen. It shares the bill's columns on purpose.
   "invoices/proforma-bill.tsx",
+  // The payslip's earnings and deductions: a printed statement, not a list on a screen.
+  "payroll/payslip-sheet.tsx",
   "assessments/sheet/sheet-form.tsx",
   "assessments/[id]/score-grid.tsx",
   "results/broadsheet/page.tsx",
