@@ -8,12 +8,14 @@ import { LEADERSHIP, OFFICE, canAccess } from "@/lib/permissions";
 import { getDeletedStudent, getStudent, getStudentFormOptions } from "@/lib/student-data";
 import { deleteStudent, withdrawStudent } from "@/lib/student-actions";
 import { formatCedis } from "@/lib/money";
+import { getStudentLoans } from "@/lib/library-data";
 import { Alert, Card, StatusBadge } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditStudentForm } from "../student-form";
 import { EnrolForm } from "./enrol-form";
 import { AddNewGuardianForm, LinkExistingGuardianForm } from "./guardian-form";
 import { DeletedStudent } from "./deleted-student";
+import { BooksOutCard } from "../../library/books-out-card";
 
 const COLUMNS_0: Column[] = [
   { label: "Name" },
@@ -75,6 +77,7 @@ export default async function StudentDetailPage({
   const { student, year, enrollments, invoices, termResults, outstanding, availableGuardians } =
     result;
   const { classGroups, houses, programmes } = await getStudentFormOptions();
+  const libraryLoans = await getStudentLoans(auth.schoolId, id);
 
   const owes = outstanding.greaterThan(0);
   // A pupil in JHS now, or with a JHS year on record, has a cumulative record.
@@ -257,6 +260,8 @@ export default async function StudentDetailPage({
           </DataTable>
         </div>
       </Card>
+
+      <BooksOutCard loans={libraryLoans} kind="STUDENT" id={id} />
 
       <Card title="Fees">
         <div className="overflow-x-auto">

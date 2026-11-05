@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { TenantTx } from "@/lib/prisma";
+import { ACCESSION_SHAPE } from "@/lib/library-rules";
 
 export type SequenceKey =
   | "ADMISSION"
@@ -11,7 +12,8 @@ export type SequenceKey =
   | "BILL"
   | "BILLPMT"
   | "JOURNAL"
-  | "APPLICATION";
+  | "APPLICATION"
+  | "ACCESSION";
 
 const DEFAULTS: Record<SequenceKey, { prefix: string; padding: number }> = {
   ADMISSION: { prefix: "ADM/", padding: 4 },
@@ -23,6 +25,7 @@ const DEFAULTS: Record<SequenceKey, { prefix: string; padding: number }> = {
   BILLPMT: { prefix: "BPV-", padding: 5 },
   JOURNAL: { prefix: "JE-", padding: 6 },
   APPLICATION: { prefix: "APP-", padding: 4 },
+  ACCESSION: { prefix: ACCESSION_SHAPE.prefix, padding: ACCESSION_SHAPE.padding },
 };
 
 type Tx = TenantTx;
@@ -129,6 +132,9 @@ export const takenSets = {
     new Set((await tx.invoice.findMany({ where: { schoolId, invoiceNo: { in: candidates } }, select: { invoiceNo: true } })).map((row) => row.invoiceNo)),
   journal: (tx: Tx, schoolId: string) => async (candidates: string[]) =>
     new Set((await tx.journalEntry.findMany({ where: { schoolId, entryNo: { in: candidates } }, select: { entryNo: true } })).map((row) => row.entryNo)),
+  /** A school that keyed its own register in has numbers the counter has never issued. */
+  accession: (tx: Tx, schoolId: string) => async (candidates: string[]) =>
+    new Set((await tx.bookCopy.findMany({ where: { schoolId, accessionNo: { in: candidates } }, select: { accessionNo: true } })).map((row) => row.accessionNo)),
 };
 
 /** Probes for the three sequences that name a row with a unique constraint. */

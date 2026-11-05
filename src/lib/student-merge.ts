@@ -6,7 +6,7 @@ import { writeAudit } from "@/lib/audit";
 /**
  * Merge a duplicate pupil record into the one to keep.
  *
- * ⚠️ This moves a child's money and marks, so it is built to REFUSE rather than guess. Eleven tables point at a
+ * ⚠️ This moves a child's money and marks, so it is built to REFUSE rather than guess. Twelve tables point at a
  * pupil. Most carry a unique key that includes the pupil (one score per assessment, one result per term, one
  * invoice per term, one register entry per day), so when BOTH records already hold a row for the same key there
  * is no way to keep both and no way to know which is right. Those are reported as conflicts, naming the table
@@ -148,6 +148,8 @@ export async function mergeStudents(
   await move("Discounts", () => tx.studentDiscount.updateMany({ where: { studentId: removeId }, data: { studentId: keepId } }));
   await move("Messages", () => tx.message.updateMany({ where: { studentId: removeId }, data: { studentId: keepId } }));
   await move("Class placements", () => tx.enrollment.updateMany({ where: { studentId: removeId }, data: { studentId: keepId } }));
+  // Books out, and the history of books returned: a loan carries no key that includes the pupil, so nothing can clash.
+  await move("Library loans", () => tx.libraryLoan.updateMany({ where: { studentId: removeId }, data: { studentId: keepId } }));
   // A moved link must not become a second PRIMARY guardian for the kept pupil.
   const keptHasPrimary = (await tx.studentGuardian.count({ where: { studentId: keepId, isPrimary: true } })) > 0;
   if (keptHasPrimary) {

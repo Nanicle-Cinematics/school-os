@@ -123,6 +123,9 @@ model School {
   payrollRuns         PayrollRun[]
   payslips            Payslip[]
   payslipLines        PayslipLine[]
+  books               Book[]
+  bookCopies          BookCopy[]
+  libraryLoans        LibraryLoan[]
 
   gradingScales  GradingScale[]
   gradeBands     GradeBand[]
@@ -413,6 +416,14 @@ model SchoolSettings {
   payrollNetPayAccountId   String?
   payrollAdvancesAccountId String?
 
+  // Library. How long a book goes out for, how many one person may hold at once, and whether a book that is
+  // overdue stops the next loan. Written from /library/settings and read by `lendCheck` in library-rules.ts.
+  libraryPupilDays    Int     @default(14)
+  libraryStaffDays    Int     @default(30)
+  libraryPupilMax     Int     @default(2)
+  libraryStaffMax     Int     @default(5)
+  libraryBlockOverdue Boolean @default(true)
+
   // SMS
   smsProvider           SmsProvider?
   smsSenderId           String?
@@ -528,6 +539,8 @@ model User {
   approvedVendorBills    VendorBill[]      @relation("VendorBillApprovedBy")
   recordedVendorPayments VendorPayment[]   @relation("VendorPaymentRecordedBy")
   postedJournalEntries   JournalEntry[]    @relation("JournalEntryPostedBy")
+  loansIssued            LibraryLoan[]     @relation("LoanIssuedBy")
+  loansClosed            LibraryLoan[]     @relation("LoanClosedBy")
 
   @@index([schoolId])
 }
@@ -951,6 +964,7 @@ model Student {
   attendanceEntries AttendanceEntry[]
   mockScores        MockScore[]
   application       Application?
+  libraryLoans      LibraryLoan[]
 
   @@unique([schoolId, admissionNo])
   @@index([schoolId, status])
@@ -1070,6 +1084,8 @@ model Staff {
   payslips Payslip[]
 
   registersTaken AttendanceDay[] @relation("RegisterTakenBy")
+
+  libraryLoans LibraryLoan[]
 
   @@unique([schoolId, staffNo])
   @@index([schoolId, status])
@@ -2760,4 +2776,109 @@ model PayslipLine {
   @@index([schoolId])
   @@index([payItemId])
   @@index([payslipId])
+}
+
+/// ───────────────────────────────── Library ─────────────────────────────────
+
+/// ACTIVE is in the library's stock, on the shelf or out on loan (which of the two is worked out from its loans, never
+/// stored). LOST and WITHDRAWN are events somebody recorded.
+enum CopyStatus {
+  ACTIVE
+  LOST
+  WITHDRAWN
+}
+
+enum LoanOutcome {
+  RETURNED
+  LOST
+}
+
+/// A title. What is lent is a COPY of it (`BookCopy`), because "is it in?" and "who has the missing one?" are questions
+/// about one physical book.
+model Book {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  title           String
+  author          String?
+  isbn            String?
+  publisher       String?
+  publishedYear   Int?
+  category        String?
+  shelf           String?
+  /// What it would cost to replace. Shown when a copy is declared lost so the librarian can ask for it; nothing is
+  /// billed from it.
+  replacementCost Decimal? @db.Decimal(10, 2)
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  copies BookCopy[]
+
+  @@index([schoolId, title])
+  @@index([schoolId, category])
+}
+
+/// One physical book, numbered in the school's accession register.
+model BookCopy {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  bookId   String
+  book     Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  accessionNo     String
+  status          CopyStatus @default(ACTIVE)
+  /// Why it was lost or withdrawn, in the librarian's words.
+  statusNote      String?
+  statusChangedOn DateTime?  @db.Date
+  acquiredOn      DateTime?  @db.Date
+
+  createdAt DateTime @default(now())
+
+  loans LibraryLoan[]
+
+  @@unique([schoolId, accessionNo])
+  @@index([schoolId, bookId])
+}
+
+/// A copy going out to ONE borrower, a pupil or a member of staff (the database holds that to exactly one, in the
+/// migration). OPEN while `returnedOn` is null; whether it is overdue is worked out from `dueOn` when it is read, never
+/// stored, because nothing runs when a date passes. Cascade on the borrower and the copy, as everywhere here: Restrict
+/// would block tearing down a whole school, and the application refuses to delete a copy that has a history.
+model LibraryLoan {
+  id       String   @id @default(cuid())
+  schoolId String
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  copyId   String
+  copy     BookCopy @relation(fields: [copyId], references: [id], onDelete: Cascade)
+
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  staffId   String?
+  staff     Staff?   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  borrowedOn DateTime @db.Date
+  dueOn      DateTime @db.Date
+  renewals   Int      @default(0)
+
+  returnedOn DateTime?    @db.Date
+  outcome    LoanOutcome?
+  note       String?
+
+  issuedByUserId String?
+  issuedBy       User?   @relation("LoanIssuedBy", fields: [issuedByUserId], references: [id], onDelete: SetNull)
+  closedByUserId String?
+  closedBy       User?   @relation("LoanClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([schoolId, returnedOn])
+  @@index([copyId])
+  @@index([studentId])
+  @@index([staffId])
+  @@index([issuedByUserId])
+  @@index([closedByUserId])
 }

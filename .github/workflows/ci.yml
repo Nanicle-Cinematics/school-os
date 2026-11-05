@@ -301,6 +301,9 @@ jobs:
       - name: Payroll — PAYE and SSNIT to the pesewa, loans, the ledger entry, and the code around them
         run: npm run verify:payroll
 
+      - name: Library — loans, limits, renewals, what is derived and what is stored, and the code around them
+        run: npm run verify:library
+
       - name: Offline register — what a phone may send, what it keeps, and what the service worker may cache
         run: npm run verify:offline-register
 
@@ -459,6 +462,16 @@ jobs:
           APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
           VERIFY_BASE_URL: "http://localhost:3000"
         run: npm run verify:payroll-route
+
+      # The library, against the real app. After the app starts because the pages sit behind requireRole. It builds
+      # its own books and loans in the seeded school, borrows real pupils and puts them back, races two desks for one
+      # copy, and removes everything it made. It also forges the head's rules form as a librarian and a teacher.
+      - name: Library — lending, returning, two desks at once, a spreadsheet, and the screens as a head, a librarian, a teacher and a parent
+        env:
+          DB_RLS: "on"
+          APP_DATABASE_URL: "postgresql://school_os_app:ci-app-role-not-a-real-secret@localhost:5432/school_os"
+          VERIFY_BASE_URL: "http://localhost:3000"
+        run: npm run verify:library-route
 
       # The route a phone posts its queued registers to. After the app starts
       # for the same reason as attendance, and it WRITES two days in the seeded

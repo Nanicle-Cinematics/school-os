@@ -889,6 +889,17 @@ const ACTIVITY: Record<
   "payroll.reopen": { kind: "money", title: () => "An approved payroll run was reopened", detail: "Payroll" },
   "payroll.pay": { kind: "money", title: () => "A payroll run was marked paid", detail: "Payroll" },
   "payroll.delete": { kind: "money", title: (a) => `The draft payroll for ${payrollMonth(a.period)} was deleted`, detail: "Payroll" },
+  /* The library audits what changes the REGISTER (a book deleted, a copy lost or withdrawn, the rules, an import), never a
+     routine loan or return: fifty a day would bury every payment in this feed. The phrases name no borrower. */
+  "library.policy": { kind: "people", title: () => "The library's loan rules were changed", detail: "Library" },
+  "library.book.delete": { kind: "people", title: () => "A book was deleted from the library", detail: "Library" },
+  "library.copy.lost": { kind: "people", title: () => "A library book was recorded as lost", detail: "Library" },
+  "library.copy.withdraw": { kind: "people", title: () => "A library book was withdrawn", detail: "Library" },
+  "library.import": {
+    kind: "people",
+    title: (a) => `${count(a.copies)} library ${Number(a.copies) === 1 ? "book was" : "books were"} added from a spreadsheet`,
+    detail: "Library",
+  },
   "application.delete": {
     kind: "people",
     title: (a) => `${text(a.name) ?? "An application"}: the application was deleted`,
