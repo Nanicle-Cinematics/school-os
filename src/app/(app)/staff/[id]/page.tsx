@@ -6,11 +6,13 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { OFFICE, roleLabel } from "@/lib/permissions";
 import { getStaffMember } from "@/lib/staff-data";
+import { getStaffLoans } from "@/lib/library-data";
 import { removeStaff, removeTeachingAssignment } from "@/lib/staff-actions";
 import { Alert, Card } from "../../ui";
 import { SubmitButton } from "../../submit-button";
 import { EditStaffForm } from "../staff-form";
 import { AssignmentForm } from "./assignment-form";
+import { BooksOutCard } from "../../library/books-out-card";
 
 const COLUMNS: Column[] = [
   { label: "Subject" },
@@ -21,7 +23,7 @@ const COLUMNS: Column[] = [
 export const metadata: Metadata = { title: "Staff member · School OS" };
 
 export default async function StaffDetailPage({ params, searchParams }: PageProps<"/staff/[id]">) {
-  await requireRole(OFFICE);
+  const auth = await requireRole(OFFICE);
   const { id } = await params;
   const query = await searchParams;
   const result = await getStaffMember(id);
@@ -33,6 +35,7 @@ export default async function StaffDetailPage({ params, searchParams }: PageProp
   const { staff, year, assignments, subjects, classGroups } = result;
   // Whether they have entered marks is asked when Remove is pressed (removeStaff), not on every view of this page.
   const blocked = staff.formClasses.length > 0;
+  const libraryLoans = await getStaffLoans(auth.schoolId, id);
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -111,6 +114,8 @@ export default async function StaffDetailPage({ params, searchParams }: PageProp
           </div>
         ) : null}
       </Card>
+
+      <BooksOutCard loans={libraryLoans} kind="STAFF" id={id} />
 
       <Card title="Details">
         <EditStaffForm

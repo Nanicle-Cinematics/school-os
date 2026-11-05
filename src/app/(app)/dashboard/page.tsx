@@ -15,6 +15,7 @@ import { paymentSource } from "@/lib/payment-labels";
 import { requireAuth } from "@/lib/auth";
 import {
   canAccess,
+  isLibrarianOnly,
   isTeacherOnly,
   isParentOnly,
   landingFor,
@@ -71,13 +72,13 @@ export default async function DashboardPage() {
   const auth = await requireAuth();
   // A class teacher has no business on the school-wide dashboard: it carries
   // collections, outstanding fees and every class's enrolment.
-  // This page uses requireAuth rather than requireRole on purpose: a nurse or
-  // librarian holds no listed role and still belongs here, and refusing them
-  // would bounce them back to /dashboard forever. The cost is that anyone whose
+  // This page uses requireAuth rather than requireRole on purpose: a nurse
+  // holds no listed role and still belongs here, and refusing them would
+  // bounce them back to /dashboard forever. A librarian's home is /library. The cost is that anyone whose
   // home is elsewhere has to be named explicitly — and a parent was not, so the
   // portal's first release rendered the school's attention list, collections and
   // activity feed to any guardian who typed the URL. Caught by verify:parent.
-  if (isTeacherOnly(auth.roles) || isParentOnly(auth.roles)) {
+  if (isTeacherOnly(auth.roles) || isParentOnly(auth.roles) || isLibrarianOnly(auth.roles)) {
     redirect(landingFor(auth.roles));
   }
   const data = await getDashboard(auth.schoolId);

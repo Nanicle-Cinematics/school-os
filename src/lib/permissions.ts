@@ -159,6 +159,16 @@ export const ADMISSIONS_FORM: Role[] = LEADERSHIP;
 export const PAYROLL: Role[] = FINANCE;
 export const PAYROLL_APPROVE: Role[] = LEADERSHIP;
 
+/**
+ * The library: lending, returning, the catalogue and the register of copies.
+ *
+ * The office and the librarian. A teacher does not lend (the librarian's job, and a second person lending from a
+ * different screen is how a book goes out twice); a parent sees only what their own child has out, in the portal.
+ * The loan period and the limits are the school's policy, so changing them is leadership's.
+ */
+export const LIBRARY: Role[] = [...OFFICE, "LIBRARIAN"];
+export const LIBRARY_POLICY: Role[] = LEADERSHIP;
+
 export type NavItem = {
   href: string;
   label: string;
@@ -172,6 +182,7 @@ export type NavItem = {
 export type NavIcon =
   | "dashboard"
   | "timetable"
+  | "library"
   | "mocks"
   | "export"
   | "students"
@@ -245,6 +256,7 @@ export const NAV: NavSection[] = [
       { href: "/classes", label: "Classes", icon: "classes", roles: CLASS_REGISTER },
       { href: "/attendance", label: "Attendance", icon: "attendance", roles: ATTENDANCE },
       { href: "/timetable", label: "Timetable", icon: "timetable", roles: TIMETABLE_VIEW },
+      { href: "/library", label: "Library", icon: "library", roles: LIBRARY },
       { href: "/subjects", label: "Subjects", icon: "subjects", roles: OFFICE },
       { href: "/assessments/sheet", label: "Mark sheet", icon: "sheet", roles: MARKING },
       { href: "/assessments", label: "Assessments", icon: "assessments", roles: ACADEMIC },
@@ -323,6 +335,15 @@ export function isTeacherOnly(roles: Role[]) {
 }
 
 /**
+ * A login whose every role is LIBRARIAN. Their whole job is /library, so that is where they land; the dashboard is
+ * the school-wide view and has no place in a librarian's rail. `every`, as for a teacher: a head who also looks after
+ * the library keeps the whole app.
+ */
+export function isLibrarianOnly(roles: Role[]) {
+  return roles.length > 0 && roles.every((role) => role === "LIBRARIAN");
+}
+
+/**
  * Someone whose only role is PARENT. Unlike a teacher, a parent is never also
  * staff in practice — but a proprietor whose own child attends the school would
  * hold both, and must keep the whole app, so this is `every` rather than `some`.
@@ -342,6 +363,7 @@ export function isParentOnly(roles: Role[]) {
 export function landingFor(roles: Role[]) {
   if (isParentOnly(roles)) return "/portal";
   if (isTeacherOnly(roles)) return "/assessments/sheet";
+  if (isLibrarianOnly(roles)) return "/library";
   return "/dashboard";
 }
 

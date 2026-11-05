@@ -22,7 +22,7 @@ Shipping Phases 1–3 plus SMS:
 
 Plus **attendance** — a daily register per class, feeding the report card.
 
-Not modelled yet: library, boarding, transport, health. Single-campus by design — there is no `Branch` model.
+Not modelled yet: boarding, transport, health. Single-campus by design — there is no `Branch` model.
 
 ## Gotchas
 
@@ -1421,6 +1421,71 @@ worked out to the pesewa, approve, reopen, pay, a loan across runs, newer rates,
 accountant and a stranger; builds its own staff, rates and accounts in the demo school, refuses to start where the school holds payroll
 data that is not its own, and `-- --clean` removes what a killed run left). `/payroll` is listed in `verify-teacher`, `verify-parent`,
 `verify-it-admin` and `verify-onboarding`.
+
+## The library (2026-11-05)
+
+`/library`: who has which book, what is overdue, and what the shelves hold. Choices made with the owner: **one record per physical copy
+with an accession number, pupils and staff both borrow, no money at all (nothing touches fees or the ledger), and a read-only view for
+parents.**
+
+- **Three tables.** `Book` is a title; `BookCopy` is one physical book with its number (unique per school); `LibraryLoan` is a copy going
+  out to ONE borrower, a pupil or a member of staff. ⚠️ **Two things are DERIVED and never stored, because nothing runs when a date passes
+  or a book is lent:** whether a copy is on the shelf (an open loan, `returnedOn` null, means it is out) and whether a loan is overdue
+  (`loanState`, from `dueOn`, when read). Only `LOST` and `WITHDRAWN` are stored on a copy, and `RETURNED`/`LOST` on a loan, because
+  somebody decided them. `verify:library` fails on an `OVERDUE` column or outcome.
+- **The database holds two rules Prisma cannot model**, as CHECK constraints appended by hand to the migration (and invisible to the
+  drift job, which was run and reported no difference): a loan has exactly one borrower, and `returnedOn` and `outcome` are set together.
+  `verify:library` reads the migration for both, and `verify:library-route` tries to insert a loan with two borrowers, none, and a
+  half-closed one. History cascades from the copy and the borrower (Restrict would block tearing down a whole school, as the schema
+  comments elsewhere say); the application refuses to delete a copy or a title that has ever been lent, so the history only goes with a
+  deliberate act.
+- **A copy goes out to ONE person, and there is no unique index to say so.** Prisma cannot express a partial unique index (`where returnedOn
+  is null`) without the drift job reporting it, so `lend` takes advisory locks, copy first and then borrower, BEFORE it reads whether the
+  copy is out and what the person holds. Two desks lending one copy make one loan; three desks lending to one pupil cannot pass the limit.
+  Closing a loan (`returnBook`, `changeCopy`) and renewing are conditional updates (`returnedOn: null`, and `renewals` unchanged), so a
+  second press changes nothing. `verify:library` pins the order of the locks and the conditions in the source; `verify:library-route` races
+  them for real, three rounds, and a pair of simultaneous returns.
+- **Routine lending and returning is NOT audited.** The loan row is the record (who lent it, who took it back, when), and a school lending
+  fifty books a day would bury every payment in the activity feed. What is audited is what changes the register: `library.policy`,
+  `library.book.delete`, `library.copy.lost`, `library.copy.withdraw`, `library.import`. None names a pupil or a title.
+- **The rules** (`library-rules.ts`, pure): 14 days and 2 books for a pupil, 30 days and 5 for staff, and an overdue book stops the next
+  loan, all on `SchoolSettings` and changed by leadership at `/library/settings`. Renewing goes out again for the full period, at most twice,
+  and not once late (take it back first). A pupil must be `ACTIVE` to borrow; staff `ACTIVE` or `ON_LEAVE`. A new period applies to new loans
+  and renewals; books already out keep the date they were given.
+- **Accession numbers.** A school numbers its own register, so a typed number is taken as given; a copy added without one is numbered
+  `ACC-00001…` from the `ACCESSION` sequence (`ACCESSION_SHAPE` in `library-rules.ts`, the one definition the sequence reads). At the
+  desk a typed `123` finds `123` first and `ACC-00123` second, so a librarian need not type the prefix.
+- **The spreadsheet** (`/library/import`) keys in a whole register: one row is one copy, only the title is required, a blank number is
+  numbered around every number the file itself carries (so it can never collide with one typed further down), and rows with the same title,
+  author and ISBN become one book. **All or nothing**: any problem adds nothing, every problem is listed with its line, and the add step
+  checks the posted text again in full, because the report on screen is advisory and the box may have been edited since.
+- **Who.** `LIBRARY` is the office plus `LIBRARIAN` (a role that existed, assignable from Users, with no screen until now); `LIBRARY_POLICY`
+  is leadership. A teacher does not lend. ⚠️ **A librarian-only login now LANDS on `/library`** (`isLibrarianOnly` in `landingFor`, and the
+  dashboard redirects them), the same mechanism as a teacher; it used to land on a dashboard with no rail entry for them. A head who also
+  looks after the library keeps the whole app. `verify:library` pins the landing and that it is a page the role may open, and
+  `verify:library-route` checks there is no redirect loop (`/students` sends a librarian to `/library`, which opens).
+- **Where else it shows.** A pupil's and a member of staff's own pages carry a "Library" card when something is out (one query), saying how many
+  are overdue; the parent portal's child page carries a read-only "Library books" card (title, due date, an overdue flag; never the
+  accession number, the author or another family's book), read through `requireMyChild` and shown only when a book is out. Merging two
+  pupils moves their loans (`student-merge.ts`, a twelfth table). Removing a member of staff is NOT blocked by a book they hold: staff are
+  soft-deleted, and the loans list marks the borrower "no longer at the school" for the librarian to chase.
+- **Not built:** fines or any charge (a lost book records what it would cost to replace and nothing is billed; billing it is a decision with a
+  fee item, a ledger mapping and a way to waive it), reservations, a stocktake, printing barcode labels, a "most borrowed" report, looking a
+  book up by ISBN, a borrower's reading history page, SMS reminders for overdue books, a teacher's own view of their loans, class reading
+  lists, and the accession register in `/export` (the school can key its register IN from a spreadsheet and cannot yet take it back OUT).
+- **Shipping it:** the migration (`library`: two enums, three tables, five columns on `SchoolSettings`, two CHECK constraints) is additive, so
+  run `migrate.yml action=deploy` BEFORE the merge, then `npm run db:rls` and, on production, `migrate.yml action=rls` after it (the tables
+  are unprotected until then and `audit:rls` goes red).
+- **Guards:** `verify:library` (pure plus the shape of the code, in CI) was forced red fifteen ways (each lock taken out, an unconditional close,
+  every lend audited, the merge forgetting loans, the limit never applying, "late" the day it is due, an action without `requireRole`, the rules
+  open to the whole library, a library page mentioning a payment, the portal showing a library number, a migration without its CHECK, a sequence
+  with its own shape, teachers let in). `verify:library-route` (against the app and database) builds its own books (`ZZLIB …`), borrows real pupils
+  and puts them back, forges the head's rules form as a librarian and as a teacher (and as the head, so the refusals mean something), checks a
+  parent sees their own child's book and never another family's, rolls a pupil merge back, refuses to start where the school holds library
+  books that are not its own, and `-- --clean` removes what a killed run left. `/library` is listed in `verify-teacher`, `verify-parent`,
+  `verify-it-admin` and `verify-onboarding`.
+- ⚠️ **On the development link a lend takes about 20 seconds** (a dozen round trips under row security, and the same again to re-render), and an
+  import of a few rows about 30. That is the link, not the code: production runs beside its database.
 
 ## A class teacher sees three screens
 

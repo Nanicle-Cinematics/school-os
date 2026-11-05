@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireMyChild } from "@/lib/portal-auth";
 import { getChildHeader, getChildFinance, getPublishedTerms } from "@/lib/portal-data";
 import { formatCedis } from "@/lib/money";
+import { getStudentLoans } from "@/lib/library-data";
+import { LoanBadge } from "@/app/(app)/library/loan-badge";
 import { termLabel } from "@/lib/academic-year";
 import { ChildHeader } from "../child-header";
 
@@ -17,7 +19,7 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 export default async function ChildOverviewPage({ params }: PageProps<"/portal/[studentId]">) {
   const { studentId } = await params;
   // Ownership is checked before a single row about this child is read.
-  await requireMyChild(studentId);
+  const guardian = await requireMyChild(studentId);
 
   const child = await getChildHeader(studentId);
   if (!child) notFound();
@@ -25,6 +27,8 @@ export default async function ChildOverviewPage({ params }: PageProps<"/portal/[
   const finance = await getChildFinance(studentId);
   const terms = await getPublishedTerms(studentId);
   const latest = terms[0] ?? null;
+  // Books out from the school library: title and due date only, and nothing at all when there are none.
+  const books = await getStudentLoans(guardian.schoolId, studentId);
 
   const owing = Number(finance.outstanding) > 0;
 
@@ -88,6 +92,23 @@ export default async function ChildOverviewPage({ params }: PageProps<"/portal/[
           </p>
         )}
       </Link>
+
+      {books.length > 0 ? (
+        <section className="rounded-card border border-hairline bg-surface p-5 shadow-card">
+          <p className="text-sm font-semibold text-slate-600">Library books</p>
+          <ul className="mt-2 divide-y divide-hairline">
+            {books.map((book) => (
+              <li key={book.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{book.title}</p>
+                  <p className="text-xs text-slate-500">Due back {dateFmt.format(book.dueOn)}</p>
+                </div>
+                <LoanBadge state={book.state} days={book.daysOverdue} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -99,3 +99,12 @@ export const ownsAcademicYears = (ids: ReadonlyArray<string | null | undefined>)
 
 export const ownsLedgerAccounts = (ids: ReadonlyArray<string | null | undefined>) =>
   ownsAll(ids, (wanted) => prisma.ledgerAccount.count({ where: { id: { in: wanted } } }));
+
+export const ownsBooks = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.book.count({ where: { id: { in: wanted } } }));
+
+export const ownsBookCopies = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.bookCopy.count({ where: { id: { in: wanted } } }));
+
+export const ownsLibraryLoans = (ids: ReadonlyArray<string | null | undefined>) =>
+  ownsAll(ids, (wanted) => prisma.libraryLoan.count({ where: { id: { in: wanted } } }));
